@@ -1,8 +1,35 @@
+export interface User {
+  id: string
+  name: string
+  email: string | null
+  avatar_url: string | null
+  provider: string
+}
+
+export interface Workspace {
+  id: string
+  name: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface WorkspaceMember {
+  workspace_id: string
+  user_id: string
+  name: string
+  email: string | null
+  avatar_url: string | null
+  role: string
+  joined_at: string
+}
+
 export interface Project {
   id: string
   name: string
   key: string
   description: string | null
+  workspace_id: string | null
   created_at: string
   updated_at: string
 }
@@ -37,7 +64,9 @@ export interface Issue {
   status: IssueStatus
   priority: IssuePriority
   points: number | null
-  assignee: string | null
+  assignee_id: string | null
+  assignee_name: string | null
+  assignee_avatar_url: string | null
   labels: string[]
   position: number
   created_at: string
@@ -47,7 +76,9 @@ export interface Issue {
 export interface Comment {
   id: string
   issue_id: string
-  author: string
+  user_id: string | null
+  author_name: string
+  author_avatar_url: string | null
   body: string
   created_at: string
   updated_at: string
@@ -68,11 +99,33 @@ export interface BurndownPoint {
   actual: number
 }
 
+export interface Attachment {
+  id: string
+  issue_id: string
+  uploaded_by: string
+  filename: string
+  content_type: string
+  size: number
+  url: string
+  created_at: string
+}
+
+export interface Notification {
+  id: string
+  user_id: string
+  issue_id: string | null
+  type: string
+  message: string
+  read: boolean
+  created_at: string
+}
+
 // Form types
 export interface CreateProject {
   name: string
   key: string
   description?: string
+  workspace_id: string
 }
 
 export interface CreateSprint {
@@ -88,7 +141,7 @@ export interface CreateIssue {
   type?: IssueType
   priority?: IssuePriority
   points?: number
-  assignee?: string
+  assignee_id?: string
   labels?: string[]
   sprint_id?: string
   parent_id?: string
@@ -101,7 +154,7 @@ export interface UpdateIssue {
   status?: IssueStatus
   priority?: IssuePriority
   points?: number
-  assignee?: string
+  assignee_id?: string
   labels?: string[]
   sprint_id?: string | null
   parent_id?: string | null

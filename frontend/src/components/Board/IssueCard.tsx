@@ -86,7 +86,7 @@ export function IssueCard({ issue, index, projectId }: Props) {
                   </span>
                 )}
               </div>
-              {issue.assignee && <Avatar name={issue.assignee} />}
+              {issue.assignee_name && <Avatar name={issue.assignee_name} avatarUrl={issue.assignee_avatar_url ?? undefined} />}
             </div>
           </div>
         )}

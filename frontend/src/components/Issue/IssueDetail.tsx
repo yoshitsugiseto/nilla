@@ -1,13 +1,14 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getIssue, updateIssue, getComments, createComment, getActivity, getIssueChildren } from '../../api/issues'
+import { getAttachments, uploadAttachment, deleteAttachment } from '../../api/attachments'
 import { TypeIcon, PriorityBadge } from '../common/Badge'
 import { Avatar } from '../common/Avatar'
 import { IssueForm } from './IssueForm'
 import { Modal } from '../common/Modal'
 import { useToast } from '../common/Toast'
 import type { IssueStatus } from '../../types'
-import { Pencil, MessageSquare, Clock, Plus, ListTodo } from 'lucide-react'
+import { Pencil, MessageSquare, Clock, Plus, ListTodo, Paperclip, Trash2, Upload } from 'lucide-react'
 
 const STATUS_OPTIONS: { value: IssueStatus; label: string }[] = [
   { value: 'todo', label: 'Todo' },
@@ -25,11 +26,11 @@ interface Props {
 export function IssueDetail({ issueId, projectId }: Props) {
   const qc = useQueryClient()
   const showToast = useToast()
-  const [tab, setTab] = useState<'comments' | 'activity'>('comments')
+  const [tab, setTab] = useState<'comments' | 'files' | 'activity'>('comments')
   const [editing, setEditing] = useState(false)
   const [addingSubtask, setAddingSubtask] = useState(false)
   const [commentText, setCommentText] = useState('')
-  const [commentAuthor, setCommentAuthor] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: issue, isLoading } = useQuery({
     queryKey: ['issue', issueId],
@@ -53,6 +54,29 @@ export function IssueDetail({ issueId, projectId }: Props) {
     enabled: tab === 'activity',
   })
 
+  const { data: attachments = [], isError: attachmentsError } = useQuery({
+    queryKey: ['attachments', issueId],
+    queryFn: () => getAttachments(issueId),
+    enabled: tab === 'files',
+    refetchOnWindowFocus: false,
+  })
+
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => uploadAttachment(issueId, file),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['attachments', issueId] })
+    },
+    onError: () => showToast('ファイルのアップロードに失敗しました', 'error'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteAttachment(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['attachments', issueId] })
+    },
+    onError: () => showToast('ファイルの削除に失敗しました', 'error'),
+  })
+
   const statusMutation = useMutation({
     mutationFn: (status: IssueStatus) => updateIssue(issueId, { status }),
     onSuccess: () => {
@@ -63,7 +87,7 @@ export function IssueDetail({ issueId, projectId }: Props) {
   })
 
   const commentMutation = useMutation({
-    mutationFn: () => createComment(issueId, commentAuthor || 'Anonymous', commentText),
+    mutationFn: () => createComment(issueId, commentText),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['comments', issueId] })
       setCommentText('')
@@ -188,6 +212,14 @@ export function IssueDetail({ issueId, projectId }: Props) {
             <MessageSquare size={14} /> コメント
           </button>
           <button
+            onClick={() => setTab('files')}
+            className={`flex items-center gap-1.5 text-sm pb-2 border-b-2 transition-colors ${
+              tab === 'files' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Paperclip size={14} /> ファイル {attachments.length > 0 && `(${attachments.length})`}
+          </button>
+          <button
             onClick={() => setTab('activity')}
             className={`flex items-center gap-1.5 text-sm pb-2 border-b-2 transition-colors ${
               tab === 'activity' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -204,10 +236,10 @@ export function IssueDetail({ issueId, projectId }: Props) {
             )}
             {comments.map(c => (
               <div key={c.id} className="flex gap-3">
-                <Avatar name={c.author} />
+                <Avatar name={c.author_name} avatarUrl={c.author_avatar_url ?? undefined} />
                 <div className="flex-1 bg-gray-50 rounded-lg p-3">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-medium text-gray-700">{c.author}</span>
+                    <span className="text-xs font-medium text-gray-700">{c.author_name}</span>
                     <span className="text-xs text-gray-400">
                       {new Date(c.created_at).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </span>
@@ -218,12 +250,6 @@ export function IssueDetail({ issueId, projectId }: Props) {
             ))}
 
             <div className="pt-2 space-y-2">
-              <input
-                value={commentAuthor}
-                onChange={e => setCommentAuthor(e.target.value)}
-                placeholder="名前"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-              />
               <textarea
                 value={commentText}
                 onChange={e => setCommentText(e.target.value)}
@@ -237,6 +263,59 @@ export function IssueDetail({ issueId, projectId }: Props) {
                 className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40"
               >
                 {commentMutation.isPending ? '保存中...' : 'コメント'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {tab === 'files' && (
+          <div className="space-y-3">
+            {attachmentsError && (
+              <p className="text-sm text-red-400">ファイルの取得に失敗しました</p>
+            )}
+            {attachments.map(a => (
+              <div key={a.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
+                <Paperclip size={14} className="text-gray-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <a
+                    href={a.url}
+                    download={a.filename}
+                    className="text-sm text-blue-600 hover:underline truncate block"
+                  >
+                    {a.filename}
+                  </a>
+                  <span className="text-xs text-gray-400">
+                    {(a.size / 1024).toFixed(1)} KB
+                  </span>
+                </div>
+                <button
+                  onClick={() => deleteMutation.mutate(a.id)}
+                  disabled={deleteMutation.isPending}
+                  className="text-gray-400 hover:text-red-500 transition-colors"
+                  aria-label="削除"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  if (file) uploadMutation.mutate(file)
+                  e.target.value = ''
+                }}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadMutation.isPending}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 disabled:opacity-50"
+              >
+                <Upload size={14} />
+                {uploadMutation.isPending ? 'アップロード中...' : 'ファイルを追加'}
               </button>
             </div>
           </div>
@@ -303,12 +382,12 @@ export function IssueDetail({ issueId, projectId }: Props) {
           </div>
         )}
 
-        {issue.assignee && (
+        {issue.assignee_name && (
           <div>
             <p className="text-xs text-gray-400 mb-1">担当者</p>
             <div className="flex items-center gap-2">
-              <Avatar name={issue.assignee} />
-              <span className="text-gray-700">{issue.assignee}</span>
+              <Avatar name={issue.assignee_name} avatarUrl={issue.assignee_avatar_url ?? undefined} />
+              <span className="text-gray-700">{issue.assignee_name}</span>
             </div>
           </div>
         )}

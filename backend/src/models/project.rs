@@ -7,6 +7,7 @@ pub struct Project {
     pub name: String,
     pub key: String,
     pub description: Option<String>,
+    pub workspace_id: Option<String>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -16,6 +17,7 @@ pub struct CreateProject {
     pub name: String,
     pub key: String,
     pub description: Option<String>,
+    pub workspace_id: String,
 }
 
 #[derive(Debug, Deserialize)]

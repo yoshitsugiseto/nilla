@@ -1,14 +1,18 @@
+mod attachments;
 mod issues;
+mod notifications;
 mod projects;
 mod sprints;
+mod workspaces;
 
 use axum::{
-    routing::{get, patch, post, put},
+    routing::{delete, get, patch, post, put},
     Router,
 };
-use sqlx::SqlitePool;
 
-pub fn router(pool: SqlitePool) -> Router {
+use crate::AppState;
+
+pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
         // Projects
         .route("/api/projects", get(projects::list_projects).post(projects::create_project))
@@ -18,6 +22,8 @@ pub fn router(pool: SqlitePool) -> Router {
                 .put(projects::update_project)
                 .delete(projects::delete_project),
         )
+        // Project members (for assignee picker)
+        .route("/api/projects/{id}/members", get(workspaces::get_project_members))
         // Sprints
         .route(
             "/api/projects/{id}/sprints",
@@ -52,5 +58,48 @@ pub fn router(pool: SqlitePool) -> Router {
             get(issues::list_comments).post(issues::create_comment),
         )
         .route("/api/issues/{id}/activity", get(issues::list_activity))
-        .with_state(pool)
+        // Workspaces
+        .route("/api/workspaces", get(workspaces::list_workspaces).post(workspaces::create_workspace))
+        .route(
+            "/api/workspaces/{id}",
+            get(workspaces::get_workspace).put(workspaces::update_workspace),
+        )
+        .route(
+            "/api/workspaces/{id}/members",
+            get(workspaces::list_members).post(workspaces::add_member),
+        )
+        .route(
+            "/api/workspaces/{id}/members/{uid}",
+            patch(workspaces::update_member_role).delete(workspaces::remove_member),
+        )
+        // Attachments
+        .route(
+            "/api/issues/{id}/attachments",
+            get(attachments::list_attachments).post(attachments::upload_attachment),
+        )
+        .route(
+            "/api/attachments/{id}/download",
+            get(attachments::download_attachment),
+        )
+        .route(
+            "/api/attachments/{id}",
+            delete(attachments::delete_attachment),
+        )
+        // Notifications
+        .route("/api/notifications", get(notifications::list_notifications))
+        .route(
+            "/api/notifications/{id}/read",
+            patch(notifications::mark_read),
+        )
+        .route(
+            "/api/notifications/{id}",
+            delete(notifications::delete_notification),
+        )
+        .route(
+            "/api/notifications/read-all",
+            post(notifications::mark_all_read),
+        )
+        // Users
+        .route("/api/users", get(workspaces::list_users))
+        .with_state(state)
 }

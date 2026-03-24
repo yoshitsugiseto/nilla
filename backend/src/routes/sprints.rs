@@ -4,6 +4,7 @@ use axum::{
 };
 use chrono::NaiveDate;
 use sqlx::SqlitePool;
+use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::{
@@ -118,6 +119,7 @@ pub async fn update_sprint(
 
 pub async fn start_sprint(
     State(pool): State<SqlitePool>,
+    State(ws_tx): State<broadcast::Sender<String>>,
     Path(id): Path<String>,
 ) -> Result<Json<Sprint>> {
     let sprint = sqlx::query_as::<_, Sprint>(GET_SPRINT_SQL)
@@ -139,6 +141,9 @@ pub async fn start_sprint(
     .fetch_one(&pool)
     .await?;
 
+    let _ = ws_tx.send(
+        serde_json::json!({ "type": "sprint.updated", "project_id": updated.project_id }).to_string(),
+    );
     Ok(Json(updated))
 }
 
@@ -149,6 +154,7 @@ pub struct CompleteSprintBody {
 
 pub async fn complete_sprint(
     State(pool): State<SqlitePool>,
+    State(ws_tx): State<broadcast::Sender<String>>,
     Path(id): Path<String>,
     body: Option<Json<CompleteSprintBody>>,
 ) -> Result<Json<Sprint>> {
@@ -186,6 +192,9 @@ pub async fn complete_sprint(
 
     tx.commit().await?;
 
+    let _ = ws_tx.send(
+        serde_json::json!({ "type": "sprint.updated", "project_id": updated.project_id }).to_string(),
+    );
     Ok(Json(updated))
 }
 

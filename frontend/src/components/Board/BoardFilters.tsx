@@ -3,7 +3,7 @@ import { TypeIcon } from '../common/Badge'
 import type { Issue, IssuePriority, IssueType } from '../../types'
 
 export interface Filters {
-  assignee?: string
+  assignee_id?: string
   priority?: IssuePriority
   type?: IssueType
 }
@@ -15,7 +15,14 @@ interface Props {
 }
 
 export function BoardFilters({ issues, filters, onChange }: Props) {
-  const assignees = [...new Set(issues.map(i => i.assignee).filter(Boolean) as string[])]
+  // Build unique assignees from issues (id -> name mapping)
+  const assigneeMap = new Map<string, string>()
+  for (const i of issues) {
+    if (i.assignee_id && i.assignee_name) {
+      assigneeMap.set(i.assignee_id, i.assignee_name)
+    }
+  }
+  const assignees = [...assigneeMap.entries()]
   const hasFilters = Object.values(filters).some(Boolean)
 
   return (
@@ -24,17 +31,17 @@ export function BoardFilters({ issues, filters, onChange }: Props) {
       <div className="flex items-center gap-1">
         <span className="text-xs text-gray-400">担当:</span>
         <div className="flex gap-1">
-          {assignees.map(a => (
+          {assignees.map(([id, name]) => (
             <button
-              key={a}
-              onClick={() => onChange({ ...filters, assignee: filters.assignee === a ? undefined : a })}
+              key={id}
+              onClick={() => onChange({ ...filters, assignee_id: filters.assignee_id === id ? undefined : id })}
               className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
-                filters.assignee === a
+                filters.assignee_id === id
                   ? 'bg-blue-600 text-white border-blue-600'
                   : 'border-gray-200 text-gray-600 hover:border-blue-300'
               }`}
             >
-              {a}
+              {name}
             </button>
           ))}
         </div>

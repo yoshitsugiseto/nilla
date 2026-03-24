@@ -14,9 +14,10 @@ async fn list_projects_empty() {
 #[tokio::test]
 async fn create_project_success() {
     let app = common::setup_app().await;
+    let ws_id = common::create_workspace(&app).await;
     let (status, json) = common::send(
         &app,
-        common::post("/api/projects", json!({ "name": "My Project", "key": "MP" })),
+        common::post("/api/projects", json!({ "name": "My Project", "key": "MP", "workspace_id": ws_id })),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -28,9 +29,10 @@ async fn create_project_success() {
 #[tokio::test]
 async fn create_project_empty_name_returns_400() {
     let app = common::setup_app().await;
+    let ws_id = common::create_workspace(&app).await;
     let (status, _) = common::send(
         &app,
-        common::post("/api/projects", json!({ "name": "  ", "key": "MP" })),
+        common::post("/api/projects", json!({ "name": "  ", "key": "MP", "workspace_id": ws_id })),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -39,9 +41,10 @@ async fn create_project_empty_name_returns_400() {
 #[tokio::test]
 async fn create_project_non_alphanumeric_key_returns_400() {
     let app = common::setup_app().await;
+    let ws_id = common::create_workspace(&app).await;
     let (status, _) = common::send(
         &app,
-        common::post("/api/projects", json!({ "name": "Project", "key": "MY-KEY" })),
+        common::post("/api/projects", json!({ "name": "Project", "key": "MY-KEY", "workspace_id": ws_id })),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -50,10 +53,11 @@ async fn create_project_non_alphanumeric_key_returns_400() {
 #[tokio::test]
 async fn create_project_duplicate_key_returns_conflict() {
     let app = common::setup_app().await;
-    common::create_project(&app, "Project A", "PA").await;
+    let ws_id = common::create_workspace(&app).await;
+    common::create_project_in(&app, "Project A", "PA", &ws_id).await;
     let (status, _) = common::send(
         &app,
-        common::post("/api/projects", json!({ "name": "Project B", "key": "PA" })),
+        common::post("/api/projects", json!({ "name": "Project B", "key": "PA", "workspace_id": ws_id })),
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT);
@@ -70,10 +74,12 @@ async fn get_project_returns_correct_data() {
 }
 
 #[tokio::test]
-async fn get_project_not_found() {
+async fn get_project_not_found_returns_forbidden() {
+    // Non-existent project: check_project_access returns 403 (user is not a member)
+    // This is intentional — prevents leaking whether a resource exists.
     let app = common::setup_app().await;
     let (status, _) = common::send(&app, common::get("/api/projects/nonexistent")).await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]
@@ -103,15 +109,15 @@ async fn delete_project_cascades_issues_and_sprints() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["ok"], true);
 
-    // project gone
+    // project gone — user no longer has membership → 403
     let (status, _) = common::send(&app, common::get(&format!("/api/projects/{pid}"))).await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(status, StatusCode::FORBIDDEN);
 
-    // issue gone
+    // issue cascade-deleted → 404
     let (status, _) = common::send(&app, common::get(&format!("/api/issues/{iid}"))).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 
-    // sprint gone
+    // sprint cascade-deleted → 404
     let (status, _) = common::send(&app, common::get(&format!("/api/sprints/{sid}"))).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }

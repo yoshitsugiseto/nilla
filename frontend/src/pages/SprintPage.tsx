@@ -295,7 +295,7 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
   })
 
   if (!activeProjectId) {
-    return <div className="flex-1 flex items-center justify-center text-gray-400">プロジェクトを選択してください</div>
+    return <div className="flex-1 flex items-center justify-center text-gray-400">← プロジェクトを選択してください</div>
   }
 
   return (

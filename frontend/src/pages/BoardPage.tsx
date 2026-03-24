@@ -48,7 +48,7 @@ export function BoardPage() {
 
   if (!activeProjectId) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400">
+      <div className="flex-1 flex items-center justify-center text-gray-400">
         ← プロジェクトを選択してください
       </div>
     )
@@ -56,16 +56,21 @@ export function BoardPage() {
 
   if (sprints.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-400">
-        <p>スプリントがありません</p>
-        <p className="text-sm">サイドバーの「Sprints」からスプリントを作成してください</p>
+      <div className="flex-1 overflow-auto">
+        <div className="p-6 max-w-6xl">
+          <h1 className="text-xl font-bold text-gray-900 mb-6">Board</h1>
+          <div className="text-center py-12 text-gray-400">
+            <p>スプリントがありません</p>
+            <p className="text-sm mt-1">サイドバーの「Sprints」からスプリントを作成してください</p>
+          </div>
+        </div>
       </div>
     )
   }
 
   // フィルタリング
   let issues: Issue[] = rawIssues
-  if (filters.assignee) issues = issues.filter(i => i.assignee === filters.assignee)
+  if (filters.assignee_id) issues = issues.filter(i => i.assignee_id === filters.assignee_id)
   if (filters.priority) issues = issues.filter(i => i.priority === filters.priority)
   if (filters.type) issues = issues.filter(i => i.type === filters.type)
 

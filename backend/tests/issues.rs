@@ -296,16 +296,17 @@ async fn add_and_list_comments() {
     let pid = common::create_project(&app, "P", "PI").await;
     let iid = common::create_issue(&app, &pid, "Issue").await;
 
+    // author is derived from JWT user, not request body
     let (status, json) = common::send(
         &app,
         common::post(
             &format!("/api/issues/{iid}/comments"),
-            json!({ "author": "Alice", "body": "LGTM!" }),
+            json!({ "body": "LGTM!" }),
         ),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["author"], "Alice");
+    assert_eq!(json["author_name"], "Test User");
 
     let (_, comments) =
         common::send(&app, common::get(&format!("/api/issues/{iid}/comments"))).await;

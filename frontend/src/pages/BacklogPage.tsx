@@ -34,7 +34,7 @@ function SubtaskRow({ issue, selectedId, onDetail }: { issue: Issue; selectedId?
             {issue.points}pt
           </span>
         )}
-        {issue.assignee && <Avatar name={issue.assignee} size="sm" />}
+        {issue.assignee_name && <Avatar name={issue.assignee_name} size="sm" />}
       </div>
     </div>
   )
@@ -115,7 +115,7 @@ function IssueRow({
                   {issue.points}pt
                 </span>
               )}
-              {issue.assignee && <Avatar name={issue.assignee} size="sm" />}
+              {issue.assignee_name && <Avatar name={issue.assignee_name} size="sm" />}
               <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
                 <button
                   onClick={e => { e.stopPropagation(); setEditing(true) }}
@@ -335,7 +335,7 @@ export function BacklogPage() {
   }
 
   if (!activeProjectId) {
-    return <div className="flex items-center justify-center h-full text-gray-400">← プロジェクトを選択してください</div>
+    return <div className="flex-1 flex items-center justify-center text-gray-400">← プロジェクトを選択してください</div>
   }
 
   // サブタスク（parent_idあり）はトップレベルには表示しない

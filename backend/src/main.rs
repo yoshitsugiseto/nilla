@@ -1,6 +1,11 @@
+use std::sync::Arc;
+
 use axum::http::{HeaderValue, Method, header};
+use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
+
+use nilla::{AppState, Config};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -10,11 +15,42 @@ async fn main() -> anyhow::Result<()> {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "sqlite:./lira.db".to_string());
 
-    let pool = lira::db::create_pool(&database_url).await?;
+    let pool = nilla::db::create_pool(&database_url).await?;
     tracing::info!("Database connected: {database_url}");
 
     let cors_origin = std::env::var("CORS_ORIGIN")
         .unwrap_or_else(|_| "http://localhost:3000".to_string());
+
+    let config = Config {
+        jwt_secret: std::env::var("JWT_SECRET")
+            .expect("JWT_SECRET must be set"),
+        google_client_id: std::env::var("GOOGLE_CLIENT_ID")
+            .unwrap_or_default(),
+        google_client_secret: std::env::var("GOOGLE_CLIENT_SECRET")
+            .unwrap_or_default(),
+        github_client_id: std::env::var("GITHUB_CLIENT_ID")
+            .unwrap_or_default(),
+        github_client_secret: std::env::var("GITHUB_CLIENT_SECRET")
+            .unwrap_or_default(),
+        app_url: std::env::var("APP_URL")
+            .unwrap_or_else(|_| "http://localhost:8080".to_string()),
+        frontend_url: std::env::var("FRONTEND_URL")
+            .unwrap_or_else(|_| "http://localhost:3000".to_string()),
+        http_client: reqwest::Client::new(),
+    };
+
+    let (ws_tx, _) = tokio::sync::broadcast::channel::<String>(256);
+
+    let storage_path = std::env::var("STORAGE_PATH").unwrap_or_else(|_| "./uploads".to_string());
+    let storage = nilla::storage::Storage::local(&storage_path)
+        .expect("Failed to initialize local storage");
+
+    let state = AppState {
+        pool,
+        config: Arc::new(config),
+        ws_tx,
+        storage,
+    };
 
     let cors = CorsLayer::new()
         .allow_origin(cors_origin.parse::<HeaderValue>()?)
@@ -26,9 +62,22 @@ async fn main() -> anyhow::Result<()> {
             Method::DELETE,
         ])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::ACCEPT])
+        .allow_credentials(true)
         .expose_headers(["x-total-count".parse::<axum::http::HeaderName>()?]);
 
-    let app = lira::create_app(pool)
+    // Serve frontend static files if dist/ exists (production mode)
+    let static_dir = std::env::var("STATIC_DIR").ok().or_else(|| {
+        if std::path::Path::new("./dist/index.html").exists() {
+            Some("./dist".to_string())
+        } else {
+            None
+        }
+    });
+    if static_dir.is_some() {
+        tracing::info!("Serving static files from: {}", static_dir.as_deref().unwrap());
+    }
+
+    let app = nilla::create_app(state, static_dir)
         .layer(cors)
         .layer(TraceLayer::new_for_http());
 
@@ -36,6 +85,6 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("Listening on http://{addr}");
 
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
     Ok(())
 }
