@@ -1,61 +1,77 @@
 -- =============================================================
--- Lira サンプルデータ (ページネーション確認用)
--- 使い方: sqlite3 lira.db < seed.sql
+-- Nilla サンプルデータ (ページネーション確認用)
+-- 使い方: sqlite3 nilla.db < seed.sql
 -- 既存データとは衝突しない (INSERT OR IGNORE)
 -- =============================================================
 
+-- ユーザー
+INSERT OR IGNORE INTO users (id, provider, provider_id, email, name, avatar_url, created_at, updated_at) VALUES
+  ('demo-user-alice', 'demo', 'demo-alice', 'alice@example.com', 'Alice',  NULL, '2026-01-01T00:00:00', '2026-01-01T00:00:00'),
+  ('demo-user-bob',   'demo', 'demo-bob',   'bob@example.com',   'Bob',    NULL, '2026-01-01T00:00:00', '2026-01-01T00:00:00'),
+  ('demo-user-carol', 'demo', 'demo-carol', 'carol@example.com', 'Carol',  NULL, '2026-01-01T00:00:00', '2026-01-01T00:00:00');
+
+-- ワークスペース
+INSERT OR IGNORE INTO workspaces (id, name, created_by, created_at, updated_at) VALUES
+  ('demo-workspace-001', 'Demo Workspace', 'demo-user-alice', '2026-01-01T00:00:00', '2026-01-01T00:00:00');
+
+-- ワークスペースメンバー
+INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role, joined_at) VALUES
+  ('demo-workspace-001', 'demo-user-alice', 'owner',  '2026-01-01T00:00:00'),
+  ('demo-workspace-001', 'demo-user-bob',   'member', '2026-01-01T00:00:00'),
+  ('demo-workspace-001', 'demo-user-carol', 'member', '2026-01-01T00:00:00');
+
 -- プロジェクト
-INSERT OR IGNORE INTO projects (id, name, key, description) VALUES
-  ('demo-project-001', 'Demo Project', 'SMPL', 'ページネーション確認用のサンプルプロジェクト');
+INSERT OR IGNORE INTO projects (id, name, key, description, workspace_id) VALUES
+  ('demo-project-001', 'Demo Project', 'SMPL', 'ページネーション確認用のサンプルプロジェクト', 'demo-workspace-001');
 
 -- スプリント
 INSERT OR IGNORE INTO sprints (id, project_id, name, goal, status, start_date, end_date) VALUES
-  ('demo-sprint-001', 'demo-project-001', 'Sprint 1', 'バックエンドAPIの基盤整備', 'completed', '2026-01-06', '2026-01-17'),
-  ('demo-sprint-002', 'demo-project-001', 'Sprint 2', 'フロントエンドの主要画面実装', 'active',    '2026-01-20', '2026-01-31'),
-  ('demo-sprint-003', 'demo-project-001', 'Sprint 3', 'パフォーマンス改善とバグ修正', 'planning',  '2026-02-03', '2026-02-14');
+  ('demo-sprint-001', 'demo-project-001', 'Sprint 1', 'バックエンドAPIの基盤整備',        'completed', '2026-01-06', '2026-01-17'),
+  ('demo-sprint-002', 'demo-project-001', 'Sprint 2', 'フロントエンドの主要画面実装',    'active',    '2026-01-20', '2026-01-31'),
+  ('demo-sprint-003', 'demo-project-001', 'Sprint 3', 'パフォーマンス改善とバグ修正',    'planning',  '2026-02-03', '2026-02-14');
 
 -- ===================== Issues (30件) =====================
 -- Sprint 1 (completed) — 8件
-INSERT OR IGNORE INTO issues (id, project_id, sprint_id, number, title, type, status, priority, points, assignee, position) VALUES
-  ('demo-i-001', 'demo-project-001', 'demo-sprint-001',  1, '[DEMO] データベーススキーマ設計',           'story', 'done',        'high',     5,  'Alice',   1000),
-  ('demo-i-002', 'demo-project-001', 'demo-sprint-001',  2, '[DEMO] プロジェクトCRUD API実装',           'task',  'done',        'high',     3,  'Bob',     2000),
-  ('demo-i-003', 'demo-project-001', 'demo-sprint-001',  3, '[DEMO] スプリントCRUD API実装',             'task',  'done',        'high',     3,  'Alice',   3000),
-  ('demo-i-004', 'demo-project-001', 'demo-sprint-001',  4, '[DEMO] イシューCRUD API実装',               'task',  'done',        'critical', 5,  'Carol',   4000),
-  ('demo-i-005', 'demo-project-001', 'demo-sprint-001',  5, '[DEMO] マイグレーション環境構築',           'task',  'done',        'medium',   2,  'Bob',     5000),
-  ('demo-i-006', 'demo-project-001', 'demo-sprint-001',  6, '[DEMO] CORSミドルウェア設定',               'task',  'done',        'low',      1,  'Carol',   6000),
-  ('demo-i-007', 'demo-project-001', 'demo-sprint-001',  7, '[DEMO] エラーハンドリング共通化',           'task',  'done',        'medium',   2,  'Alice',   7000),
-  ('demo-i-008', 'demo-project-001', 'demo-sprint-001',  8, '[DEMO] CI/CDパイプライン構築',              'spike', 'done',        'low',      3,  'Bob',     8000);
+INSERT OR IGNORE INTO issues (id, project_id, sprint_id, number, title, type, status, priority, points, assignee_id, position) VALUES
+  ('demo-i-001', 'demo-project-001', 'demo-sprint-001',  1, '[DEMO] データベーススキーマ設計',           'story', 'done',        'high',     5,  'demo-user-alice',  1000),
+  ('demo-i-002', 'demo-project-001', 'demo-sprint-001',  2, '[DEMO] プロジェクトCRUD API実装',           'task',  'done',        'high',     3,  'demo-user-bob',    2000),
+  ('demo-i-003', 'demo-project-001', 'demo-sprint-001',  3, '[DEMO] スプリントCRUD API実装',             'task',  'done',        'high',     3,  'demo-user-alice',  3000),
+  ('demo-i-004', 'demo-project-001', 'demo-sprint-001',  4, '[DEMO] イシューCRUD API実装',               'task',  'done',        'critical', 5,  'demo-user-carol',  4000),
+  ('demo-i-005', 'demo-project-001', 'demo-sprint-001',  5, '[DEMO] マイグレーション環境構築',           'task',  'done',        'medium',   2,  'demo-user-bob',    5000),
+  ('demo-i-006', 'demo-project-001', 'demo-sprint-001',  6, '[DEMO] CORSミドルウェア設定',               'task',  'done',        'low',      1,  'demo-user-carol',  6000),
+  ('demo-i-007', 'demo-project-001', 'demo-sprint-001',  7, '[DEMO] エラーハンドリング共通化',           'task',  'done',        'medium',   2,  'demo-user-alice',  7000),
+  ('demo-i-008', 'demo-project-001', 'demo-sprint-001',  8, '[DEMO] CI/CDパイプライン構築',              'spike', 'done',        'low',      3,  'demo-user-bob',    8000);
 
 -- Sprint 2 (active) — 10件
-INSERT OR IGNORE INTO issues (id, project_id, sprint_id, number, title, type, status, priority, points, assignee, position) VALUES
-  ('demo-i-009', 'demo-project-001', 'demo-sprint-002',  9, '[DEMO] カンバンボード実装',                 'story', 'done',        'critical', 8,  'Alice',   1000),
-  ('demo-i-010', 'demo-project-001', 'demo-sprint-002', 10, '[DEMO] ドラッグ&ドロップ機能',              'task',  'in_review',   'high',     5,  'Carol',   2000),
-  ('demo-i-011', 'demo-project-001', 'demo-sprint-002', 11, '[DEMO] バックログ画面実装',                 'task',  'in_progress', 'high',     5,  'Bob',     3000),
-  ('demo-i-012', 'demo-project-001', 'demo-sprint-002', 12, '[DEMO] スプリント管理画面実装',             'task',  'in_progress', 'high',     3,  'Alice',   4000),
-  ('demo-i-013', 'demo-project-001', 'demo-sprint-002', 13, '[DEMO] イシュー詳細モーダル',               'task',  'todo',        'medium',   3,  'Carol',   5000),
-  ('demo-i-014', 'demo-project-001', 'demo-sprint-002', 14, '[DEMO] バーンダウンチャート',               'story', 'todo',        'medium',   5,  'Bob',     6000),
-  ('demo-i-015', 'demo-project-001', 'demo-sprint-002', 15, '[DEMO] コメント機能実装',                   'task',  'todo',        'low',      2,  'Alice',   7000),
-  ('demo-i-016', 'demo-project-001', 'demo-sprint-002', 16, '[DEMO] アクティビティログ表示',             'task',  'todo',        'low',      2,  'Carol',   8000),
-  ('demo-i-017', 'demo-project-001', 'demo-sprint-002', 17, '[DEMO] 検索機能実装',                       'task',  'todo',        'medium',   3,  'Bob',     9000),
-  ('demo-i-018', 'demo-project-001', 'demo-sprint-002', 18, '[DEMO] フィルター機能実装',                 'bug',   'todo',        'high',     2,  'Alice',  10000);
+INSERT OR IGNORE INTO issues (id, project_id, sprint_id, number, title, type, status, priority, points, assignee_id, position) VALUES
+  ('demo-i-009', 'demo-project-001', 'demo-sprint-002',  9, '[DEMO] カンバンボード実装',                 'story', 'done',        'critical', 8,  'demo-user-alice',  1000),
+  ('demo-i-010', 'demo-project-001', 'demo-sprint-002', 10, '[DEMO] ドラッグ&ドロップ機能',              'task',  'in_review',   'high',     5,  'demo-user-carol',  2000),
+  ('demo-i-011', 'demo-project-001', 'demo-sprint-002', 11, '[DEMO] バックログ画面実装',                 'task',  'in_progress', 'high',     5,  'demo-user-bob',    3000),
+  ('demo-i-012', 'demo-project-001', 'demo-sprint-002', 12, '[DEMO] スプリント管理画面実装',             'task',  'in_progress', 'high',     3,  'demo-user-alice',  4000),
+  ('demo-i-013', 'demo-project-001', 'demo-sprint-002', 13, '[DEMO] イシュー詳細モーダル',               'task',  'todo',        'medium',   3,  'demo-user-carol',  5000),
+  ('demo-i-014', 'demo-project-001', 'demo-sprint-002', 14, '[DEMO] バーンダウンチャート',               'story', 'todo',        'medium',   5,  'demo-user-bob',    6000),
+  ('demo-i-015', 'demo-project-001', 'demo-sprint-002', 15, '[DEMO] コメント機能実装',                   'task',  'todo',        'low',      2,  'demo-user-alice',  7000),
+  ('demo-i-016', 'demo-project-001', 'demo-sprint-002', 16, '[DEMO] アクティビティログ表示',             'task',  'todo',        'low',      2,  'demo-user-carol',  8000),
+  ('demo-i-017', 'demo-project-001', 'demo-sprint-002', 17, '[DEMO] 検索機能実装',                       'task',  'todo',        'medium',   3,  'demo-user-bob',    9000),
+  ('demo-i-018', 'demo-project-001', 'demo-sprint-002', 18, '[DEMO] フィルター機能実装',                 'bug',   'todo',        'high',     2,  'demo-user-alice', 10000);
 
 -- Sprint 3 (planning) — 6件
-INSERT OR IGNORE INTO issues (id, project_id, sprint_id, number, title, type, status, priority, points, assignee, position) VALUES
-  ('demo-i-019', 'demo-project-001', 'demo-sprint-003', 19, '[DEMO] ページネーション実装',               'task',  'todo',        'high',     3,  'Bob',     1000),
-  ('demo-i-020', 'demo-project-001', 'demo-sprint-003', 20, '[DEMO] パフォーマンスプロファイリング',     'spike', 'todo',        'medium',   3,  'Carol',   2000),
-  ('demo-i-021', 'demo-project-001', 'demo-sprint-003', 21, '[DEMO] DBインデックス最適化',               'task',  'todo',        'medium',   2,  'Alice',   3000),
-  ('demo-i-022', 'demo-project-001', 'demo-sprint-003', 22, '[DEMO] N+1クエリ問題修正',                  'bug',   'todo',        'high',     3,  'Bob',     4000),
-  ('demo-i-023', 'demo-project-001', 'demo-sprint-003', 23, '[DEMO] メモリリーク調査',                   'bug',   'todo',        'critical', 5,  'Carol',   5000),
-  ('demo-i-024', 'demo-project-001', 'demo-sprint-003', 24, '[DEMO] セキュリティレビュー',               'spike', 'todo',        'high',     3,  'Alice',   6000);
+INSERT OR IGNORE INTO issues (id, project_id, sprint_id, number, title, type, status, priority, points, assignee_id, position) VALUES
+  ('demo-i-019', 'demo-project-001', 'demo-sprint-003', 19, '[DEMO] ページネーション実装',               'task',  'todo',        'high',     3,  'demo-user-bob',    1000),
+  ('demo-i-020', 'demo-project-001', 'demo-sprint-003', 20, '[DEMO] パフォーマンスプロファイリング',     'spike', 'todo',        'medium',   3,  'demo-user-carol',  2000),
+  ('demo-i-021', 'demo-project-001', 'demo-sprint-003', 21, '[DEMO] DBインデックス最適化',               'task',  'todo',        'medium',   2,  'demo-user-alice',  3000),
+  ('demo-i-022', 'demo-project-001', 'demo-sprint-003', 22, '[DEMO] N+1クエリ問題修正',                  'bug',   'todo',        'high',     3,  'demo-user-bob',    4000),
+  ('demo-i-023', 'demo-project-001', 'demo-sprint-003', 23, '[DEMO] メモリリーク調査',                   'bug',   'todo',        'critical', 5,  'demo-user-carol',  5000),
+  ('demo-i-024', 'demo-project-001', 'demo-sprint-003', 24, '[DEMO] セキュリティレビュー',               'spike', 'todo',        'high',     3,  'demo-user-alice',  6000);
 
 -- バックログ — 6件 (sprint_id = NULL)
-INSERT OR IGNORE INTO issues (id, project_id, sprint_id, number, title, type, status, priority, points, assignee, position) VALUES
-  ('demo-i-025', 'demo-project-001', NULL, 25, '[DEMO] ダークモード対応',                    'story', 'todo', 'low',    5, NULL,    1000),
-  ('demo-i-026', 'demo-project-001', NULL, 26, '[DEMO] モバイルレスポンシブ対応',            'task',  'todo', 'low',    3, NULL,    2000),
-  ('demo-i-027', 'demo-project-001', NULL, 27, '[DEMO] キーボードショートカット',            'task',  'todo', 'low',    2, NULL,    3000),
-  ('demo-i-028', 'demo-project-001', NULL, 28, '[DEMO] エクスポート機能 (CSV/JSON)',         'story', 'todo', 'medium', 8, NULL,    4000),
-  ('demo-i-029', 'demo-project-001', NULL, 29, '[DEMO] Webhook通知機能',                     'spike', 'todo', 'medium', 5, NULL,    5000),
-  ('demo-i-030', 'demo-project-001', NULL, 30, '[DEMO] ユーザー設定画面',                    'task',  'todo', 'medium', 3, NULL,    6000);
+INSERT OR IGNORE INTO issues (id, project_id, sprint_id, number, title, type, status, priority, points, assignee_id, position) VALUES
+  ('demo-i-025', 'demo-project-001', NULL, 25, '[DEMO] ダークモード対応',                    'story', 'todo', 'low',    5, NULL,              1000),
+  ('demo-i-026', 'demo-project-001', NULL, 26, '[DEMO] モバイルレスポンシブ対応',            'task',  'todo', 'low',    3, NULL,              2000),
+  ('demo-i-027', 'demo-project-001', NULL, 27, '[DEMO] キーボードショートカット',            'task',  'todo', 'low',    2, NULL,              3000),
+  ('demo-i-028', 'demo-project-001', NULL, 28, '[DEMO] エクスポート機能 (CSV/JSON)',         'story', 'todo', 'medium', 8, NULL,              4000),
+  ('demo-i-029', 'demo-project-001', NULL, 29, '[DEMO] Webhook通知機能',                     'spike', 'todo', 'medium', 5, NULL,              5000),
+  ('demo-i-030', 'demo-project-001', NULL, 30, '[DEMO] ユーザー設定画面',                    'task',  'todo', 'medium', 3, NULL,              6000);
 
 -- アクティビティログ (Sprint 1 完了分)
 INSERT OR IGNORE INTO activity_logs (id, issue_id, field, old_value, new_value, created_at) VALUES
@@ -77,14 +93,17 @@ INSERT OR IGNORE INTO activity_logs (id, issue_id, field, old_value, new_value, 
   ('demo-al-016', 'demo-i-008', 'status', 'in_progress', 'done',        '2026-01-16 16:00:00');
 
 -- サンプルコメント
-INSERT OR IGNORE INTO comments (id, issue_id, author, body) VALUES
-  ('demo-c-001', 'demo-i-009', 'Alice', 'カンバンボードのカラム幅を可変にする案も検討中です。'),
-  ('demo-c-002', 'demo-i-009', 'Bob',   '@Alice ドラッグ中のプレビュー表示も優先度高めにお願いします！'),
-  ('demo-c-003', 'demo-i-010', 'Carol', 'hello-pangea/dnd を採用することにしました。react-beautiful-dnd の後継です。'),
-  ('demo-c-004', 'demo-i-014', 'Bob',   'バーンダウンの実績線はactivity_logsから算出します。スプリント開始時のスナップショットがないので中途追加issueの扱いに注意。'),
-  ('demo-c-005', 'demo-i-019', 'Alice', '検索はサーバーサイドで20件/ページ。Board/Backlogはスプリント単位で自然に件数が絞られるのでページネーション不要の方針。');
+INSERT OR IGNORE INTO comments (id, issue_id, user_id, author, body) VALUES
+  ('demo-c-001', 'demo-i-009', 'demo-user-alice', 'Alice', 'カンバンボードのカラム幅を可変にする案も検討中です。'),
+  ('demo-c-002', 'demo-i-009', 'demo-user-bob',   'Bob',   '@Alice ドラッグ中のプレビュー表示も優先度高めにお願いします！'),
+  ('demo-c-003', 'demo-i-010', 'demo-user-carol', 'Carol', 'hello-pangea/dnd を採用することにしました。react-beautiful-dnd の後継です。'),
+  ('demo-c-004', 'demo-i-014', 'demo-user-bob',   'Bob',   'バーンダウンの実績線はactivity_logsから算出します。スプリント開始時のスナップショットがないので中途追加issueの扱いに注意。'),
+  ('demo-c-005', 'demo-i-019', 'demo-user-alice', 'Alice', '検索はサーバーサイドで20件/ページ。Board/Backlogはスプリント単位で自然に件数が絞られるのでページネーション不要の方針。');
 
 SELECT '✓ シードデータ挿入完了' AS result;
-SELECT '  プロジェクト: ' || COUNT(*) || '件' AS summary FROM projects WHERE id = 'demo-project-001';
-SELECT '  スプリント:   ' || COUNT(*) || '件' AS summary FROM sprints WHERE project_id = 'demo-project-001';
-SELECT '  イシュー:     ' || COUNT(*) || '件' AS summary FROM issues WHERE project_id = 'demo-project-001';
+SELECT '  ユーザー:         ' || COUNT(*) || '件' AS summary FROM users WHERE id LIKE 'demo-user-%';
+SELECT '  ワークスペース:   ' || COUNT(*) || '件' AS summary FROM workspaces WHERE id = 'demo-workspace-001';
+SELECT '  プロジェクト:     ' || COUNT(*) || '件' AS summary FROM projects WHERE id = 'demo-project-001';
+SELECT '  スプリント:       ' || COUNT(*) || '件' AS summary FROM sprints WHERE project_id = 'demo-project-001';
+SELECT '  イシュー:         ' || COUNT(*) || '件' AS summary FROM issues WHERE project_id = 'demo-project-001';
+SELECT '  コメント:         ' || COUNT(*) || '件' AS summary FROM comments WHERE id LIKE 'demo-c-%';

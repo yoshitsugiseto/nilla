@@ -6,7 +6,7 @@ export interface IssueFilters {
   status?: string
   type?: string
   priority?: string
-  assignee?: string
+  assignee_id?: string
   q?: string
   limit?: number
   offset?: number
@@ -50,7 +50,7 @@ export const reorderIssues = (projectId: string, ids: string[]) =>
   client.put(`/projects/${projectId}/issues/reorder`, { ids }).then(r => r.data)
 
 export const getComments = (id: string) => client.get<Comment[]>(`/issues/${id}/comments`).then(r => r.data)
-export const createComment = (id: string, author: string, body: string) =>
-  client.post<Comment>(`/issues/${id}/comments`, { author, body }).then(r => r.data)
+export const createComment = (id: string, body: string) =>
+  client.post<Comment>(`/issues/${id}/comments`, { body }).then(r => r.data)
 
 export const getActivity = (id: string) => client.get<ActivityLog[]>(`/issues/${id}/activity`).then(r => r.data)

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createIssue, updateIssue, getIssues } from '../../api/issues'
+import { getProjectMembers } from '../../api/workspaces'
 import type { Issue, IssueType, IssuePriority, UpdateIssue } from '../../types'
 import { useToast } from '../common/Toast'
 import { extractErrorMessage } from '../../api/client'
@@ -23,7 +24,7 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
     type: (issue?.type ?? 'task') as IssueType,
     priority: (issue?.priority ?? parentPriority ?? 'medium') as IssuePriority,
     points: issue?.points?.toString() ?? '',
-    assignee: issue?.assignee ?? '',
+    assignee_id: issue?.assignee_id ?? '',
     parent_id: issue?.parent_id ?? parentId ?? '',
   })
 
@@ -34,6 +35,12 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
   })
   const stories = allIssues.filter(i => i.type === 'story' && i.id !== issue?.id)
 
+  // Project members for assignee dropdown
+  const { data: members = [] } = useQuery({
+    queryKey: ['project-members', projectId],
+    queryFn: () => getProjectMembers(projectId),
+  })
+
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['issues', projectId] })
     onClose()
@@ -43,6 +50,7 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
     mutationFn: () =>
       createIssue(projectId, {
         ...form,
+        assignee_id: form.assignee_id || undefined,
         points: form.points ? parseInt(form.points) : undefined,
         sprint_id: sprintId,
         parent_id: form.parent_id || undefined,
@@ -55,6 +63,7 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
     mutationFn: () => {
       const data: UpdateIssue = {
         ...form,
+        assignee_id: form.assignee_id || undefined,
         points: form.points ? parseInt(form.points) : undefined,
         parent_id: form.parent_id || null,
       }
@@ -153,12 +162,16 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">担当者</label>
-          <input
-            value={form.assignee}
-            onChange={e => setForm(f => ({ ...f, assignee: e.target.value }))}
+          <select
+            value={form.assignee_id}
+            onChange={e => setForm(f => ({ ...f, assignee_id: e.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            placeholder="名前"
-          />
+          >
+            <option value="">未割り当て</option>
+            {members.map(m => (
+              <option key={m.user_id} value={m.user_id}>{m.name}</option>
+            ))}
+          </select>
         </div>
       </div>
 

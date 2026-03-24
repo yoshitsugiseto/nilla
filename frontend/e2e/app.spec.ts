@@ -1,10 +1,19 @@
 import { test, expect, type Page } from '@playwright/test'
 
+const WORKSPACE = {
+  id: 'ws-1',
+  name: 'Test Workspace',
+  created_by: 'user-1',
+  created_at: '2026-01-01T00:00:00',
+  updated_at: '2026-01-01T00:00:00',
+}
+
 const PROJECT = {
   id: 'proj-1',
   name: 'Test Project',
   key: 'TP',
   description: null,
+  workspace_id: 'ws-1',
   created_at: '2026-01-01T00:00:00',
   updated_at: '2026-01-01T00:00:00',
 }
@@ -21,31 +30,54 @@ const SPRINT = {
   updated_at: '2026-01-01T00:00:00',
 }
 
+const TEST_USER = {
+  id: 'user-1',
+  name: 'Test User',
+  email: 'test@example.com',
+  avatar_url: null,
+  provider: 'demo',
+}
+
 async function clearStorage(page: Page) {
   await page.addInitScript(() => {
-    localStorage.removeItem('lira-app-state')
+    localStorage.removeItem('nilla-app-state')
   })
 }
 
+async function mockAuth(page: Page) {
+  await page.route('**/api/auth/refresh', route =>
+    route.fulfill({ json: { access_token: 'test-token' } })
+  )
+  await page.route('**/api/auth/me', route => route.fulfill({ json: TEST_USER }))
+  await page.route('**/api/auth/logout', route => route.fulfill({ status: 204 }))
+  await page.routeWebSocket('**/api/ws**', _ws => { /* accept, no messages */ })
+}
+
 async function mockEmptyApi(page: Page) {
+  await mockAuth(page)
+  await page.route('**/api/workspaces', route => route.fulfill({ json: [] }))
   await page.route('**/api/projects', route => route.fulfill({ json: [] }))
+  await page.route('**/api/notifications', route => route.fulfill({ json: [] }))
 }
 
 async function mockProjectApi(page: Page) {
+  await mockAuth(page)
+  await page.route('**/api/workspaces', route => route.fulfill({ json: [WORKSPACE] }))
   await page.route('**/api/projects', route => route.fulfill({ json: [PROJECT] }))
   await page.route('**/api/projects/proj-1/sprints', route => route.fulfill({ json: [SPRINT] }))
   await page.route('**/api/projects/proj-1/issues**', route =>
     route.fulfill({ json: [], headers: { 'x-total-count': '0' } })
   )
   await page.route('**/api/sprints/sprint-1/burndown', route => route.fulfill({ json: [] }))
+  await page.route('**/api/notifications', route => route.fulfill({ json: [] }))
 }
 
 function withProject(page: Page) {
   return page.addInitScript(() => {
     localStorage.setItem(
-      'lira-app-state',
+      'nilla-app-state',
       JSON.stringify({
-        state: { activeProjectId: 'proj-1', activeSprint: null, boardFilters: {} },
+        state: { activeProjectId: 'proj-1', activeWorkspaceId: 'ws-1', activeSprint: null, boardFilters: {} },
         version: 0,
       })
     )
@@ -61,7 +93,7 @@ test('shows app title and sidebar on load', async ({ page }) => {
   await mockEmptyApi(page)
   await page.goto('/')
 
-  await expect(page.getByText('Lira')).toBeVisible()
+  await expect(page.getByText('Nilla')).toBeVisible()
   await expect(page.getByText('Sprint Manager')).toBeVisible()
   await expect(page.getByPlaceholder('イシューを検索...')).toBeVisible()
 })
@@ -159,6 +191,16 @@ test('pressing Escape clears search', async ({ page }) => {
 test('clicking + opens New Project modal', async ({ page }) => {
   await clearStorage(page)
   await mockEmptyApi(page)
+  // activeWorkspaceId must be set for the New Project modal to render
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'nilla-app-state',
+      JSON.stringify({
+        state: { activeProjectId: null, activeWorkspaceId: 'ws-1', activeSprint: null, boardFilters: {} },
+        version: 0,
+      })
+    )
+  })
   await page.goto('/')
 
   await page.getByRole('button', { name: 'プロジェクトを作成' }).click()
@@ -169,6 +211,15 @@ test('clicking + opens New Project modal', async ({ page }) => {
 test('closing modal with Escape hides the modal', async ({ page }) => {
   await clearStorage(page)
   await mockEmptyApi(page)
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'nilla-app-state',
+      JSON.stringify({
+        state: { activeProjectId: null, activeWorkspaceId: 'ws-1', activeSprint: null, boardFilters: {} },
+        version: 0,
+      })
+    )
+  })
   await page.goto('/')
 
   await page.getByRole('button', { name: 'プロジェクトを作成' }).click()

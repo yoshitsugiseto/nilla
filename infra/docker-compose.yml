@@ -1,0 +1,48 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: sqlite:/data/nilla.db
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      FRONTEND_URL: ${APP_URL:-http://localhost:8080}
+      CORS_ORIGIN: ${APP_URL:-http://localhost:8080}
+      STORAGE_PATH: /data/uploads
+    volumes:
+      - data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  backup:
+    image: alpine:3.20
+    volumes:
+      - data:/data:ro
+      - ./backup:/backup
+    # 毎日 02:00 にバックアップ（WAL 対応）、7日以上古いファイルを削除
+    command: >
+      sh -c "apk add --no-cache sqlite &&
+             while true; do
+               sleep $$(( 86400 - ($$(date +%s) % 86400) + 7200 ));
+               sqlite3 /data/nilla.db \".backup /backup/nilla-$$(date +%Y%m%d).db\" &&
+               find /backup -name 'nilla-*.db' -mtime +7 -delete &&
+               echo \"Backup completed: nilla-$$(date +%Y%m%d).db\";
+             done"
+    restart: unless-stopped
+    depends_on:
+      - app
+
+volumes:
+  data:

@@ -1,14 +1,17 @@
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
+    Extension,
     Json,
 };
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
+use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::{
+    auth::middleware::UserId,
     error::{AppError, Result},
     models::issue::{
         CreateIssue, Issue, IssueFilters, IssueRow, UpdateIssue, UpdateIssueSprint,
@@ -17,9 +20,9 @@ use crate::{
 };
 
 const ISSUE_SELECT: &str =
-    "SELECT id, project_id, sprint_id, parent_id, number, title, description, type, status, priority, points, assignee, labels, position, created_at, updated_at FROM issues";
+    "SELECT i.id, i.project_id, i.sprint_id, i.parent_id, i.number, i.title, i.description, i.type, i.status, i.priority, i.points, i.assignee_id, u.name as assignee_name, u.avatar_url as assignee_avatar_url, i.labels, i.position, i.created_at, i.updated_at FROM issues i LEFT JOIN users u ON i.assignee_id = u.id";
 const GET_ISSUE_SQL: &str =
-    "SELECT id, project_id, sprint_id, parent_id, number, title, description, type, status, priority, points, assignee, labels, position, created_at, updated_at FROM issues WHERE id = ?";
+    "SELECT i.id, i.project_id, i.sprint_id, i.parent_id, i.number, i.title, i.description, i.type, i.status, i.priority, i.points, i.assignee_id, u.name as assignee_name, u.avatar_url as assignee_avatar_url, i.labels, i.position, i.created_at, i.updated_at FROM issues i LEFT JOIN users u ON i.assignee_id = u.id WHERE i.id = ?";
 
 fn validate_status(status: &str) -> crate::error::Result<()> {
     match status {
@@ -42,37 +45,101 @@ fn validate_priority(p: &str) -> crate::error::Result<()> {
     }
 }
 
+async fn check_project_access(pool: &SqlitePool, user_id: &str, project_id: &str) -> Result<()> {
+    let has_access: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM projects p JOIN workspace_members wm ON p.workspace_id = wm.workspace_id WHERE p.id = ? AND wm.user_id = ?)"
+    )
+    .bind(project_id)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+
+    if !has_access {
+        // Also allow access if workspace_id is NULL (legacy data)
+        let is_legacy: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM projects WHERE id = ? AND workspace_id IS NULL)"
+        )
+        .bind(project_id)
+        .fetch_one(pool)
+        .await?;
+
+        if !is_legacy {
+            return Err(AppError::Forbidden);
+        }
+    }
+
+    Ok(())
+}
+
+fn broadcast_event(ws_tx: &broadcast::Sender<String>, event_type: &str, project_id: &str) {
+    let _ = ws_tx.send(
+        serde_json::json!({ "type": event_type, "project_id": project_id }).to_string(),
+    );
+}
+
+async fn create_notification(
+    pool: &SqlitePool,
+    ws_tx: &broadcast::Sender<String>,
+    user_id: &str,
+    issue_id: &str,
+    notif_type: &str,
+    message: &str,
+) {
+    let notif_id = Uuid::new_v4().to_string();
+    let _ = sqlx::query(
+        "INSERT INTO notifications (id, user_id, issue_id, type, message) VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(&notif_id)
+    .bind(user_id)
+    .bind(issue_id)
+    .bind(notif_type)
+    .bind(message)
+    .execute(pool)
+    .await;
+    let _ = ws_tx.send(
+        serde_json::json!({ "type": "notification.new", "user_id": user_id }).to_string(),
+    );
+}
+
+async fn get_project_id_for_issue(pool: &SqlitePool, issue_id: &str) -> Result<String> {
+    sqlx::query_scalar::<_, String>("SELECT project_id FROM issues WHERE id = ?")
+        .bind(issue_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or(AppError::NotFound)
+}
+
 /// WHERE句と引数リストを構築する共通ヘルパー
 fn build_issue_where(project_id: &str, filters: &IssueFilters) -> (String, Vec<String>) {
-    let mut clause = "WHERE project_id = ?".to_string();
+    let mut clause = "WHERE i.project_id = ?".to_string();
     let mut args: Vec<String> = vec![project_id.to_string()];
 
     match filters.sprint_id.as_deref() {
-        Some("backlog") => clause.push_str(" AND sprint_id IS NULL"),
+        Some("backlog") => clause.push_str(" AND i.sprint_id IS NULL"),
         Some(sid) => {
-            clause.push_str(" AND sprint_id = ?");
+            clause.push_str(" AND i.sprint_id = ?");
             args.push(sid.to_string());
         }
         None => {}
     }
     if let Some(status) = &filters.status {
-        clause.push_str(" AND status = ?");
+        clause.push_str(" AND i.status = ?");
         args.push(status.clone());
     }
     if let Some(t) = &filters.r#type {
-        clause.push_str(" AND type = ?");
+        clause.push_str(" AND i.type = ?");
         args.push(t.clone());
     }
     if let Some(priority) = &filters.priority {
-        clause.push_str(" AND priority = ?");
+        clause.push_str(" AND i.priority = ?");
         args.push(priority.clone());
     }
-    if let Some(assignee) = &filters.assignee {
-        clause.push_str(" AND assignee = ?");
-        args.push(assignee.clone());
+    if let Some(assignee_id) = &filters.assignee_id {
+        clause.push_str(" AND i.assignee_id = ?");
+        args.push(assignee_id.clone());
     }
     if let Some(q) = &filters.q {
-        clause.push_str(" AND (title LIKE ? OR description LIKE ?)");
+        clause.push_str(" AND (i.title LIKE ? OR i.description LIKE ?)");
         let pattern = format!("%{}%", q);
         args.push(pattern.clone());
         args.push(pattern);
@@ -83,13 +150,16 @@ fn build_issue_where(project_id: &str, filters: &IssueFilters) -> (String, Vec<S
 
 pub async fn list_issues(
     State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
     Path(project_id): Path<String>,
     Query(filters): Query<IssueFilters>,
 ) -> Result<(HeaderMap, Json<Vec<Issue>>)> {
+    check_project_access(&pool, &user_id.0, &project_id).await?;
+
     let (where_clause, args) = build_issue_where(&project_id, &filters);
 
     // 総件数クエリ
-    let count_sql = format!("SELECT COUNT(*) FROM issues {where_clause}");
+    let count_sql = format!("SELECT COUNT(*) FROM issues i LEFT JOIN users u ON i.assignee_id = u.id {where_clause}");
     let mut count_q = sqlx::query_scalar::<_, i64>(&count_sql);
     for arg in &args {
         count_q = count_q.bind(arg);
@@ -100,7 +170,7 @@ pub async fn list_issues(
     let limit = filters.limit.unwrap_or(500).clamp(1, 1000);
     let offset = filters.offset.unwrap_or(0).max(0);
     let data_sql = format!(
-        "{ISSUE_SELECT} {where_clause} ORDER BY position ASC, created_at DESC LIMIT {limit} OFFSET {offset}"
+        "{ISSUE_SELECT} {where_clause} ORDER BY i.position ASC, i.created_at DESC LIMIT {limit} OFFSET {offset}"
     );
     let mut data_q = sqlx::query_as::<_, IssueRow>(&data_sql);
     for arg in &args {
@@ -120,9 +190,13 @@ pub async fn list_issues(
 
 pub async fn create_issue(
     State(pool): State<SqlitePool>,
+    State(ws_tx): State<broadcast::Sender<String>>,
+    Extension(user_id): Extension<UserId>,
     Path(project_id): Path<String>,
     Json(body): Json<CreateIssue>,
 ) -> Result<Json<Issue>> {
+    check_project_access(&pool, &user_id.0, &project_id).await?;
+
     if body.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".to_string()));
     }
@@ -181,8 +255,8 @@ pub async fn create_issue(
     .fetch_one(&mut *tx)
     .await?;
 
-    let row = sqlx::query_as::<_, IssueRow>(
-        "INSERT INTO issues (id, project_id, sprint_id, parent_id, number, title, description, type, priority, points, assignee, labels) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, project_id, sprint_id, parent_id, number, title, description, type, status, priority, points, assignee, labels, position, created_at, updated_at",
+    sqlx::query(
+        "INSERT INTO issues (id, project_id, sprint_id, parent_id, number, title, description, type, priority, points, assignee_id, labels) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&project_id)
@@ -194,31 +268,30 @@ pub async fn create_issue(
     .bind(&issue_type)
     .bind(&priority)
     .bind(body.points)
-    .bind(body.assignee.as_deref())
+    .bind(body.assignee_id.as_deref())
     .bind(&labels_json)
-    .fetch_one(&mut *tx)
-    .await;
+    .execute(&mut *tx)
+    .await?;
 
-    // Fallback: fetch the inserted row
-    let row = match row {
-        Ok(r) => r,
-        Err(_) => {
-            sqlx::query_as::<_, IssueRow>(GET_ISSUE_SQL)
-                .bind(&id)
-                .fetch_one(&mut *tx)
-                .await?
-        }
-    };
+    let row = sqlx::query_as::<_, IssueRow>(GET_ISSUE_SQL)
+        .bind(&id)
+        .fetch_one(&mut *tx)
+        .await?;
 
     tx.commit().await?;
 
+    broadcast_event(&ws_tx, "issue.created", &project_id);
     Ok(Json(Issue::from(row)))
 }
 
 pub async fn get_issue(
     State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
 ) -> Result<Json<Issue>> {
+    let project_id = get_project_id_for_issue(&pool, &id).await?;
+    check_project_access(&pool, &user_id.0, &project_id).await?;
+
     let row = sqlx::query_as::<_, IssueRow>(GET_ISSUE_SQL)
         .bind(&id)
         .fetch_optional(&pool)
@@ -230,9 +303,14 @@ pub async fn get_issue(
 
 pub async fn update_issue(
     State(pool): State<SqlitePool>,
+    State(ws_tx): State<broadcast::Sender<String>>,
+    Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
     Json(body): Json<UpdateIssue>,
 ) -> Result<Json<Issue>> {
+    let project_id = get_project_id_for_issue(&pool, &id).await?;
+    check_project_access(&pool, &user_id.0, &project_id).await?;
+
     if let Some(ref title) = body.title {
         if title.trim().is_empty() {
             return Err(AppError::BadRequest("title must not be empty".to_string()));
@@ -276,7 +354,8 @@ pub async fn update_issue(
     let new_status = body.status.clone().unwrap_or(current.status.clone());
     let priority = body.priority.unwrap_or(current.priority.clone());
     let points = body.points.or(current.points);
-    let assignee = body.assignee.or(current.assignee.clone());
+    let new_assignee_id_from_body = body.assignee_id.clone();
+    let assignee_id = body.assignee_id.or(current.assignee_id.clone());
     let labels_json = match body.labels {
         Some(l) => serde_json::to_string(&l).map_err(|e| AppError::Internal(e.into()))?,
         None => current.labels.clone().unwrap_or_else(|| "[]".to_string()),
@@ -295,7 +374,7 @@ pub async fn update_issue(
     let mut tx = pool.begin().await?;
 
     sqlx::query(
-        "UPDATE issues SET title=?, description=?, type=?, status=?, priority=?, points=?, assignee=?, labels=?, sprint_id=?, parent_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        "UPDATE issues SET title=?, description=?, type=?, status=?, priority=?, points=?, assignee_id=?, labels=?, sprint_id=?, parent_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
     )
     .bind(&title)
     .bind(&description)
@@ -303,7 +382,7 @@ pub async fn update_issue(
     .bind(&new_status)
     .bind(&priority)
     .bind(points)
-    .bind(&assignee)
+    .bind(&assignee_id)
     .bind(&labels_json)
     .bind(&sprint_id)
     .bind(&parent_id)
@@ -331,13 +410,38 @@ pub async fn update_issue(
 
     tx.commit().await?;
 
+    broadcast_event(&ws_tx, "issue.updated", &project_id);
+
+    // Notify new assignee (if changed and not self-assign)
+    let assignee_changed = new_assignee_id_from_body.is_some()
+        && new_assignee_id_from_body.as_deref() != current.assignee_id.as_deref();
+    if assignee_changed {
+        if let Some(ref new_assignee) = assignee_id {
+            if new_assignee != &user_id.0 {
+                let assigner_name: String = sqlx::query_scalar("SELECT name FROM users WHERE id = ?")
+                    .bind(&user_id.0)
+                    .fetch_optional(&pool)
+                    .await
+                    .unwrap_or(None)
+                    .unwrap_or_else(|| "Unknown".to_string());
+                let msg = format!("{} が「{}」にアサインしました", assigner_name, title);
+                create_notification(&pool, &ws_tx, new_assignee, &id, "assigned", &msg).await;
+            }
+        }
+    }
+
     Ok(Json(Issue::from(row)))
 }
 
 pub async fn delete_issue(
     State(pool): State<SqlitePool>,
+    State(ws_tx): State<broadcast::Sender<String>>,
+    Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>> {
+    let project_id = get_project_id_for_issue(&pool, &id).await?;
+    check_project_access(&pool, &user_id.0, &project_id).await?;
+
     let mut tx = pool.begin().await?;
 
     // Delete subtasks first to avoid orphaned children
@@ -357,15 +461,21 @@ pub async fn delete_issue(
     }
 
     tx.commit().await?;
+    broadcast_event(&ws_tx, "issue.deleted", &project_id);
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 pub async fn update_issue_status(
     State(pool): State<SqlitePool>,
+    State(ws_tx): State<broadcast::Sender<String>>,
+    Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
     Json(body): Json<UpdateIssueStatus>,
 ) -> Result<Json<Issue>> {
     validate_status(&body.status)?;
+
+    let project_id = get_project_id_for_issue(&pool, &id).await?;
+    check_project_access(&pool, &user_id.0, &project_id).await?;
 
     let current = sqlx::query_as::<_, IssueRow>(GET_ISSUE_SQL)
         .bind(&id)
@@ -403,14 +513,19 @@ pub async fn update_issue_status(
 
     tx.commit().await?;
 
+    broadcast_event(&ws_tx, "issue.updated", &project_id);
     Ok(Json(Issue::from(row)))
 }
 
 pub async fn update_issue_sprint(
     State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
     Json(body): Json<UpdateIssueSprint>,
 ) -> Result<Json<Issue>> {
+    let project_id = get_project_id_for_issue(&pool, &id).await?;
+    check_project_access(&pool, &user_id.0, &project_id).await?;
+
     let result =
         sqlx::query("UPDATE issues SET sprint_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
             .bind(&body.sprint_id)
@@ -432,12 +547,18 @@ pub async fn update_issue_sprint(
 
 pub async fn list_children(
     State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
 ) -> Result<Json<Vec<Issue>>> {
-    let rows = sqlx::query_as::<_, IssueRow>("SELECT id, project_id, sprint_id, parent_id, number, title, description, type, status, priority, points, assignee, labels, position, created_at, updated_at FROM issues WHERE parent_id = ? ORDER BY position ASC, created_at ASC")
-        .bind(&id)
-        .fetch_all(&pool)
-        .await?;
+    let project_id = get_project_id_for_issue(&pool, &id).await?;
+    check_project_access(&pool, &user_id.0, &project_id).await?;
+
+    let rows = sqlx::query_as::<_, IssueRow>(
+        "SELECT i.id, i.project_id, i.sprint_id, i.parent_id, i.number, i.title, i.description, i.type, i.status, i.priority, i.points, i.assignee_id, u.name as assignee_name, u.avatar_url as assignee_avatar_url, i.labels, i.position, i.created_at, i.updated_at FROM issues i LEFT JOIN users u ON i.assignee_id = u.id WHERE i.parent_id = ? ORDER BY i.position ASC, i.created_at ASC"
+    )
+    .bind(&id)
+    .fetch_all(&pool)
+    .await?;
     Ok(Json(rows.into_iter().map(Issue::from).collect()))
 }
 
@@ -451,9 +572,13 @@ const POSITION_GAP: i64 = 1000;
 
 pub async fn reorder_issues(
     State(pool): State<SqlitePool>,
-    Path(_project_id): Path<String>,
+    State(ws_tx): State<broadcast::Sender<String>>,
+    Extension(user_id): Extension<UserId>,
+    Path(project_id): Path<String>,
     Json(body): Json<ReorderBody>,
 ) -> Result<Json<serde_json::Value>> {
+    check_project_access(&pool, &user_id.0, &project_id).await?;
+
     let mut tx = pool.begin().await?;
     for (i, id) in body.ids.iter().enumerate() {
         sqlx::query("UPDATE issues SET position=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
@@ -463,6 +588,7 @@ pub async fn reorder_issues(
             .await?;
     }
     tx.commit().await?;
+    broadcast_event(&ws_tx, "issue.reordered", &project_id);
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -472,7 +598,9 @@ pub async fn reorder_issues(
 pub struct Comment {
     pub id: String,
     pub issue_id: String,
-    pub author: String,
+    pub user_id: Option<String>,
+    pub author_name: String,
+    pub author_avatar_url: Option<String>,
     pub body: String,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
@@ -480,16 +608,19 @@ pub struct Comment {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateComment {
-    pub author: String,
     pub body: String,
 }
 
 pub async fn list_comments(
     State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
 ) -> Result<Json<Vec<Comment>>> {
+    let project_id = get_project_id_for_issue(&pool, &id).await?;
+    check_project_access(&pool, &user_id.0, &project_id).await?;
+
     let comments = sqlx::query_as::<_, Comment>(
-        "SELECT id, issue_id, author, body, created_at, updated_at FROM comments WHERE issue_id = ? ORDER BY created_at ASC",
+        "SELECT c.id, c.issue_id, c.user_id, COALESCE(u.name, c.author, 'Unknown') as author_name, u.avatar_url as author_avatar_url, c.body, c.created_at, c.updated_at FROM comments c LEFT JOIN users u ON c.user_id = u.id WHERE c.issue_id = ? ORDER BY c.created_at ASC",
     )
     .bind(&id)
     .fetch_all(&pool)
@@ -499,12 +630,14 @@ pub async fn list_comments(
 
 pub async fn create_comment(
     State(pool): State<SqlitePool>,
+    State(ws_tx): State<broadcast::Sender<String>>,
+    Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
     Json(body): Json<CreateComment>,
 ) -> Result<Json<Comment>> {
-    if body.author.trim().is_empty() {
-        return Err(AppError::BadRequest("author is required".to_string()));
-    }
+    let project_id = get_project_id_for_issue(&pool, &id).await?;
+    check_project_access(&pool, &user_id.0, &project_id).await?;
+
     if body.body.trim().is_empty() {
         return Err(AppError::BadRequest("body is required".to_string()));
     }
@@ -514,20 +647,47 @@ pub async fn create_comment(
 
     let comment_id = Uuid::new_v4().to_string();
 
-    sqlx::query("INSERT INTO comments (id, issue_id, author, body) VALUES (?, ?, ?, ?)")
+    // `author` column is NOT NULL for backward compat — populate from users table
+    let author_name: String = sqlx::query_scalar("SELECT name FROM users WHERE id = ?")
+        .bind(&user_id.0)
+        .fetch_optional(&pool)
+        .await?
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    sqlx::query("INSERT INTO comments (id, issue_id, user_id, author, body) VALUES (?, ?, ?, ?, ?)")
         .bind(&comment_id)
         .bind(&id)
-        .bind(&body.author)
+        .bind(&user_id.0)
+        .bind(&author_name)
         .bind(&body.body)
         .execute(&pool)
         .await?;
 
     let comment = sqlx::query_as::<_, Comment>(
-        "SELECT id, issue_id, author, body, created_at, updated_at FROM comments WHERE id = ?",
+        "SELECT c.id, c.issue_id, c.user_id, COALESCE(u.name, 'Unknown') as author_name, u.avatar_url as author_avatar_url, c.body, c.created_at, c.updated_at FROM comments c LEFT JOIN users u ON c.user_id = u.id WHERE c.id = ?",
     )
     .bind(&comment_id)
     .fetch_one(&pool)
     .await?;
+
+    let _ = ws_tx.send(
+        serde_json::json!({ "type": "comment.created", "issue_id": id, "project_id": project_id }).to_string(),
+    );
+
+    // Notify issue assignee (if not the commenter)
+    let issue_row: Option<(Option<String>, String)> =
+        sqlx::query_as("SELECT assignee_id, title FROM issues WHERE id = ?")
+            .bind(&id)
+            .fetch_optional(&pool)
+            .await
+            .ok()
+            .flatten();
+    if let Some((Some(assignee_uid), issue_title)) = issue_row {
+        if assignee_uid != user_id.0 {
+            let msg = format!("「{}」に {} がコメントしました", issue_title, author_name);
+            create_notification(&pool, &ws_tx, &assignee_uid, &id, "comment", &msg).await;
+        }
+    }
 
     Ok(Json(comment))
 }
@@ -546,8 +706,12 @@ pub struct ActivityLog {
 
 pub async fn list_activity(
     State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
 ) -> Result<Json<Vec<ActivityLog>>> {
+    let project_id = get_project_id_for_issue(&pool, &id).await?;
+    check_project_access(&pool, &user_id.0, &project_id).await?;
+
     let logs = sqlx::query_as::<_, ActivityLog>(
         "SELECT id, issue_id, field, old_value, new_value, created_at FROM activity_logs WHERE issue_id = ? ORDER BY created_at ASC",
     )
