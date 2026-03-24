@@ -116,6 +116,26 @@ pub struct UpdateIssueSprint {
     pub sprint_id: Option<String>,
 }
 
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct IssueLink {
+    pub id: String,
+    pub source_issue_id: String,
+    pub target_issue_id: String,
+    pub link_type: String,
+    pub linked_issue_id: String,
+    pub linked_issue_number: i64,
+    pub linked_issue_title: String,
+    pub linked_issue_status: String,
+    pub linked_issue_type: String,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateIssueLink {
+    pub target_issue_id: String,
+    pub link_type: String,
+}
+
 #[derive(Debug, Deserialize, Default)]
 pub struct IssueFilters {
     pub sprint_id: Option<String>,

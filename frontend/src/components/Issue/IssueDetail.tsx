@@ -1,14 +1,28 @@
 import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getIssue, updateIssue, getComments, createComment, getActivity, getIssueChildren } from '../../api/issues'
+import { getIssue, updateIssue, getComments, createComment, getActivity, getIssueChildren, getIssueLinks, createIssueLink, deleteIssueLink } from '../../api/issues'
 import { getAttachments, uploadAttachment, deleteAttachment } from '../../api/attachments'
 import { TypeIcon, PriorityBadge } from '../common/Badge'
 import { Avatar } from '../common/Avatar'
 import { IssueForm } from './IssueForm'
 import { Modal } from '../common/Modal'
 import { useToast } from '../common/Toast'
-import type { IssueStatus } from '../../types'
-import { Pencil, MessageSquare, Clock, Plus, ListTodo, Paperclip, Trash2, Upload } from 'lucide-react'
+import type { IssueStatus, IssueLinkType } from '../../types'
+import { Pencil, MessageSquare, Clock, Plus, ListTodo, Paperclip, Trash2, Upload, Link2, X } from 'lucide-react'
+
+const LINK_TYPE_LABELS: Record<IssueLinkType, string> = {
+  blocks: 'Blocks',
+  is_blocked_by: 'Is blocked by',
+  relates_to: 'Relates to',
+  duplicates: 'Duplicates',
+}
+
+const LINK_TYPE_COLORS: Record<IssueLinkType, string> = {
+  blocks: 'text-red-600 bg-red-50',
+  is_blocked_by: 'text-orange-600 bg-orange-50',
+  relates_to: 'text-blue-600 bg-blue-50',
+  duplicates: 'text-gray-600 bg-gray-100',
+}
 
 const STATUS_OPTIONS: { value: IssueStatus; label: string }[] = [
   { value: 'todo', label: 'Todo' },
@@ -26,7 +40,9 @@ interface Props {
 export function IssueDetail({ issueId, projectId }: Props) {
   const qc = useQueryClient()
   const showToast = useToast()
-  const [tab, setTab] = useState<'comments' | 'files' | 'activity'>('comments')
+  const [tab, setTab] = useState<'comments' | 'files' | 'activity' | 'links'>('comments')
+  const [linkTargetId, setLinkTargetId] = useState('')
+  const [linkType, setLinkType] = useState<IssueLinkType>('relates_to')
   const [editing, setEditing] = useState(false)
   const [addingSubtask, setAddingSubtask] = useState(false)
   const [commentText, setCommentText] = useState('')
@@ -59,6 +75,29 @@ export function IssueDetail({ issueId, projectId }: Props) {
     queryFn: () => getAttachments(issueId),
     enabled: tab === 'files',
     refetchOnWindowFocus: false,
+  })
+
+  const { data: links = [], isError: linksError } = useQuery({
+    queryKey: ['links', issueId],
+    queryFn: () => getIssueLinks(issueId),
+    enabled: tab === 'links',
+  })
+
+  const createLinkMutation = useMutation({
+    mutationFn: () => createIssueLink(issueId, linkTargetId.trim(), linkType),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['links', issueId] })
+      setLinkTargetId('')
+    },
+    onError: () => showToast('リンクの作成に失敗しました', 'error'),
+  })
+
+  const deleteLinkMutation = useMutation({
+    mutationFn: (linkId: string) => deleteIssueLink(linkId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['links', issueId] })
+    },
+    onError: () => showToast('リンクの削除に失敗しました', 'error'),
   })
 
   const uploadMutation = useMutation({
@@ -227,6 +266,14 @@ export function IssueDetail({ issueId, projectId }: Props) {
           >
             <Clock size={14} /> アクティビティ
           </button>
+          <button
+            onClick={() => setTab('links')}
+            className={`flex items-center gap-1.5 text-sm pb-2 border-b-2 transition-colors ${
+              tab === 'links' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Link2 size={14} /> リンク {links.length > 0 && `(${links.length})`}
+          </button>
         </div>
 
         {tab === 'comments' && (
@@ -343,6 +390,65 @@ export function IssueDetail({ issueId, projectId }: Props) {
                 </span>
               </div>
             ))}
+          </div>
+        )}
+
+        {tab === 'links' && (
+          <div className="space-y-3">
+            {linksError && (
+              <p className="text-sm text-red-400">リンクの取得に失敗しました</p>
+            )}
+            {links.map(link => (
+              <div key={link.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg text-sm">
+                <span className={`text-xs font-medium px-1.5 py-0.5 rounded shrink-0 ${LINK_TYPE_COLORS[link.link_type]}`}>
+                  {LINK_TYPE_LABELS[link.link_type]}
+                </span>
+                <TypeIcon type={link.linked_issue_type as any} />
+                <span className="text-xs text-gray-400 font-mono shrink-0">#{link.linked_issue_number}</span>
+                <span className="flex-1 text-gray-800 truncate">{link.linked_issue_title}</span>
+                <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${
+                  link.linked_issue_status === 'done' ? 'bg-emerald-100 text-emerald-700' :
+                  link.linked_issue_status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                  'bg-gray-100 text-gray-600'
+                }`}>{link.linked_issue_status.replace('_', ' ')}</span>
+                <button
+                  onClick={() => deleteLinkMutation.mutate(link.id)}
+                  disabled={deleteLinkMutation.isPending}
+                  className="text-gray-400 hover:text-red-500 transition-colors"
+                  aria-label="リンクを削除"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+            {!linksError && links.length === 0 && (
+              <p className="text-sm text-gray-400">リンクなし</p>
+            )}
+
+            <div className="pt-2 flex gap-2">
+              <input
+                value={linkTargetId}
+                onChange={e => setLinkTargetId(e.target.value)}
+                placeholder="リンク先イシューID"
+                className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
+              />
+              <select
+                value={linkType}
+                onChange={e => setLinkType(e.target.value as IssueLinkType)}
+                className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
+              >
+                {(Object.keys(LINK_TYPE_LABELS) as IssueLinkType[]).map(t => (
+                  <option key={t} value={t}>{LINK_TYPE_LABELS[t]}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => createLinkMutation.mutate()}
+                disabled={!linkTargetId.trim() || createLinkMutation.isPending}
+                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40 flex items-center gap-1"
+              >
+                <Plus size={14} /> 追加
+              </button>
+            </div>
           </div>
         )}
       </div>

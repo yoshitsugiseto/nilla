@@ -99,6 +99,26 @@ export interface BurndownPoint {
   actual: number
 }
 
+export type IssueLinkType = 'blocks' | 'is_blocked_by' | 'relates_to' | 'duplicates'
+
+export interface IssueLink {
+  id: string
+  source_issue_id: string
+  target_issue_id: string
+  link_type: IssueLinkType
+  linked_issue_id: string
+  linked_issue_number: number
+  linked_issue_title: string
+  linked_issue_status: string
+  linked_issue_type: string
+  created_at: string
+}
+
+export interface VelocityPoint {
+  sprint_name: string
+  completed_points: number
+}
+
 export interface Attachment {
   id: string
   issue_id: string

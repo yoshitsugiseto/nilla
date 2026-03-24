@@ -1,5 +1,5 @@
 import client from './client'
-import type { Issue, CreateIssue, UpdateIssue, Comment, ActivityLog } from '../types'
+import type { Issue, CreateIssue, UpdateIssue, Comment, ActivityLog, IssueLink } from '../types'
 
 export interface IssueFilters {
   sprint_id?: string
@@ -54,3 +54,8 @@ export const createComment = (id: string, body: string) =>
   client.post<Comment>(`/issues/${id}/comments`, { body }).then(r => r.data)
 
 export const getActivity = (id: string) => client.get<ActivityLog[]>(`/issues/${id}/activity`).then(r => r.data)
+
+export const getIssueLinks = (id: string) => client.get<IssueLink[]>(`/issues/${id}/links`).then(r => r.data)
+export const createIssueLink = (id: string, target_issue_id: string, link_type: string) =>
+  client.post<IssueLink>(`/issues/${id}/links`, { target_issue_id, link_type }).then(r => r.data)
+export const deleteIssueLink = (linkId: string) => client.delete(`/issue-links/${linkId}`).then(r => r.data)
