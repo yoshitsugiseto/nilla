@@ -1,19 +1,21 @@
-# Lira
+# Nilla
 
-ローカル動作のスプリント管理アプリ。インターネット接続不要、シングルプロセスで起動します。
+チーム向けスプリント管理アプリ。Rust + React で構築し、Docker 一発で起動できます。
 
 ---
 
 ## 特徴
 
+- **認証** — GitHub / Google OAuth、JWT によるセッション管理
+- **Workspace** — チーム単位でプロジェクトを管理、ロールベースの権限制御
 - **カンバンボード** — ドラッグ&ドロップでステータス変更
 - **バックログ管理** — スプリントへの割当・並び替え
 - **スプリントライフサイクル** — 作成 → 開始 → 完了、未完了 Issue の自動移動
 - **バーンダウンチャート** — アクティビティログから実績を自動集計
 - **全文検索** — タイトル・説明をリアルタイム検索（サーバーサイドページネーション）
 - **サブタスク** — Story に対して子 Issue を作成
-- **コメント・アクティビティログ** — Issue ごとの変更履歴を記録
-- **データはローカル SQLite** — `nilla.db` をコピーするだけでバックアップ
+- **ファイル添付** — Issue へのファイル・画像添付（S3互換ストレージ対応）
+- **通知** — @メンション・アサイン変更・コメント追加のインアプリ通知
 
 ---
 
@@ -23,6 +25,7 @@
 |---|---|
 | バックエンド | Rust + Axum 0.8 |
 | DB | SQLite + sqlx 0.8 |
+| 認証 | JWT + OAuth (GitHub / Google) |
 | フロントエンド | React 19 + TypeScript + Vite |
 | スタイル | Tailwind CSS 4 |
 | 状態管理 | TanStack Query 5 + Zustand 5 |
@@ -30,24 +33,32 @@
 
 ---
 
-## 必要環境
+## Docker で起動（推奨）
 
-- **Rust** 1.75 以上（[rustup](https://rustup.rs/)）
-- **Node.js** 20 以上
+```bash
+cp .env.example .env
+# .env を編集して JWT_SECRET と OAuth キーを設定
+
+docker compose -f infra/docker-compose.yml up
+# → http://localhost:8080
+```
 
 ---
 
-## セットアップ
+## ローカル開発
+
+### 必要環境
+
+- Rust 1.75 以上（[rustup](https://rustup.rs/)）
+- Node.js 20 以上
+
+### セットアップ
 
 ```bash
-git clone https://github.com/yourname/nilla.git
+git clone https://github.com/yoshitsugiseto/nilla.git
 cd nilla
-```
-
-環境変数はデフォルトのままで動きますが、変更したい場合は `.env.example` をコピーして編集します。
-
-```bash
 cp .env.example backend/.env
+# backend/.env を編集して JWT_SECRET などを設定
 ```
 
 ### バックエンド起動
@@ -56,7 +67,7 @@ cp .env.example backend/.env
 cd backend
 cargo run
 # → http://localhost:8080
-# データベース (nilla.db) とマイグレーションは初回起動時に自動生成
+# DBとマイグレーションは初回起動時に自動生成
 ```
 
 ### フロントエンド起動（別ターミナル）
@@ -68,15 +79,15 @@ npm run dev
 # → http://localhost:3000
 ```
 
-ブラウザで http://localhost:3000 を開きます。
+### 環境変数
 
-### サンプルデータ（任意）
-
-```bash
-sqlite3 nilla.db < seed.sql
-```
-
-30 件のサンプル Issue が追加されます。
+| 変数 | 説明 | 必須 |
+|---|---|---|
+| `JWT_SECRET` | JWT 署名キー（32文字以上推奨） | ✓ |
+| `DATABASE_URL` | SQLite パス（例: `sqlite:./nilla.db`） | |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth | |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth | |
+| `APP_URL` | 公開URL（OAuthコールバック用、例: `http://localhost:8080`） | |
 
 ---
 
@@ -89,7 +100,7 @@ cd backend
 cargo test
 ```
 
-インメモリ SQLite を使った統合テスト（34 件）。
+インメモリ SQLite を使った統合テスト。
 
 ### フロントエンド
 
@@ -122,12 +133,16 @@ cd backend && cargo build --release
 nilla/
 ├── backend/          # Rust / Axum
 │   ├── src/
+│   │   └── auth/     # JWT・OAuth
 │   ├── migrations/   # SQLite マイグレーション
 │   └── tests/        # 統合テスト
 ├── frontend/         # React / Vite
 │   ├── src/
 │   ├── e2e/          # Playwright テスト
 │   └── src/test/     # Vitest テスト
+├── infra/            # Docker
+│   ├── Dockerfile
+│   └── docker-compose.yml
 ├── seed.sql          # サンプルデータ
 └── SPEC.md           # 詳細仕様
 ```
