@@ -735,14 +735,14 @@ pub async fn list_links(
         r#"SELECT il.id, il.source_issue_id, il.target_issue_id, il.link_type,
                   i.id as linked_issue_id, i.number as linked_issue_number,
                   i.title as linked_issue_title, i.status as linked_issue_status,
-                  i.type as linked_issue_type, il.created_at
+                  i.type as linked_issue_type, il.created_at as created_at
            FROM issue_links il JOIN issues i ON i.id = il.target_issue_id
            WHERE il.source_issue_id = ?
            UNION ALL
            SELECT il.id, il.source_issue_id, il.target_issue_id, il.link_type,
                   i.id as linked_issue_id, i.number as linked_issue_number,
                   i.title as linked_issue_title, i.status as linked_issue_status,
-                  i.type as linked_issue_type, il.created_at
+                  i.type as linked_issue_type, il.created_at as created_at
            FROM issue_links il JOIN issues i ON i.id = il.source_issue_id
            WHERE il.target_issue_id = ?
            ORDER BY created_at ASC"#,
