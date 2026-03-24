@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Trello, List, Zap, Plus, FolderOpen, LayoutDashboard, Search, LogOut, Settings, Bell, X, Trash2 } from 'lucide-react'
+import { Trello, List, Zap, Plus, FolderOpen, LayoutDashboard, Search, LogOut, Settings, Bell, X } from 'lucide-react'
 import { useToast } from './components/common/Toast'
 import { extractErrorMessage } from './api/client'
 import client from './api/client'
