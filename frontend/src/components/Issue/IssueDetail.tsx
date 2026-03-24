@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getIssue, updateIssue, getComments, createComment, getActivity, getIssueChildren, getIssueLinks, createIssueLink, deleteIssueLink } from '../../api/issues'
+import { getIssue, updateIssue, getComments, createComment, getActivity, getIssueChildren, getIssueLinks, createIssueLink, deleteIssueLink, getIssues } from '../../api/issues'
 import { getAttachments, uploadAttachment, deleteAttachment } from '../../api/attachments'
 import { TypeIcon, PriorityBadge } from '../common/Badge'
 import { Avatar } from '../common/Avatar'
@@ -41,8 +41,12 @@ export function IssueDetail({ issueId, projectId }: Props) {
   const qc = useQueryClient()
   const showToast = useToast()
   const [tab, setTab] = useState<'comments' | 'files' | 'activity' | 'links'>('comments')
+  const [linkSearch, setLinkSearch] = useState('')
   const [linkTargetId, setLinkTargetId] = useState('')
   const [linkType, setLinkType] = useState<IssueLinkType>('relates_to')
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const linkComboRef = useRef<HTMLDivElement>(null)
   const [editing, setEditing] = useState(false)
   const [addingSubtask, setAddingSubtask] = useState(false)
   const [commentText, setCommentText] = useState('')
@@ -83,11 +87,41 @@ export function IssueDetail({ issueId, projectId }: Props) {
     enabled: tab === 'links',
   })
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(linkSearch), 300)
+    return () => clearTimeout(timer)
+  }, [linkSearch])
+
+  useEffect(() => {
+    if (!showSuggestions) return
+    const handler = (e: MouseEvent) => {
+      if (linkComboRef.current && !linkComboRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showSuggestions])
+
+  const searchTerm = debouncedSearch.startsWith('#') ? debouncedSearch.slice(1) : debouncedSearch
+
+  const { data: suggestions = [] } = useQuery({
+    queryKey: ['issue-search', projectId, searchTerm],
+    queryFn: () => getIssues(projectId, { q: searchTerm, limit: 8 }),
+    enabled: showSuggestions && searchTerm.trim().length > 0,
+    staleTime: 30_000,
+  })
+
+  const filteredSuggestions = suggestions.filter(
+    i => i.id !== issueId && !links.some(l => l.linked_issue_id === i.id)
+  )
+
   const createLinkMutation = useMutation({
-    mutationFn: () => createIssueLink(issueId, linkTargetId.trim(), linkType),
+    mutationFn: () => createIssueLink(issueId, linkTargetId, linkType),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['links', issueId] })
       setLinkTargetId('')
+      setLinkSearch('')
     },
     onError: () => showToast('リンクの作成に失敗しました', 'error'),
   })
@@ -425,29 +459,70 @@ export function IssueDetail({ issueId, projectId }: Props) {
               <p className="text-sm text-gray-400">リンクなし</p>
             )}
 
-            <div className="pt-2 flex gap-2">
-              <input
-                value={linkTargetId}
-                onChange={e => setLinkTargetId(e.target.value)}
-                placeholder="リンク先イシューID"
-                className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
-              />
-              <select
-                value={linkType}
-                onChange={e => setLinkType(e.target.value as IssueLinkType)}
-                className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
-              >
-                {(Object.keys(LINK_TYPE_LABELS) as IssueLinkType[]).map(t => (
-                  <option key={t} value={t}>{LINK_TYPE_LABELS[t]}</option>
-                ))}
-              </select>
-              <button
-                onClick={() => createLinkMutation.mutate()}
-                disabled={!linkTargetId.trim() || createLinkMutation.isPending}
-                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40 flex items-center gap-1"
-              >
-                <Plus size={14} /> 追加
-              </button>
+            <div className="pt-2 space-y-2">
+              <div className="flex gap-2">
+                <div className="relative flex-1" ref={linkComboRef}>
+                  <input
+                    value={linkSearch}
+                    onChange={e => {
+                      setLinkSearch(e.target.value)
+                      setLinkTargetId('')
+                      setShowSuggestions(true)
+                    }}
+                    onFocus={() => setShowSuggestions(true)}
+                    placeholder="イシューを検索（タイトル・#番号）..."
+                    className={`w-full border rounded-lg px-3 py-1.5 text-sm ${
+                      linkTargetId ? 'border-blue-400 bg-blue-50' : 'border-gray-200'
+                    }`}
+                  />
+                  {showSuggestions && searchTerm.trim().length > 0 && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-52 overflow-auto">
+                      {filteredSuggestions.length === 0 ? (
+                        <p className="px-3 py-2 text-xs text-gray-400">該当なし</p>
+                      ) : (
+                        filteredSuggestions.map(i => (
+                          <button
+                            key={i.id}
+                            type="button"
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => {
+                              setLinkTargetId(i.id)
+                              setLinkSearch(`#${i.number} ${i.title}`)
+                              setShowSuggestions(false)
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                          >
+                            <TypeIcon type={i.type} />
+                            <span className="text-gray-400 font-mono text-xs shrink-0">#{i.number}</span>
+                            <span className="flex-1 truncate text-gray-800">{i.title}</span>
+                            <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${
+                              i.status === 'done' ? 'bg-emerald-100 text-emerald-700' :
+                              i.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                              'bg-gray-100 text-gray-600'
+                            }`}>{i.status.replace('_', ' ')}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+                <select
+                  value={linkType}
+                  onChange={e => setLinkType(e.target.value as IssueLinkType)}
+                  className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm shrink-0"
+                >
+                  {(Object.keys(LINK_TYPE_LABELS) as IssueLinkType[]).map(t => (
+                    <option key={t} value={t}>{LINK_TYPE_LABELS[t]}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => createLinkMutation.mutate()}
+                  disabled={!linkTargetId || createLinkMutation.isPending}
+                  className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40 flex items-center gap-1 shrink-0"
+                >
+                  <Plus size={14} /> 追加
+                </button>
+              </div>
             </div>
           </div>
         )}
