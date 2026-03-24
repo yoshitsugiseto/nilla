@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart2, ChevronDown, ChevronRight, ArrowLeft } from 'lucide-react'
+import { BarChart2, ChevronDown, ChevronRight, ArrowLeft, TrendingUp } from 'lucide-react'
 import { getSprints } from '../api/sprints'
 import { getIssues } from '../api/issues'
 import { useAppStore } from '../store'
 import { BurndownChart } from '../components/Board/BurndownChart'
+import { VelocityChart } from '../components/Board/VelocityChart'
 import { StatusBadge, PriorityBadge, TypeIcon } from '../components/common/Badge'
 import type { Sprint, Issue } from '../types'
 
@@ -138,11 +139,21 @@ export function SprintHistoryPage({ onNavigate }: { onNavigate: (page: string) =
       ) : completed.length === 0 ? (
         <div className="text-center py-12 text-gray-400">完了済みのスプリントはありません</div>
       ) : (
-        <div className="space-y-4">
-          {completed.map(sprint => (
-            <CompletedSprintCard key={sprint.id} sprint={sprint} issues={issues} />
-          ))}
-        </div>
+        <>
+          {completed.length >= 2 && (
+            <div className="mb-6 border border-gray-200 rounded-xl p-5">
+              <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-4">
+                <TrendingUp size={16} /> ベロシティ推移
+              </h2>
+              <VelocityChart projectId={activeProjectId!} />
+            </div>
+          )}
+          <div className="space-y-4">
+            {completed.map(sprint => (
+              <CompletedSprintCard key={sprint.id} sprint={sprint} issues={issues} />
+            ))}
+          </div>
+        </>
       )}
     </div>
     </div>

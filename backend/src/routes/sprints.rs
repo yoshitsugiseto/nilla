@@ -269,6 +269,31 @@ pub async fn get_burndown(
     Ok(Json(points))
 }
 
+#[derive(serde::Serialize, sqlx::FromRow)]
+pub struct VelocityPoint {
+    pub sprint_name: String,
+    pub completed_points: i64,
+}
+
+pub async fn get_velocity(
+    State(pool): State<SqlitePool>,
+    Path(project_id): Path<String>,
+) -> Result<Json<Vec<VelocityPoint>>> {
+    let points = sqlx::query_as::<_, VelocityPoint>(
+        r#"SELECT s.name as sprint_name, COALESCE(SUM(i.points), 0) as completed_points
+           FROM sprints s
+           LEFT JOIN issues i ON i.sprint_id = s.id AND i.status = 'done'
+           WHERE s.project_id = ? AND s.status = 'completed'
+           GROUP BY s.id, s.name
+           ORDER BY s.created_at ASC"#,
+    )
+    .bind(&project_id)
+    .fetch_all(&pool)
+    .await?;
+
+    Ok(Json(points))
+}
+
 pub async fn delete_sprint(
     State(pool): State<SqlitePool>,
     Path(id): Path<String>,

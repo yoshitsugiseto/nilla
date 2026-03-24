@@ -38,6 +38,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/api/sprints/{id}/start", post(sprints::start_sprint))
         .route("/api/sprints/{id}/complete", post(sprints::complete_sprint))
         .route("/api/sprints/{id}/burndown", get(sprints::get_burndown))
+        .route("/api/projects/{id}/velocity", get(sprints::get_velocity))
         // Issues
         .route(
             "/api/projects/{id}/issues",
@@ -58,6 +59,11 @@ pub fn router(state: AppState) -> Router<AppState> {
             get(issues::list_comments).post(issues::create_comment),
         )
         .route("/api/issues/{id}/activity", get(issues::list_activity))
+        .route(
+            "/api/issues/{id}/links",
+            get(issues::list_links).post(issues::create_link),
+        )
+        .route("/api/issue-links/{id}", delete(issues::delete_link))
         // Workspaces
         .route("/api/workspaces", get(workspaces::list_workspaces).post(workspaces::create_workspace))
         .route(
