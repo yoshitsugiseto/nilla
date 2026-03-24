@@ -13,7 +13,7 @@
 - **全文検索** — タイトル・説明をリアルタイム検索（サーバーサイドページネーション）
 - **サブタスク** — Story に対して子 Issue を作成
 - **コメント・アクティビティログ** — Issue ごとの変更履歴を記録
-- **データはローカル SQLite** — `lira.db` をコピーするだけでバックアップ
+- **データはローカル SQLite** — `nilla.db` をコピーするだけでバックアップ
 
 ---
 
@@ -40,8 +40,8 @@
 ## セットアップ
 
 ```bash
-git clone https://github.com/yourname/lira.git
-cd lira
+git clone https://github.com/yourname/nilla.git
+cd nilla
 ```
 
 環境変数はデフォルトのままで動きますが、変更したい場合は `.env.example` をコピーして編集します。
@@ -56,7 +56,7 @@ cp .env.example backend/.env
 cd backend
 cargo run
 # → http://localhost:8080
-# データベース (lira.db) とマイグレーションは初回起動時に自動生成
+# データベース (nilla.db) とマイグレーションは初回起動時に自動生成
 ```
 
 ### フロントエンド起動（別ターミナル）
@@ -73,7 +73,7 @@ npm run dev
 ### サンプルデータ（任意）
 
 ```bash
-sqlite3 lira.db < seed.sql
+sqlite3 nilla.db < seed.sql
 ```
 
 30 件のサンプル Issue が追加されます。
@@ -110,7 +110,7 @@ npm run test:e2e
 ```bash
 cd frontend && npm run build
 cd backend && cargo build --release
-./backend/target/release/lira
+./backend/target/release/nilla
 # → http://localhost:8080 で起動（静的ファイルも配信）
 ```
 
@@ -119,7 +119,7 @@ cd backend && cargo build --release
 ## ディレクトリ構成
 
 ```
-lira/
+nilla/
 ├── backend/          # Rust / Axum
 │   ├── src/
 │   ├── migrations/   # SQLite マイグレーション
