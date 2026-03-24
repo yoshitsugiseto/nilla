@@ -56,14 +56,14 @@ async function mockAuth(page: Page) {
 async function mockEmptyApi(page: Page) {
   await mockAuth(page)
   await page.route('**/api/workspaces', route => route.fulfill({ json: [] }))
-  await page.route('**/api/projects', route => route.fulfill({ json: [] }))
+  await page.route('**/api/projects**', route => route.fulfill({ json: [] }))
   await page.route('**/api/notifications', route => route.fulfill({ json: [] }))
 }
 
 async function mockProjectApi(page: Page) {
   await mockAuth(page)
   await page.route('**/api/workspaces', route => route.fulfill({ json: [WORKSPACE] }))
-  await page.route('**/api/projects', route => route.fulfill({ json: [PROJECT] }))
+  await page.route('**/api/projects**', route => route.fulfill({ json: [PROJECT] }))
   await page.route('**/api/projects/proj-1/sprints', route => route.fulfill({ json: [SPRINT] }))
   await page.route('**/api/projects/proj-1/issues**', route =>
     route.fulfill({ json: [], headers: { 'x-total-count': '0' } })

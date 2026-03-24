@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT user_id FROM sessions WHERE refresh_token_hash = ? AND expires_at > ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "user_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cc8f8e000633412eeb44f3aaedf0d63f45b5bdc74a639ecdbdbe7bd16317cb02"
+}
