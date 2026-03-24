@@ -13,7 +13,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "sqlite:./lira.db".to_string());
+        .unwrap_or_else(|_| "sqlite:./nilla.db".to_string());
 
     let pool = nilla::db::create_pool(&database_url).await?;
     tracing::info!("Database connected: {database_url}");
