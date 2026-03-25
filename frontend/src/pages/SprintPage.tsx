@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Play, CheckCircle, BarChart2, AlertCircle, History, Pencil } from 'lucide-react'
+import { Plus, Play, CheckCircle, BarChart2, AlertCircle, History, Pencil, Trophy, TrendingUp } from 'lucide-react'
 import { getSprints, createSprint, updateSprint, startSprint, completeSprint } from '../api/sprints'
 import { getIssues } from '../api/issues'
 import { useAppStore } from '../store'
@@ -8,7 +8,108 @@ import { Modal } from '../components/common/Modal'
 import { BurndownChart } from '../components/Board/BurndownChart'
 import { useToast } from '../components/common/Toast'
 import { extractErrorMessage } from '../api/client'
-import type { Issue, Sprint } from '../types'
+import type { Issue, Sprint, IssueType } from '../types'
+
+interface SprintReportData {
+  sprint: Sprint
+  totalIssues: number
+  doneIssues: number
+  totalPts: number
+  donePts: number
+  byType: Record<string, { total: number; done: number }>
+}
+
+const TYPE_LABELS: Record<IssueType, string> = {
+  story: 'Story', task: 'Task', bug: 'Bug', spike: 'Spike',
+}
+
+function SprintReportModal({
+  report,
+  onClose,
+  onHistory,
+}: {
+  report: SprintReportData
+  onClose: () => void
+  onHistory: () => void
+}) {
+  const pct = report.totalPts > 0 ? Math.round((report.donePts / report.totalPts) * 100) : 0
+  const issuePct = report.totalIssues > 0 ? Math.round((report.doneIssues / report.totalIssues) * 100) : 0
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+        <Trophy size={24} className="text-emerald-600 shrink-0" />
+        <div>
+          <p className="font-semibold text-emerald-800">スプリント完了！</p>
+          <p className="text-sm text-emerald-600">
+            {report.sprint.start_date} → {report.sprint.end_date ?? '—'}
+          </p>
+        </div>
+      </div>
+
+      {report.sprint.goal && (
+        <div>
+          <p className="text-xs text-gray-400 mb-1">ゴール</p>
+          <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{report.sprint.goal}</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <p className="text-xs text-gray-400 mb-1">イシュー完了率</p>
+          <p className="text-2xl font-bold text-gray-900">{issuePct}%</p>
+          <p className="text-sm text-gray-500 mt-1">{report.doneIssues} / {report.totalIssues} 件</p>
+          <div className="mt-2 bg-gray-100 rounded-full h-1.5">
+            <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${issuePct}%` }} />
+          </div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <p className="text-xs text-gray-400 mb-1">ポイント完了率</p>
+          <p className="text-2xl font-bold text-gray-900">{pct}%</p>
+          <p className="text-sm text-gray-500 mt-1">{report.donePts} / {report.totalPts} pt</p>
+          <div className="mt-2 bg-gray-100 rounded-full h-1.5">
+            <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+      </div>
+
+      {Object.keys(report.byType).length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">タイプ別</p>
+          <div className="space-y-2">
+            {Object.entries(report.byType).map(([type, counts]) => {
+              const p = counts.total > 0 ? Math.round((counts.done / counts.total) * 100) : 0
+              return (
+                <div key={type} className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500 w-12 shrink-0">{TYPE_LABELS[type as IssueType] ?? type}</span>
+                  <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                    <div className="bg-indigo-400 h-1.5 rounded-full transition-all" style={{ width: `${p}%` }} />
+                  </div>
+                  <span className="text-xs text-gray-400 w-16 text-right shrink-0">{counts.done}/{counts.total} ({p}%)</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="flex justify-between pt-2 border-t border-gray-100">
+        <button
+          onClick={() => { onClose(); onHistory() }}
+          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-600"
+        >
+          <TrendingUp size={14} /> 履歴を見る
+        </button>
+        <button
+          onClick={onClose}
+          className="px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700"
+        >
+          閉じる
+        </button>
+      </div>
+    </div>
+  )
+}
 
 function SprintForm({
   projectId,
@@ -263,7 +364,8 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
   const qc = useQueryClient()
   const showToast = useToast()
   const [creating, setCreating] = useState(false)
-  const [completing, setCompleting] = useState<string | null>(null) // sprintId being completed
+  const [completing, setCompleting] = useState<string | null>(null)
+  const [report, setReport] = useState<SprintReportData | null>(null)
 
   const { data: sprints = [], isLoading } = useQuery({
     queryKey: ['sprints', activeProjectId],
@@ -285,11 +387,32 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
   const completeMutation = useMutation({
     mutationFn: ({ id, nextSprintId }: { id: string; nextSprintId: string | null }) =>
       completeSprint(id, nextSprintId),
-    onSuccess: () => {
+    onSuccess: (_, { id }) => {
+      const sprint = sprints.find(s => s.id === id)
+      const sprintIssues = issues.filter(i => i.sprint_id === id && !i.parent_id)
+      const totalPts = sprintIssues.reduce((s, i) => s + (i.points ?? 0), 0)
+      const donePts = sprintIssues.filter(i => i.status === 'done').reduce((s, i) => s + (i.points ?? 0), 0)
+      const byType: Record<string, { total: number; done: number }> = {}
+      for (const issue of sprintIssues) {
+        if (!byType[issue.type]) byType[issue.type] = { total: 0, done: 0 }
+        byType[issue.type].total++
+        if (issue.status === 'done') byType[issue.type].done++
+      }
       qc.invalidateQueries({ queryKey: ['sprints', activeProjectId] })
       qc.invalidateQueries({ queryKey: ['issues', activeProjectId] })
       setCompleting(null)
-      showToast('スプリントを完了しました', 'success')
+      if (sprint) {
+        setReport({
+          sprint,
+          totalIssues: sprintIssues.length,
+          doneIssues: sprintIssues.filter(i => i.status === 'done').length,
+          totalPts,
+          donePts,
+          byType,
+        })
+      } else {
+        showToast('スプリントを完了しました', 'success')
+      }
     },
     onError: (err) => showToast(extractErrorMessage(err, 'スプリントの完了に失敗しました'), 'error'),
   })
@@ -367,6 +490,16 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
           </Modal>
         )
       })()}
+
+      {report && (
+        <Modal title={`「${report.sprint.name}」完了レポート`} onClose={() => setReport(null)}>
+          <SprintReportModal
+            report={report}
+            onClose={() => setReport(null)}
+            onHistory={() => onNavigate('sprint-history')}
+          />
+        </Modal>
+      )}
     </div>
     </div>
   )

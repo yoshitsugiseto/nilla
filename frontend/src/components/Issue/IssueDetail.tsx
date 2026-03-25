@@ -2,6 +2,7 @@ import { useRef, useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getIssue, updateIssue, getComments, createComment, getActivity, getIssueChildren, getIssueLinks, createIssueLink, deleteIssueLink, getIssues } from '../../api/issues'
 import { getAttachments, uploadAttachment, deleteAttachment } from '../../api/attachments'
+import { getLabels } from '../../api/labels'
 import { TypeIcon, PriorityBadge } from '../common/Badge'
 import { Avatar } from '../common/Avatar'
 import { IssueForm } from './IssueForm'
@@ -40,7 +41,7 @@ interface Props {
 export function IssueDetail({ issueId, projectId }: Props) {
   const qc = useQueryClient()
   const showToast = useToast()
-  const [tab, setTab] = useState<'comments' | 'files' | 'activity' | 'links'>('comments')
+  const [tab, setTab] = useState<'comments' | 'files' | 'activity'>('comments')
   const [linkSearch, setLinkSearch] = useState('')
   const [linkTargetId, setLinkTargetId] = useState('')
   const [linkType, setLinkType] = useState<IssueLinkType>('relates_to')
@@ -84,7 +85,6 @@ export function IssueDetail({ issueId, projectId }: Props) {
   const { data: links = [], isError: linksError } = useQuery({
     queryKey: ['links', issueId],
     queryFn: () => getIssueLinks(issueId),
-    enabled: tab === 'links',
   })
 
   useEffect(() => {
@@ -148,6 +148,20 @@ export function IssueDetail({ issueId, projectId }: Props) {
       qc.invalidateQueries({ queryKey: ['attachments', issueId] })
     },
     onError: () => showToast('ファイルの削除に失敗しました', 'error'),
+  })
+
+  const { data: projectLabels = [] } = useQuery({
+    queryKey: ['labels', projectId],
+    queryFn: () => getLabels(projectId),
+  })
+
+  const labelsMutation = useMutation({
+    mutationFn: (labels: string[]) => updateIssue(issueId, { labels }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['issue', issueId] })
+      qc.invalidateQueries({ queryKey: ['issues', projectId] })
+    },
+    onError: () => showToast('ラベルの更新に失敗しました', 'error'),
   })
 
   const statusMutation = useMutation({
@@ -274,6 +288,107 @@ export function IssueDetail({ issueId, projectId }: Props) {
           </div>
         )}
 
+        {/* Links */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-medium text-gray-500 flex items-center gap-1">
+              <Link2 size={14} /> リンク {links.length > 0 && `(${links.length})`}
+            </p>
+          </div>
+          {linksError ? (
+            <p className="text-xs text-red-400">リンクの取得に失敗しました</p>
+          ) : (
+            <div className="space-y-1">
+              {links.map(link => (
+                <div key={link.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg text-sm">
+                  <span className={`text-xs font-medium px-1.5 py-0.5 rounded shrink-0 ${LINK_TYPE_COLORS[link.link_type]}`}>
+                    {LINK_TYPE_LABELS[link.link_type]}
+                  </span>
+                  <TypeIcon type={link.linked_issue_type as any} />
+                  <span className="text-xs text-gray-400 font-mono shrink-0">#{link.linked_issue_number}</span>
+                  <span className="flex-1 text-gray-800 truncate">{link.linked_issue_title}</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${
+                    link.linked_issue_status === 'done' ? 'bg-emerald-100 text-emerald-700' :
+                    link.linked_issue_status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                    'bg-gray-100 text-gray-600'
+                  }`}>{link.linked_issue_status.replace('_', ' ')}</span>
+                  <button
+                    onClick={() => deleteLinkMutation.mutate(link.id)}
+                    disabled={deleteLinkMutation.isPending}
+                    className="text-gray-400 hover:text-red-500 transition-colors"
+                    aria-label="リンクを削除"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              <div className="pt-1 flex gap-2">
+                <div className="relative flex-1" ref={linkComboRef}>
+                  <input
+                    value={linkSearch}
+                    onChange={e => {
+                      setLinkSearch(e.target.value)
+                      setLinkTargetId('')
+                      setShowSuggestions(true)
+                    }}
+                    onFocus={() => setShowSuggestions(true)}
+                    placeholder="イシューを検索して追加..."
+                    className={`w-full border rounded-lg px-3 py-1.5 text-sm ${
+                      linkTargetId ? 'border-blue-400 bg-blue-50' : 'border-gray-200'
+                    }`}
+                  />
+                  {showSuggestions && searchTerm.trim().length > 0 && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-52 overflow-auto">
+                      {filteredSuggestions.length === 0 ? (
+                        <p className="px-3 py-2 text-xs text-gray-400">該当なし</p>
+                      ) : (
+                        filteredSuggestions.map(i => (
+                          <button
+                            key={i.id}
+                            type="button"
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => {
+                              setLinkTargetId(i.id)
+                              setLinkSearch(`#${i.number} ${i.title}`)
+                              setShowSuggestions(false)
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                          >
+                            <TypeIcon type={i.type} />
+                            <span className="text-gray-400 font-mono text-xs shrink-0">#{i.number}</span>
+                            <span className="flex-1 truncate text-gray-800">{i.title}</span>
+                            <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${
+                              i.status === 'done' ? 'bg-emerald-100 text-emerald-700' :
+                              i.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                              'bg-gray-100 text-gray-600'
+                            }`}>{i.status.replace('_', ' ')}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+                <select
+                  value={linkType}
+                  onChange={e => setLinkType(e.target.value as IssueLinkType)}
+                  className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm shrink-0"
+                >
+                  {(Object.keys(LINK_TYPE_LABELS) as IssueLinkType[]).map(t => (
+                    <option key={t} value={t}>{LINK_TYPE_LABELS[t]}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => createLinkMutation.mutate()}
+                  disabled={!linkTargetId || createLinkMutation.isPending}
+                  className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40 flex items-center gap-1 shrink-0"
+                >
+                  <Plus size={14} /> 追加
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Tabs */}
         <div className="border-b border-gray-200 mb-4 flex gap-4">
           <button
@@ -299,14 +414,6 @@ export function IssueDetail({ issueId, projectId }: Props) {
             }`}
           >
             <Clock size={14} /> アクティビティ
-          </button>
-          <button
-            onClick={() => setTab('links')}
-            className={`flex items-center gap-1.5 text-sm pb-2 border-b-2 transition-colors ${
-              tab === 'links' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Link2 size={14} /> リンク {links.length > 0 && `(${links.length})`}
           </button>
         </div>
 
@@ -427,105 +534,6 @@ export function IssueDetail({ issueId, projectId }: Props) {
           </div>
         )}
 
-        {tab === 'links' && (
-          <div className="space-y-3">
-            {linksError && (
-              <p className="text-sm text-red-400">リンクの取得に失敗しました</p>
-            )}
-            {links.map(link => (
-              <div key={link.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg text-sm">
-                <span className={`text-xs font-medium px-1.5 py-0.5 rounded shrink-0 ${LINK_TYPE_COLORS[link.link_type]}`}>
-                  {LINK_TYPE_LABELS[link.link_type]}
-                </span>
-                <TypeIcon type={link.linked_issue_type as any} />
-                <span className="text-xs text-gray-400 font-mono shrink-0">#{link.linked_issue_number}</span>
-                <span className="flex-1 text-gray-800 truncate">{link.linked_issue_title}</span>
-                <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${
-                  link.linked_issue_status === 'done' ? 'bg-emerald-100 text-emerald-700' :
-                  link.linked_issue_status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
-                  'bg-gray-100 text-gray-600'
-                }`}>{link.linked_issue_status.replace('_', ' ')}</span>
-                <button
-                  onClick={() => deleteLinkMutation.mutate(link.id)}
-                  disabled={deleteLinkMutation.isPending}
-                  className="text-gray-400 hover:text-red-500 transition-colors"
-                  aria-label="リンクを削除"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            ))}
-            {!linksError && links.length === 0 && (
-              <p className="text-sm text-gray-400">リンクなし</p>
-            )}
-
-            <div className="pt-2 space-y-2">
-              <div className="flex gap-2">
-                <div className="relative flex-1" ref={linkComboRef}>
-                  <input
-                    value={linkSearch}
-                    onChange={e => {
-                      setLinkSearch(e.target.value)
-                      setLinkTargetId('')
-                      setShowSuggestions(true)
-                    }}
-                    onFocus={() => setShowSuggestions(true)}
-                    placeholder="イシューを検索（タイトル・#番号）..."
-                    className={`w-full border rounded-lg px-3 py-1.5 text-sm ${
-                      linkTargetId ? 'border-blue-400 bg-blue-50' : 'border-gray-200'
-                    }`}
-                  />
-                  {showSuggestions && searchTerm.trim().length > 0 && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-52 overflow-auto">
-                      {filteredSuggestions.length === 0 ? (
-                        <p className="px-3 py-2 text-xs text-gray-400">該当なし</p>
-                      ) : (
-                        filteredSuggestions.map(i => (
-                          <button
-                            key={i.id}
-                            type="button"
-                            onMouseDown={e => e.preventDefault()}
-                            onClick={() => {
-                              setLinkTargetId(i.id)
-                              setLinkSearch(`#${i.number} ${i.title}`)
-                              setShowSuggestions(false)
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 border-b border-gray-50 last:border-0"
-                          >
-                            <TypeIcon type={i.type} />
-                            <span className="text-gray-400 font-mono text-xs shrink-0">#{i.number}</span>
-                            <span className="flex-1 truncate text-gray-800">{i.title}</span>
-                            <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${
-                              i.status === 'done' ? 'bg-emerald-100 text-emerald-700' :
-                              i.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
-                              'bg-gray-100 text-gray-600'
-                            }`}>{i.status.replace('_', ' ')}</span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-                <select
-                  value={linkType}
-                  onChange={e => setLinkType(e.target.value as IssueLinkType)}
-                  className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm shrink-0"
-                >
-                  {(Object.keys(LINK_TYPE_LABELS) as IssueLinkType[]).map(t => (
-                    <option key={t} value={t}>{LINK_TYPE_LABELS[t]}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => createLinkMutation.mutate()}
-                  disabled={!linkTargetId || createLinkMutation.isPending}
-                  className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40 flex items-center gap-1 shrink-0"
-                >
-                  <Plus size={14} /> 追加
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Sidebar metadata */}
@@ -573,13 +581,53 @@ export function IssueDetail({ issueId, projectId }: Props) {
           </div>
         )}
 
-        {issue.labels.length > 0 && (
+        {issue.due_date && (
           <div>
-            <p className="text-xs text-gray-400 mb-1">Labels</p>
+            <p className="text-xs text-gray-400 mb-1">期限日</p>
+            {(() => {
+              const days = Math.ceil((new Date(issue.due_date).getTime() - Date.now()) / 86400000)
+              const overdue = days < 0
+              const today = days === 0
+              return (
+                <span className={`text-sm font-medium ${overdue || today ? 'text-red-500' : 'text-gray-700'}`}>
+                  {issue.due_date}
+                  {(overdue || today) && (
+                    <span className="ml-1 text-xs">({overdue ? `${Math.abs(days)}日超過` : '今日'})</span>
+                  )}
+                </span>
+              )
+            })()}
+          </div>
+        )}
+
+        {projectLabels.length > 0 && (
+          <div>
+            <p className="text-xs text-gray-400 mb-1">ラベル</p>
             <div className="flex flex-wrap gap-1">
-              {issue.labels.map(l => (
-                <span key={l} className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{l}</span>
-              ))}
+              {projectLabels.map(label => {
+                const selected = issue.labels.includes(label.name)
+                return (
+                  <button
+                    key={label.id}
+                    onClick={() => {
+                      const next = selected
+                        ? issue.labels.filter(l => l !== label.name)
+                        : [...issue.labels, label.name]
+                      labelsMutation.mutate(next)
+                    }}
+                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium border transition-all ${
+                      selected
+                        ? 'border-transparent text-white'
+                        : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                    style={selected ? { backgroundColor: label.color } : {}}
+                    title={selected ? 'クリックで削除' : 'クリックで追加'}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: label.color }} />
+                    {label.name}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}

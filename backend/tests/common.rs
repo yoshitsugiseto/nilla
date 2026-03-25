@@ -209,3 +209,29 @@ pub async fn create_sprint(app: &Router, project_id: &str, name: &str) -> String
     assert_eq!(status, StatusCode::OK, "create_sprint failed: {json}");
     json["id"].as_str().unwrap().to_string()
 }
+
+pub async fn create_label(app: &Router, project_id: &str, name: &str) -> String {
+    let (status, json) = send(
+        app,
+        post(
+            &format!("/api/projects/{project_id}/labels"),
+            serde_json::json!({ "name": name }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "create_label failed: {json}");
+    json["id"].as_str().unwrap().to_string()
+}
+
+pub async fn create_template(app: &Router, project_id: &str, name: &str) -> String {
+    let (status, json) = send(
+        app,
+        post(
+            &format!("/api/projects/{project_id}/templates"),
+            serde_json::json!({ "name": name }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "create_template failed: {json}");
+    json["id"].as_str().unwrap().to_string()
+}

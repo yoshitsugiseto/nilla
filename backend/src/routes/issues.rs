@@ -14,15 +14,15 @@ use crate::{
     auth::middleware::UserId,
     error::{AppError, Result},
     models::issue::{
-        CreateIssue, CreateIssueLink, Issue, IssueFilters, IssueLink, IssueRow, UpdateIssue,
-        UpdateIssueSprint, UpdateIssueStatus,
+        BulkUpdateIssues, CreateIssue, CreateIssueLink, Issue, IssueFilters, IssueLink, IssueRow,
+        UpdateIssue, UpdateIssueSprint, UpdateIssueStatus,
     },
 };
 
 const ISSUE_SELECT: &str =
-    "SELECT i.id, i.project_id, i.sprint_id, i.parent_id, i.number, i.title, i.description, i.type, i.status, i.priority, i.points, i.assignee_id, u.name as assignee_name, u.avatar_url as assignee_avatar_url, i.labels, i.position, i.created_at, i.updated_at FROM issues i LEFT JOIN users u ON i.assignee_id = u.id";
+    "SELECT i.id, i.project_id, i.sprint_id, i.parent_id, i.number, i.title, i.description, i.type, i.status, i.priority, i.points, i.assignee_id, u.name as assignee_name, u.avatar_url as assignee_avatar_url, i.labels, i.position, i.due_date, i.created_at, i.updated_at FROM issues i LEFT JOIN users u ON i.assignee_id = u.id";
 const GET_ISSUE_SQL: &str =
-    "SELECT i.id, i.project_id, i.sprint_id, i.parent_id, i.number, i.title, i.description, i.type, i.status, i.priority, i.points, i.assignee_id, u.name as assignee_name, u.avatar_url as assignee_avatar_url, i.labels, i.position, i.created_at, i.updated_at FROM issues i LEFT JOIN users u ON i.assignee_id = u.id WHERE i.id = ?";
+    "SELECT i.id, i.project_id, i.sprint_id, i.parent_id, i.number, i.title, i.description, i.type, i.status, i.priority, i.points, i.assignee_id, u.name as assignee_name, u.avatar_url as assignee_avatar_url, i.labels, i.position, i.due_date, i.created_at, i.updated_at FROM issues i LEFT JOIN users u ON i.assignee_id = u.id WHERE i.id = ?";
 
 fn validate_status(status: &str) -> crate::error::Result<()> {
     match status {
@@ -257,7 +257,7 @@ pub async fn create_issue(
     .await?;
 
     sqlx::query(
-        "INSERT INTO issues (id, project_id, sprint_id, parent_id, number, title, description, type, priority, points, assignee_id, labels) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO issues (id, project_id, sprint_id, parent_id, number, title, description, type, priority, points, assignee_id, labels, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&project_id)
@@ -271,6 +271,7 @@ pub async fn create_issue(
     .bind(body.points)
     .bind(body.assignee_id.as_deref())
     .bind(&labels_json)
+    .bind(body.due_date)
     .execute(&mut *tx)
     .await?;
 
@@ -371,11 +372,16 @@ pub async fn update_issue(
     } else {
         current.parent_id.clone()
     };
+    let due_date = if body.due_date.is_some() {
+        body.due_date
+    } else {
+        current.due_date
+    };
 
     let mut tx = pool.begin().await?;
 
     sqlx::query(
-        "UPDATE issues SET title=?, description=?, type=?, status=?, priority=?, points=?, assignee_id=?, labels=?, sprint_id=?, parent_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        "UPDATE issues SET title=?, description=?, type=?, status=?, priority=?, points=?, assignee_id=?, labels=?, sprint_id=?, parent_id=?, due_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
     )
     .bind(&title)
     .bind(&description)
@@ -387,6 +393,7 @@ pub async fn update_issue(
     .bind(&labels_json)
     .bind(&sprint_id)
     .bind(&parent_id)
+    .bind(due_date)
     .bind(&id)
     .execute(&mut *tx)
     .await?;
@@ -683,10 +690,33 @@ pub async fn create_comment(
             .await
             .ok()
             .flatten();
-    if let Some((Some(assignee_uid), issue_title)) = issue_row {
+    let issue_title = if let Some((Some(assignee_uid), ref title)) = issue_row {
         if assignee_uid != user_id.0 {
-            let msg = format!("「{}」に {} がコメントしました", issue_title, author_name);
+            let msg = format!("「{}」に {} がコメントしました", title, author_name);
             create_notification(&pool, &ws_tx, &assignee_uid, &id, "comment", &msg).await;
+        }
+        title.clone()
+    } else {
+        issue_row.as_ref().map(|(_, t)| t.clone()).unwrap_or_default()
+    };
+
+    // @メンション通知
+    let mentioned_names: Vec<&str> = body.body
+        .split_whitespace()
+        .filter(|w| w.starts_with('@') && w.len() > 1)
+        .map(|w| w.trim_start_matches('@').trim_end_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-'))
+        .collect();
+    for name in mentioned_names {
+        if let Ok(Some(mentioned_uid)) =
+            sqlx::query_scalar::<_, String>("SELECT id FROM users WHERE name = ?")
+                .bind(name)
+                .fetch_optional(&pool)
+                .await
+        {
+            if mentioned_uid != user_id.0 {
+                let msg = format!("「{}」で {} があなたをメンションしました", issue_title, author_name);
+                create_notification(&pool, &ws_tx, &mentioned_uid, &id, "mention", &msg).await;
+            }
         }
     }
 
@@ -840,4 +870,65 @@ pub async fn delete_link(
     }
 
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+// Bulk update
+
+pub async fn bulk_update_issues(
+    State(pool): State<SqlitePool>,
+    State(ws_tx): State<broadcast::Sender<String>>,
+    Extension(user_id): Extension<UserId>,
+    Path(project_id): Path<String>,
+    Json(body): Json<BulkUpdateIssues>,
+) -> Result<Json<Vec<Issue>>> {
+    check_project_access(&pool, &user_id.0, &project_id).await?;
+
+    if body.issue_ids.is_empty() {
+        return Ok(Json(vec![]));
+    }
+
+    let mut tx = pool.begin().await?;
+
+    for issue_id in &body.issue_ids {
+        if let Some(ref status) = body.status {
+            validate_status(status)?;
+            sqlx::query("UPDATE issues SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=?")
+                .bind(status)
+                .bind(issue_id)
+                .bind(&project_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        if let Some(ref sprint_id) = body.sprint_id {
+            let sid: Option<&str> = if sprint_id == "backlog" { None } else { Some(sprint_id) };
+            sqlx::query("UPDATE issues SET sprint_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=?")
+                .bind(sid)
+                .bind(issue_id)
+                .bind(&project_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        if let Some(ref assignee_id) = body.assignee_id {
+            let aid: Option<&str> = if assignee_id.is_empty() { None } else { Some(assignee_id) };
+            sqlx::query("UPDATE issues SET assignee_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=?")
+                .bind(aid)
+                .bind(issue_id)
+                .bind(&project_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
+
+    tx.commit().await?;
+
+    broadcast_event(&ws_tx, "issue.updated", &project_id);
+
+    let placeholders = body.issue_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+    let sql = format!("{ISSUE_SELECT} WHERE i.id IN ({placeholders}) ORDER BY i.position ASC");
+    let mut q = sqlx::query_as::<_, IssueRow>(&sql);
+    for id in &body.issue_ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(&pool).await?;
+    Ok(Json(rows.into_iter().map(Issue::from).collect()))
 }

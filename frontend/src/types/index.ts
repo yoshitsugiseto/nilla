@@ -69,6 +69,7 @@ export interface Issue {
   assignee_avatar_url: string | null
   labels: string[]
   position: number
+  due_date: string | null
   created_at: string
   updated_at: string
 }
@@ -165,6 +166,7 @@ export interface CreateIssue {
   labels?: string[]
   sprint_id?: string
   parent_id?: string
+  due_date?: string
 }
 
 export interface UpdateIssue {
@@ -178,4 +180,32 @@ export interface UpdateIssue {
   labels?: string[]
   sprint_id?: string | null
   parent_id?: string | null
+  due_date?: string | null
+}
+
+export interface ProjectLabel {
+  id: string
+  project_id: string
+  name: string
+  color: string
+  created_at: string
+}
+
+export interface IssueTemplate {
+  id: string
+  project_id: string
+  name: string
+  description: string | null
+  type: IssueType
+  priority: IssuePriority
+  labels: string[]
+  points: number | null
+  created_at: string
+}
+
+export interface BulkUpdatePayload {
+  issue_ids: string[]
+  status?: IssueStatus
+  sprint_id?: string
+  assignee_id?: string
 }

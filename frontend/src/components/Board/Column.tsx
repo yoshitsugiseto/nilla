@@ -33,9 +33,18 @@ export function Column({ status, issues, projectId }: Props) {
             ref={provided.innerRef}
             {...provided.droppableProps}
             className={`flex flex-col gap-2 flex-1 min-h-32 rounded-lg p-1 transition-colors duration-150 ${
-              snapshot.isDraggingOver ? 'bg-blue-50' : ''
+              snapshot.isDraggingOver ? 'bg-blue-50 ring-2 ring-blue-200 ring-inset' : ''
             }`}
           >
+            {issues.length === 0 && (
+              <div className={`flex-1 min-h-24 rounded-lg border-2 border-dashed flex items-center justify-center transition-colors ${
+                snapshot.isDraggingOver
+                  ? 'border-blue-300 text-blue-300'
+                  : 'border-gray-100 text-gray-200'
+              }`}>
+                <span className="text-xs select-none">ドロップ</span>
+              </div>
+            )}
             {issues.map((issue, index) => (
               <IssueCard
                 key={issue.id}

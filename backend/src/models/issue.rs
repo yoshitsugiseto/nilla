@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::{NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, sqlx::FromRow)]
@@ -19,6 +19,7 @@ pub struct IssueRow {
     pub assignee_avatar_url: Option<String>,
     pub labels: Option<String>, // JSON string
     pub position: i64,
+    pub due_date: Option<NaiveDate>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -41,6 +42,7 @@ pub struct Issue {
     pub assignee_avatar_url: Option<String>,
     pub labels: Vec<String>,
     pub position: i64,
+    pub due_date: Option<NaiveDate>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -73,6 +75,7 @@ impl From<IssueRow> for Issue {
             assignee_avatar_url: row.assignee_avatar_url,
             labels,
             position: row.position,
+            due_date: row.due_date,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }
@@ -90,6 +93,7 @@ pub struct CreateIssue {
     pub labels: Option<Vec<String>>,
     pub sprint_id: Option<String>,
     pub parent_id: Option<String>,
+    pub due_date: Option<NaiveDate>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -104,6 +108,7 @@ pub struct UpdateIssue {
     pub labels: Option<Vec<String>>,
     pub sprint_id: Option<String>,
     pub parent_id: Option<String>,
+    pub due_date: Option<NaiveDate>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -146,4 +151,12 @@ pub struct IssueFilters {
     pub q: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BulkUpdateIssues {
+    pub issue_ids: Vec<String>,
+    pub status: Option<String>,
+    pub sprint_id: Option<String>, // "backlog" = set NULL
+    pub assignee_id: Option<String>, // "" = clear
 }

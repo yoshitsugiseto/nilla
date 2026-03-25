@@ -1,6 +1,7 @@
 -- =============================================================
--- Nilla サンプルデータ (ページネーション確認用)
--- 使い方: sqlite3 nilla.db < seed.sql
+-- Nilla サンプルデータ
+-- 使い方 (プロジェクトルートから実行):
+--   sqlite3 backend/nilla.db < seed.sql
 -- 既存データとは衝突しない (INSERT OR IGNORE)
 -- =============================================================
 
@@ -19,6 +20,11 @@ INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role, joined_at)
   ('demo-workspace-001', 'demo-user-alice', 'owner',  '2026-01-01T00:00:00'),
   ('demo-workspace-001', 'demo-user-bob',   'member', '2026-01-01T00:00:00'),
   ('demo-workspace-001', 'demo-user-carol', 'member', '2026-01-01T00:00:00');
+
+-- ログイン済みの全ユーザーをデモワークスペースに追加（seed実行時点でDBにいるユーザー全員）
+INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role, joined_at)
+SELECT 'demo-workspace-001', u.id, 'member', CURRENT_TIMESTAMP
+FROM users u;
 
 -- プロジェクト
 INSERT OR IGNORE INTO projects (id, name, key, description, workspace_id) VALUES
@@ -92,6 +98,62 @@ INSERT OR IGNORE INTO activity_logs (id, issue_id, field, old_value, new_value, 
   ('demo-al-015', 'demo-i-008', 'status', 'todo',        'in_progress', '2026-01-13 10:00:00'),
   ('demo-al-016', 'demo-i-008', 'status', 'in_progress', 'done',        '2026-01-16 16:00:00');
 
+-- プロジェクトラベル（DB内の全プロジェクトに挿入）
+INSERT OR IGNORE INTO project_labels (id, project_id, name, color)
+SELECT lower(hex(randomblob(8))), p.id, 'frontend',    '#3b82f6' FROM projects p;
+INSERT OR IGNORE INTO project_labels (id, project_id, name, color)
+SELECT lower(hex(randomblob(8))), p.id, 'backend',     '#8b5cf6' FROM projects p;
+INSERT OR IGNORE INTO project_labels (id, project_id, name, color)
+SELECT lower(hex(randomblob(8))), p.id, 'bug',         '#ef4444' FROM projects p;
+INSERT OR IGNORE INTO project_labels (id, project_id, name, color)
+SELECT lower(hex(randomblob(8))), p.id, 'enhancement', '#10b981' FROM projects p;
+INSERT OR IGNORE INTO project_labels (id, project_id, name, color)
+SELECT lower(hex(randomblob(8))), p.id, 'performance', '#f59e0b' FROM projects p;
+INSERT OR IGNORE INTO project_labels (id, project_id, name, color)
+SELECT lower(hex(randomblob(8))), p.id, 'security',    '#ec4899' FROM projects p;
+INSERT OR IGNORE INTO project_labels (id, project_id, name, color)
+SELECT lower(hex(randomblob(8))), p.id, 'docs',        '#6b7280' FROM projects p;
+INSERT OR IGNORE INTO project_labels (id, project_id, name, color)
+SELECT lower(hex(randomblob(8))), p.id, 'infra',       '#0ea5e9' FROM projects p;
+
+-- イシューテンプレート（DB内の全プロジェクトに挿入）
+INSERT OR IGNORE INTO issue_templates (id, project_id, name, description, type, priority, labels, points)
+SELECT lower(hex(randomblob(8))), p.id,
+  'バグ報告',
+  '## 再現手順\n1. \n2. \n\n## 期待される動作\n\n## 実際の動作\n\n## 環境\n- OS: \n- ブラウザ: ',
+  'bug', 'high', '["bug"]', 2
+FROM projects p;
+INSERT OR IGNORE INTO issue_templates (id, project_id, name, description, type, priority, labels, points)
+SELECT lower(hex(randomblob(8))), p.id,
+  '新機能',
+  '## 概要\n\n## 要件\n- \n\n## 完了条件\n- [ ] \n- [ ] ',
+  'story', 'medium', '["enhancement"]', 5
+FROM projects p;
+INSERT OR IGNORE INTO issue_templates (id, project_id, name, description, type, priority, labels, points)
+SELECT lower(hex(randomblob(8))), p.id,
+  'パフォーマンス改善',
+  '## 現状の問題\n\n## 計測結果\n- Before: \n- After (目標): \n\n## アプローチ',
+  'task', 'medium', '["performance"]', 3
+FROM projects p;
+INSERT OR IGNORE INTO issue_templates (id, project_id, name, description, type, priority, labels, points)
+SELECT lower(hex(randomblob(8))), p.id,
+  'セキュリティ調査',
+  '## 調査内容\n\n## リスク評価\n- 影響範囲: \n- 深刻度: \n\n## 対応方針',
+  'spike', 'high', '["security"]', 3
+FROM projects p;
+INSERT OR IGNORE INTO issue_templates (id, project_id, name, description, type, priority, labels, points)
+SELECT lower(hex(randomblob(8))), p.id,
+  'フロントエンドタスク',
+  '## 実装内容\n\n## デザイン参考\n\n## 完了条件\n- [ ] PC表示確認\n- [ ] モバイル確認',
+  'task', 'medium', '["frontend"]', 2
+FROM projects p;
+INSERT OR IGNORE INTO issue_templates (id, project_id, name, description, type, priority, labels, points)
+SELECT lower(hex(randomblob(8))), p.id,
+  'APIエンドポイント追加',
+  '## エンドポイント\n- Method: \n- Path: \n\n## Request\n```json\n\n```\n\n## Response\n```json\n\n```',
+  'task', 'medium', '["backend"]', 3
+FROM projects p;
+
 -- サンプルコメント
 INSERT OR IGNORE INTO comments (id, issue_id, user_id, author, body) VALUES
   ('demo-c-001', 'demo-i-009', 'demo-user-alice', 'Alice', 'カンバンボードのカラム幅を可変にする案も検討中です。'),
@@ -107,3 +169,5 @@ SELECT '  プロジェクト:     ' || COUNT(*) || '件' AS summary FROM project
 SELECT '  スプリント:       ' || COUNT(*) || '件' AS summary FROM sprints WHERE project_id = 'demo-project-001';
 SELECT '  イシュー:         ' || COUNT(*) || '件' AS summary FROM issues WHERE project_id = 'demo-project-001';
 SELECT '  コメント:         ' || COUNT(*) || '件' AS summary FROM comments WHERE id LIKE 'demo-c-%';
+SELECT '  ラベル:           ' || COUNT(*) || '件' AS summary FROM project_labels WHERE project_id = 'demo-project-001';
+SELECT '  テンプレート:     ' || COUNT(*) || '件' AS summary FROM issue_templates WHERE project_id = 'demo-project-001';

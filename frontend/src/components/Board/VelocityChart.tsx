@@ -34,7 +34,7 @@ export function VelocityChart({ projectId }: Props) {
         <XAxis dataKey="sprint_name" tick={{ fontSize: 11 }} />
         <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
         <Tooltip
-          formatter={(v: number) => [`${v}pt`, '完了ポイント']}
+          formatter={(v) => [`${v}pt`, '完了ポイント']}
           labelFormatter={l => `${l}`}
         />
         <Bar dataKey="completed_points" radius={[4, 4, 0, 0]}>

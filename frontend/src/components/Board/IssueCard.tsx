@@ -1,7 +1,8 @@
 import { Draggable } from '@hello-pangea/dnd'
 import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Issue } from '../../types'
+import { getLabels } from '../../api/labels'
 import { TypeIcon, PriorityBadge } from '../common/Badge'
 import { Avatar } from '../common/Avatar'
 import { Modal } from '../common/Modal'
@@ -17,6 +18,11 @@ export function IssueCard({ issue, index, projectId }: Props) {
   const [detailOpen, setDetailOpen] = useState(false)
   const qc = useQueryClient()
 
+  const { data: projectLabels = [] } = useQuery({
+    queryKey: ['labels', projectId],
+    queryFn: () => getLabels(projectId),
+    staleTime: 60_000,
+  })
   const allIssues = qc.getQueryData<Issue[]>(['issues', projectId]) ?? []
   const parent = issue.parent_id ? allIssues.find(i => i.id === issue.parent_id) : null
   const subtasks = issue.type === 'story' ? allIssues.filter(i => i.parent_id === issue.id) : []
@@ -30,10 +36,7 @@ export function IssueCard({ issue, index, projectId }: Props) {
             ref={provided.innerRef}
             {...provided.draggableProps}
             {...provided.dragHandleProps}
-            style={{
-              ...provided.draggableProps.style,
-              opacity: snapshot.isDropAnimating ? 0 : undefined,
-            }}
+            style={provided.draggableProps.style}
             onClick={() => !snapshot.isDragging && setDetailOpen(true)}
             className={`bg-white rounded-lg border p-3 shadow-sm cursor-pointer select-none transition-shadow ${
               snapshot.isDragging
@@ -74,6 +77,34 @@ export function IssueCard({ issue, index, projectId }: Props) {
                     style={{ width: `${(doneTasks / subtasks.length) * 100}%` }}
                   />
                 </div>
+              </div>
+            )}
+
+            {issue.due_date && (() => {
+              const days = Math.ceil((new Date(issue.due_date).getTime() - Date.now()) / 86400000)
+              const overdue = days < 0
+              const today = days === 0
+              return (
+                <div className={`text-xs mt-1 ${overdue || today ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+                  {overdue ? `${Math.abs(days)}日超過` : today ? '今日が期限' : `残り${days}日`}
+                </div>
+              )
+            })()}
+
+            {issue.labels.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-2">
+                {issue.labels.map(name => {
+                  const color = projectLabels.find(l => l.name === name)?.color
+                  return (
+                    <span
+                      key={name}
+                      className="text-xs px-1.5 py-0.5 rounded-full text-white font-medium"
+                      style={{ backgroundColor: color ?? '#6b7280' }}
+                    >
+                      {name}
+                    </span>
+                  )
+                })}
               </div>
             )}
 

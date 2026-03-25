@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createIssue, updateIssue, getIssues } from '../../api/issues'
 import { getProjectMembers } from '../../api/workspaces'
+import { getTemplates } from '../../api/templates'
+import { getLabels } from '../../api/labels'
 import type { Issue, IssueType, IssuePriority, UpdateIssue } from '../../types'
 import { useToast } from '../common/Toast'
 import { extractErrorMessage } from '../../api/client'
@@ -26,6 +28,8 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
     points: issue?.points?.toString() ?? '',
     assignee_id: issue?.assignee_id ?? '',
     parent_id: issue?.parent_id ?? parentId ?? '',
+    due_date: issue?.due_date ?? '',
+    labels: issue?.labels ?? [] as string[],
   })
 
   // ストーリー一覧（親候補）
@@ -34,6 +38,17 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
     queryFn: () => getIssues(projectId),
   })
   const stories = allIssues.filter(i => i.type === 'story' && i.id !== issue?.id)
+
+  // テンプレート
+  const { data: templates = [] } = useQuery({
+    queryKey: ['templates', projectId],
+    queryFn: () => getTemplates(projectId),
+  })
+
+  const { data: projectLabels = [] } = useQuery({
+    queryKey: ['labels', projectId],
+    queryFn: () => getLabels(projectId),
+  })
 
   // Project members for assignee dropdown
   const { data: members = [] } = useQuery({
@@ -54,6 +69,8 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
         points: form.points ? parseInt(form.points) : undefined,
         sprint_id: sprintId,
         parent_id: form.parent_id || undefined,
+        due_date: form.due_date || undefined,
+        labels: form.labels.length > 0 ? form.labels : undefined,
       }),
     onSuccess: invalidate,
     onError: (err) => showToast(extractErrorMessage(err, 'イシューの作成に失敗しました'), 'error'),
@@ -66,6 +83,8 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
         assignee_id: form.assignee_id || undefined,
         points: form.points ? parseInt(form.points) : undefined,
         parent_id: form.parent_id || null,
+        due_date: form.due_date || null,
+        labels: form.labels,
       }
       return updateIssue(issue!.id, data)
     },
@@ -87,6 +106,33 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {!issue && templates.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">テンプレートから作成</label>
+          <select
+            onChange={e => {
+              const t = templates.find(t => t.id === e.target.value)
+              if (!t) return
+              setForm(f => ({
+                ...f,
+                title: t.name,
+                description: t.description ?? '',
+                type: t.type,
+                priority: t.priority,
+                points: t.points?.toString() ?? '',
+                labels: t.labels ?? [],
+              }))
+            }}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            defaultValue=""
+          >
+            <option value="">テンプレートを選択...</option>
+            {templates.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">タイトル *</label>
         <input
@@ -174,6 +220,54 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
           </select>
         </div>
       </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">期限日</label>
+        <input
+          type="date"
+          value={form.due_date}
+          onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+        />
+        {form.due_date && new Date(form.due_date) < new Date(new Date().toDateString()) && (
+          <p className="text-xs text-amber-600 mt-1">過去の日付が設定されています</p>
+        )}
+      </div>
+
+      {projectLabels.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">ラベル</label>
+          <div className="flex flex-wrap gap-2">
+            {projectLabels.map(label => {
+              const selected = form.labels.includes(label.name)
+              return (
+                <button
+                  key={label.id}
+                  type="button"
+                  onClick={() => setForm(f => ({
+                    ...f,
+                    labels: selected
+                      ? f.labels.filter(l => l !== label.name)
+                      : [...f.labels, label.name],
+                  }))}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                    selected
+                      ? 'border-transparent text-white'
+                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                  }`}
+                  style={selected ? { backgroundColor: label.color } : {}}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: label.color }}
+                  />
+                  {label.name}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* 親ストーリー（Story タイプ以外のとき表示） */}
       {form.type !== 'story' && stories.length > 0 && (

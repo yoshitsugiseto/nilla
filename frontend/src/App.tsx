@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Trello, List, Zap, Plus, FolderOpen, LayoutDashboard, Search, LogOut, Settings, Bell, X } from 'lucide-react'
+import { Trello, List, Zap, Plus, FolderOpen, LayoutDashboard, Search, LogOut, Settings, Bell, X, Keyboard } from 'lucide-react'
 import { useToast } from './components/common/Toast'
 import { extractErrorMessage } from './api/client'
 import client from './api/client'
@@ -14,12 +14,14 @@ import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { Modal } from './components/common/Modal'
 import { IssueDetail } from './components/Issue/IssueDetail'
+import { IssueForm } from './components/Issue/IssueForm'
 import { getProjects, getProject, createProject } from './api/projects'
 import { getIssue } from './api/issues'
 import { getWorkspaces, createWorkspace } from './api/workspaces'
 import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification } from './api/notifications'
 import { useAppStore } from './store'
 import { useWebSocket } from './hooks/useWebSocket'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 
 type Page = 'dashboard' | 'board' | 'backlog' | 'sprints' | 'sprint-history' | 'settings'
 
@@ -107,16 +109,28 @@ export default function App() {
   const [page, setPage] = useState<Page>('dashboard')
   const [creatingProject, setCreatingProject] = useState(false)
   const [creatingWorkspace, setCreatingWorkspace] = useState(false)
+  const [creatingIssue, setCreatingIssue] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [pendingOpenIssueTitle, setPendingOpenIssueTitle] = useState<string | null>(null)
   const notifRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const { activeProjectId, setActiveProject, activeWorkspaceId, setActiveWorkspace, pendingOpenIssueId, setPendingOpenIssueId } = useAppStore()
   const { user, clearAuth } = useAuthStore()
   const qc = useQueryClient()
   useWebSocket()
+
+  useKeyboardShortcuts({
+    'n': () => { if (activeProjectId) setCreatingIssue(true) },
+    '/': () => { searchInputRef.current?.focus() },
+    '?': () => setShowShortcuts(true),
+    'b': () => { setPage('backlog'); setSearching(false); setSearchInput(''); setSearchQuery('') },
+    'd': () => { setPage('board'); setSearching(false); setSearchInput(''); setSearchQuery('') },
+    's': () => { setPage('sprints'); setSearching(false); setSearchInput(''); setSearchQuery('') },
+  })
 
   const { data: notifications = [] } = useQuery({
     queryKey: ['notifications'],
@@ -283,6 +297,7 @@ export default function App() {
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
+              ref={searchInputRef}
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
               onKeyDown={e => {
@@ -290,10 +305,11 @@ export default function App() {
                   setSearchInput('')
                   setSearchQuery('')
                   setSearching(false)
+                  searchInputRef.current?.blur()
                 }
               }}
               aria-label="イシューを検索"
-              placeholder="イシューを検索..."
+              placeholder="イシューを検索... (/)"
               className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
             />
           </div>
@@ -321,6 +337,17 @@ export default function App() {
             ))}
           </div>
         </nav>
+        {/* Keyboard shortcuts hint */}
+        <div className="px-3 pb-1">
+          <button
+            onClick={() => setShowShortcuts(true)}
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors text-xs"
+          >
+            <Keyboard size={13} />
+            ショートカット (?)
+          </button>
+        </div>
+
         {/* Notifications */}
         {user && (
           <div ref={notifRef} className="px-3 py-2 border-t border-gray-200 relative">
@@ -442,6 +469,35 @@ export default function App() {
       {creatingWorkspace && (
         <Modal title="New Workspace" onClose={() => setCreatingWorkspace(false)}>
           <NewWorkspaceForm onClose={() => setCreatingWorkspace(false)} onCreated={id => { setActiveWorkspace(id); setCreatingWorkspace(false) }} />
+        </Modal>
+      )}
+
+      {creatingIssue && activeProjectId && (
+        <Modal title="New Issue" onClose={() => setCreatingIssue(false)}>
+          <IssueForm projectId={activeProjectId} onClose={() => setCreatingIssue(false)} />
+        </Modal>
+      )}
+
+      {showShortcuts && (
+        <Modal title="キーボードショートカット" onClose={() => setShowShortcuts(false)} size="sm">
+          <div className="space-y-1 text-sm">
+            {[
+              { key: 'n', desc: '新規Issueを作成' },
+              { key: '/', desc: '検索にフォーカス' },
+              { key: 'b', desc: 'Backlogへ移動' },
+              { key: 'd', desc: 'Board（Dashboard）へ移動' },
+              { key: 's', desc: 'Sprintsへ移動' },
+              { key: '?', desc: 'このヘルプを表示' },
+              { key: 'Esc', desc: 'モーダルを閉じる / 検索をクリア' },
+            ].map(({ key, desc }) => (
+              <div key={key} className="flex items-center gap-3 py-1.5">
+                <kbd className="px-2 py-0.5 bg-gray-100 border border-gray-300 rounded text-xs font-mono text-gray-700 min-w-8 text-center shrink-0">
+                  {key}
+                </kbd>
+                <span className="text-gray-600">{desc}</span>
+              </div>
+            ))}
+          </div>
         </Modal>
       )}
 

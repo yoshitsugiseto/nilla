@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
-import { Plus, GripVertical, Pencil, Trash2, ChevronDown, ChevronRight, Search, X } from 'lucide-react'
-import { getIssues, updateIssueSprint, deleteIssue, reorderIssues } from '../api/issues'
+import { Plus, GripVertical, Pencil, Trash2, ChevronDown, ChevronRight, Search, X, CheckSquare, Square } from 'lucide-react'
+import { getIssues, updateIssueSprint, deleteIssue, reorderIssues, bulkUpdateIssues } from '../api/issues'
 import { getSprints } from '../api/sprints'
+import { getProjectMembers } from '../api/workspaces'
 import { useAppStore } from '../store'
 import { Modal } from '../components/common/Modal'
 import { DetailPanel } from '../components/common/DetailPanel'
@@ -13,7 +14,7 @@ import { TypeIcon, PriorityBadge, StatusBadge } from '../components/common/Badge
 import { Avatar } from '../components/common/Avatar'
 import { ConfirmDialog } from '../components/common/ConfirmDialog'
 import { useToast } from '../components/common/Toast'
-import type { Issue } from '../types'
+import type { Issue, IssueStatus } from '../types'
 
 function SubtaskRow({ issue, selectedId, onDetail }: { issue: Issue; selectedId?: string | null; onDetail: (id: string) => void }) {
   return (
@@ -47,6 +48,9 @@ function IssueRow({
   subtasks = [],
   selectedId,
   onDetail,
+  bulkMode,
+  bulkSelected,
+  onBulkToggle,
 }: {
   issue: Issue
   index: number
@@ -54,6 +58,9 @@ function IssueRow({
   subtasks?: Issue[]
   selectedId?: string | null
   onDetail: (id: string) => void
+  bulkMode?: boolean
+  bulkSelected?: boolean
+  onBulkToggle?: (id: string) => void
 }) {
   const qc = useQueryClient()
   const [editing, setEditing] = useState(false)
@@ -79,16 +86,31 @@ function IssueRow({
               ...provided.draggableProps.style,
               opacity: snapshot.isDropAnimating ? 0 : undefined,
             }}
-            onClick={() => !snapshot.isDragging && onDetail(issue.id)}
+            onClick={() => {
+              if (snapshot.isDragging) return
+              if (bulkMode && onBulkToggle) { onBulkToggle(issue.id); return }
+              onDetail(issue.id)
+            }}
             className={`flex items-center gap-3 py-2.5 px-4 group transition-colors ${
               snapshot.isDragging
                 ? 'bg-blue-50 border border-blue-200 rounded-lg shadow-md cursor-grabbing'
-                : selectedId === issue.id
-                  ? 'bg-blue-50 cursor-grab'
-                  : 'hover:bg-blue-50/40 cursor-grab'
+                : bulkSelected
+                  ? 'bg-blue-50 cursor-pointer'
+                  : selectedId === issue.id
+                    ? 'bg-blue-50 cursor-grab'
+                    : 'hover:bg-blue-50/40 cursor-grab'
             }`}
           >
-            <GripVertical size={14} className="text-gray-300 shrink-0" />
+            {bulkMode ? (
+              <button
+                onClick={e => { e.stopPropagation(); onBulkToggle?.(issue.id) }}
+                className="shrink-0 text-blue-500"
+              >
+                {bulkSelected ? <CheckSquare size={15} /> : <Square size={15} className="text-gray-300" />}
+              </button>
+            ) : (
+              <GripVertical size={14} className="text-gray-300 shrink-0" />
+            )}
             {subtasks.length > 0 ? (
               <button
                 onClick={e => { e.stopPropagation(); setSubtasksOpen(v => !v) }}
@@ -105,9 +127,29 @@ function IssueRow({
               {issue.title}
             </span>
             <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
-              {subtasks.length > 0 && (
-                <span className="text-xs text-gray-400">{subtasks.length}件</span>
-              )}
+              {issue.type === 'story' && subtasks.length > 0 && (() => {
+                const done = subtasks.filter(s => s.status === 'done').length
+                return (
+                  <div className="flex items-center gap-1.5 w-20">
+                    <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                      <div
+                        className="bg-emerald-400 h-1.5 rounded-full"
+                        style={{ width: `${(done / subtasks.length) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-400 shrink-0">{done}/{subtasks.length}</span>
+                  </div>
+                )
+              })()}
+              {issue.due_date && (() => {
+                const days = Math.ceil((new Date(issue.due_date).getTime() - Date.now()) / 86400000)
+                const cls = days < 0 ? 'text-red-500 font-medium' : days <= 2 ? 'text-orange-500 font-medium' : 'text-gray-400'
+                return (
+                  <span className={`text-xs ${cls}`}>
+                    {days < 0 ? `${Math.abs(days)}日超過` : days === 0 ? '今日' : `${days}日`}
+                  </span>
+                )
+              })()}
               <StatusBadge status={issue.status} />
               <PriorityBadge priority={issue.priority} />
               {issue.points != null && (
@@ -185,6 +227,9 @@ function SprintGroup({
   selectedId,
   onDetail,
   defaultOpen = true,
+  bulkMode,
+  bulkSelected,
+  onBulkToggle,
 }: {
   label: string
   status?: string
@@ -197,8 +242,13 @@ function SprintGroup({
   selectedId?: string | null
   onDetail: (id: string) => void
   defaultOpen?: boolean
+  bulkMode?: boolean
+  bulkSelected?: Set<string>
+  onBulkToggle?: (id: string) => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  const [maxVisible, setMaxVisible] = useState(50)
+  const visibleIssues = issues.slice(0, maxVisible)
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -236,7 +286,7 @@ function SprintGroup({
                 {issues.length === 0 && !snapshot.isDraggingOver ? (
                   <p className="text-sm text-gray-400 px-4 py-3 italic">Issueなし</p>
                 ) : (
-                  issues.map((issue, index) => (
+                  visibleIssues.map((issue, index) => (
                     <IssueRow
                       key={issue.id}
                       issue={issue}
@@ -245,8 +295,19 @@ function SprintGroup({
                       subtasks={allIssues.filter(i => i.parent_id === issue.id)}
                       selectedId={selectedId}
                       onDetail={onDetail}
+                      bulkMode={bulkMode}
+                      bulkSelected={bulkSelected?.has(issue.id)}
+                      onBulkToggle={onBulkToggle}
                     />
                   ))
+                )}
+                {issues.length > maxVisible && (
+                  <button
+                    onClick={e => { e.stopPropagation(); setMaxVisible(v => v + 50) }}
+                    className="w-full py-2 text-xs text-blue-600 hover:bg-blue-50 transition-colors"
+                  >
+                    さらに表示（残り {issues.length - maxVisible} 件）
+                  </button>
                 )}
               </div>
             )}
@@ -265,12 +326,41 @@ export function BacklogPage() {
   const [creating, setCreating] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [filterQuery, setFilterQuery] = useState('')
+  const [bulkMode, setBulkMode] = useState(false)
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
 
   const { data: sprints = [] } = useQuery({
     queryKey: ['sprints', activeProjectId],
     queryFn: () => getSprints(activeProjectId!),
     enabled: !!activeProjectId,
   })
+
+  const { data: members = [] } = useQuery({
+    queryKey: ['project-members', activeProjectId],
+    queryFn: () => getProjectMembers(activeProjectId!),
+    enabled: !!activeProjectId && bulkMode,
+  })
+
+  const bulkMutation = useMutation({
+    mutationFn: (payload: { status?: IssueStatus; sprint_id?: string; assignee_id?: string }) =>
+      bulkUpdateIssues(activeProjectId!, { issue_ids: [...bulkSelected], ...payload }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['issues', activeProjectId] })
+      setBulkSelected(new Set())
+      setBulkMode(false)
+      showToast('一括更新しました', 'success')
+    },
+    onError: () => showToast('一括更新に失敗しました', 'error'),
+  })
+
+  const toggleBulkSelect = (id: string) => {
+    setBulkSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const { data: issues = [], isLoading } = useQuery({
     queryKey: ['issues', activeProjectId],
@@ -356,12 +446,22 @@ export function BacklogPage() {
       <div className="p-6 max-w-6xl">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-gray-900">Backlog</h1>
-        <button
-          onClick={() => setCreating(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-        >
-          <Plus size={16} /> Issueを作成
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setBulkMode(v => !v); setBulkSelected(new Set()) }}
+            className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border transition-colors ${
+              bulkMode ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            <CheckSquare size={14} /> 一括操作
+          </button>
+          <button
+            onClick={() => setCreating(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+          >
+            <Plus size={16} /> Issueを作成
+          </button>
+        </div>
       </div>
       <div className="relative mb-4">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -380,6 +480,48 @@ export function BacklogPage() {
           </button>
         )}
       </div>
+
+      {bulkMode && bulkSelected.size > 0 && (
+        <div className="flex items-center gap-3 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+          <span className="text-blue-700 font-medium shrink-0">{bulkSelected.size}件選択中</span>
+          <select
+            defaultValue=""
+            onChange={e => { if (e.target.value) bulkMutation.mutate({ status: e.target.value as IssueStatus }); e.target.value = '' }}
+            className="border border-gray-200 rounded px-2 py-1 text-sm"
+          >
+            <option value="">ステータス変更...</option>
+            <option value="todo">Todo</option>
+            <option value="in_progress">In Progress</option>
+            <option value="in_review">In Review</option>
+            <option value="done">Done</option>
+          </select>
+          <select
+            defaultValue=""
+            onChange={e => { if (e.target.value) bulkMutation.mutate({ sprint_id: e.target.value }); e.target.value = '' }}
+            className="border border-gray-200 rounded px-2 py-1 text-sm"
+          >
+            <option value="">スプリント変更...</option>
+            <option value="backlog">Backlog</option>
+            {sprints.filter(s => s.status !== 'completed').map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          <select
+            defaultValue=""
+            onChange={e => { bulkMutation.mutate({ assignee_id: e.target.value }); e.target.value = '' }}
+            className="border border-gray-200 rounded px-2 py-1 text-sm"
+          >
+            <option value="">担当者変更...</option>
+            <option value="">未割り当て</option>
+            {members.map(m => (
+              <option key={m.user_id} value={m.user_id}>{m.name}</option>
+            ))}
+          </select>
+          <button onClick={() => setBulkSelected(new Set())} className="ml-auto text-gray-400 hover:text-gray-600">
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {isLoading ? (
         <div role="status" aria-label="読み込み中" className="text-gray-400 text-center py-12">読み込み中...</div>
@@ -400,6 +542,9 @@ export function BacklogPage() {
                 selectedId={detailId}
                 onDetail={setDetailId}
                 defaultOpen={sprint.status === 'active'}
+                bulkMode={bulkMode}
+                bulkSelected={bulkSelected}
+                onBulkToggle={toggleBulkSelect}
               />
             ))}
 
@@ -412,6 +557,9 @@ export function BacklogPage() {
               projectId={activeProjectId}
               selectedId={detailId}
               onDetail={setDetailId}
+              bulkMode={bulkMode}
+              bulkSelected={bulkSelected}
+              onBulkToggle={toggleBulkSelect}
             />
           </div>
         </DragDropContext>

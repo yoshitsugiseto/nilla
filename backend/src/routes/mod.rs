@@ -1,8 +1,10 @@
 mod attachments;
 mod issues;
+mod labels;
 mod notifications;
 mod projects;
 mod sprints;
+mod templates;
 mod workspaces;
 
 use axum::{
@@ -64,6 +66,25 @@ pub fn router(state: AppState) -> Router<AppState> {
             get(issues::list_links).post(issues::create_link),
         )
         .route("/api/issue-links/{id}", delete(issues::delete_link))
+        .route("/api/projects/{id}/issues/bulk", patch(issues::bulk_update_issues))
+        // Labels
+        .route(
+            "/api/projects/{id}/labels",
+            get(labels::list_labels).post(labels::create_label),
+        )
+        .route(
+            "/api/labels/{id}",
+            put(labels::update_label).delete(labels::delete_label),
+        )
+        // Templates
+        .route(
+            "/api/projects/{id}/templates",
+            get(templates::list_templates).post(templates::create_template),
+        )
+        .route(
+            "/api/templates/{id}",
+            put(templates::update_template).delete(templates::delete_template),
+        )
         // Workspaces
         .route("/api/workspaces", get(workspaces::list_workspaces).post(workspaces::create_workspace))
         .route(

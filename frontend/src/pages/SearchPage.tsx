@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getIssuesPaged } from '../api/issues'
+import { getProjectMembers } from '../api/workspaces'
 import { useAppStore } from '../store'
 import { TypeIcon, PriorityBadge, StatusBadge } from '../components/common/Badge'
 import { Modal } from '../components/common/Modal'
 import { IssueDetail } from '../components/Issue/IssueDetail'
-import { Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, SlidersHorizontal, X } from 'lucide-react'
 
 const PAGE_SIZE = 20
 
@@ -13,23 +14,46 @@ interface Props {
   query: string
 }
 
+interface Filters {
+  status: string
+  type: string
+  priority: string
+  assignee_id: string
+}
+
+const EMPTY_FILTERS: Filters = { status: '', type: '', priority: '', assignee_id: '' }
+
 export function SearchPage({ query }: Props) {
   const { activeProjectId } = useAppStore()
   const [detailId, setDetailId] = useState<string | null>(null)
   const [page, setPage] = useState(0)
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
+  const [showFilters, setShowFilters] = useState(false)
 
-  // queryが変わったらページを0にリセット
-  useEffect(() => { setPage(0) }, [query])
+  // queryまたはフィルターが変わったらページをリセット
+  useEffect(() => { setPage(0) }, [query, filters])
 
   const effectivePage = query.length >= 2 ? page : 0
 
+  const hasFilters = Object.values(filters).some(Boolean)
+
+  const { data: members = [] } = useQuery({
+    queryKey: ['project-members', activeProjectId],
+    queryFn: () => getProjectMembers(activeProjectId!),
+    enabled: !!activeProjectId && showFilters,
+  })
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['issues', activeProjectId, 'search', query, effectivePage],
+    queryKey: ['issues', activeProjectId, 'search', query, effectivePage, filters],
     queryFn: () =>
       getIssuesPaged(activeProjectId!, {
         q: query,
         limit: PAGE_SIZE,
         offset: effectivePage * PAGE_SIZE,
+        status: filters.status || undefined,
+        type: filters.type || undefined,
+        priority: filters.priority || undefined,
+        assignee_id: filters.assignee_id || undefined,
       }),
     enabled: !!activeProjectId && query.length >= 2,
     placeholderData: prev => prev,
@@ -41,6 +65,11 @@ export function SearchPage({ query }: Props) {
   const start = effectivePage * PAGE_SIZE + 1
   const end = Math.min(effectivePage * PAGE_SIZE + issues.length, total)
 
+  const setFilter = (key: keyof Filters, value: string) =>
+    setFilters(f => ({ ...f, [key]: value }))
+
+  const clearFilters = () => setFilters(EMPTY_FILTERS)
+
   if (!activeProjectId) {
     return <div className="flex-1 flex items-center justify-center text-gray-400">← プロジェクトを選択してください</div>
   }
@@ -49,15 +78,105 @@ export function SearchPage({ query }: Props) {
     <div className="flex-1 overflow-auto">
       <div className="p-6 max-w-4xl">
         {/* Header */}
-        <div className="flex items-center gap-2 mb-2">
-          <Search size={18} className="text-gray-400" aria-hidden="true" />
-          <h1 className="text-xl font-bold text-gray-900">
-            {query.length < 2 ? '検索' : `"${query}" の検索結果`}
-          </h1>
-          {query.length >= 2 && !isLoading && total > 0 && (
-            <span className="text-sm text-gray-400 ml-2">{total}件</span>
-          )}
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <Search size={18} className="text-gray-400" aria-hidden="true" />
+            <h1 className="text-xl font-bold text-gray-900">
+              {query.length < 2 ? '検索' : `"${query}" の検索結果`}
+            </h1>
+            {query.length >= 2 && !isLoading && total > 0 && (
+              <span className="text-sm text-gray-400 ml-1">{total}件</span>
+            )}
+          </div>
+          <button
+            onClick={() => setShowFilters(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors shrink-0 ${
+              showFilters || hasFilters
+                ? 'bg-blue-50 text-blue-700 border-blue-300'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            <SlidersHorizontal size={14} />
+            フィルター
+            {hasFilters && (
+              <span className="bg-blue-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                {Object.values(filters).filter(Boolean).length}
+              </span>
+            )}
+          </button>
         </div>
+
+        {/* Filter panel */}
+        {showFilters && (
+          <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-xl">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">ステータス</label>
+                <select
+                  value={filters.status}
+                  onChange={e => setFilter('status', e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                >
+                  <option value="">すべて</option>
+                  <option value="todo">Todo</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="in_review">In Review</option>
+                  <option value="done">Done</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">タイプ</label>
+                <select
+                  value={filters.type}
+                  onChange={e => setFilter('type', e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                >
+                  <option value="">すべて</option>
+                  <option value="story">Story</option>
+                  <option value="task">Task</option>
+                  <option value="bug">Bug</option>
+                  <option value="spike">Spike</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">優先度</label>
+                <select
+                  value={filters.priority}
+                  onChange={e => setFilter('priority', e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                >
+                  <option value="">すべて</option>
+                  <option value="critical">Critical</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">担当者</label>
+                <select
+                  value={filters.assignee_id}
+                  onChange={e => setFilter('assignee_id', e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                >
+                  <option value="">すべて</option>
+                  <option value="__unassigned__">未割り当て</option>
+                  {members.map(m => (
+                    <option key={m.user_id} value={m.user_id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {hasFilters && (
+              <button
+                onClick={clearFilters}
+                className="mt-3 flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+              >
+                <X size={12} /> フィルターをクリア
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Pagination info */}
         {query.length >= 2 && !isLoading && total > 0 && (
@@ -79,7 +198,9 @@ export function SearchPage({ query }: Props) {
         )}
 
         {!isLoading && !isError && query.length >= 2 && issues.length === 0 && (
-          <p className="text-gray-400 text-sm">該当するイシューが見つかりません</p>
+          <p className="text-gray-400 text-sm">
+            {hasFilters ? '条件に一致するイシューが見つかりません' : '該当するイシューが見つかりません'}
+          </p>
         )}
 
         {/* Results */}
@@ -94,6 +215,14 @@ export function SearchPage({ query }: Props) {
               <span className="text-xs text-gray-400 font-mono w-14 shrink-0">#{issue.number}</span>
               <span className="flex-1 text-sm text-gray-900 font-medium truncate">{issue.title}</span>
               <div className="flex items-center gap-2 shrink-0">
+                {issue.due_date && (() => {
+                  const days = Math.ceil((new Date(issue.due_date).getTime() - Date.now()) / 86400000)
+                  return (
+                    <span className={`text-xs ${days < 0 ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+                      {days < 0 ? `${Math.abs(days)}日超過` : days === 0 ? '今日' : `残${days}日`}
+                    </span>
+                  )
+                })()}
                 <StatusBadge status={issue.status} />
                 <PriorityBadge priority={issue.priority} />
                 {issue.points != null && (
