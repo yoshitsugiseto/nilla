@@ -58,6 +58,32 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
     queryFn: () => getProjectMembers(projectId),
   })
 
+  // エピック・親ストーリーの選択状況に応じて選べるタイプを絞り込む
+  const allowedTypes: { value: IssueType; label: string }[] = form.parent_id
+    ? [
+        { value: 'task',  label: 'Task' },
+        { value: 'bug',   label: 'Bug' },
+        { value: 'spike', label: 'Spike' },
+      ]
+    : form.epic_id
+      ? [
+          { value: 'story', label: 'Story' },
+          { value: 'task',  label: 'Task' },
+          { value: 'bug',   label: 'Bug' },
+          { value: 'spike', label: 'Spike' },
+        ]
+      : [
+          { value: 'epic',  label: 'Epic' },
+          { value: 'story', label: 'Story' },
+          { value: 'task',  label: 'Task' },
+          { value: 'bug',   label: 'Bug' },
+          { value: 'spike', label: 'Spike' },
+        ]
+
+  const effectiveType: IssueType = allowedTypes.some(t => t.value === form.type)
+    ? form.type
+    : allowedTypes[0].value
+
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['issues', projectId] })
     onClose()
@@ -67,6 +93,7 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
     mutationFn: () =>
       createIssue(projectId, {
         ...form,
+        type: effectiveType,
         assignee_id: form.assignee_id || undefined,
         points: form.points ? parseInt(form.points) : undefined,
         sprint_id: sprintId,
@@ -83,6 +110,7 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
     mutationFn: () => {
       const data: UpdateIssue = {
         ...form,
+        type: effectiveType,
         assignee_id: form.assignee_id || undefined,
         points: form.points ? parseInt(form.points) : undefined,
         parent_id: form.parent_id || null,
@@ -137,6 +165,56 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
           </select>
         </div>
       )}
+
+      {/* コンテキスト選択（Epic → 親Story）を先頭に */}
+      {epics.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">エピック</label>
+          <select
+            value={form.epic_id}
+            onChange={e => {
+              const epic_id = e.target.value
+              setForm(f => {
+                const next = { ...f, epic_id }
+                // エピック選択時は epic タイプ不可 → 必要ならリセット
+                if (epic_id && next.type === 'epic') next.type = 'story'
+                return next
+              })
+            }}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">なし</option>
+            {epics.map(ep => (
+              <option key={ep.id} value={ep.id}>#{ep.number} {ep.title}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {stories.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">親ストーリー</label>
+          <select
+            value={form.parent_id}
+            onChange={e => {
+              const parent_id = e.target.value
+              setForm(f => {
+                const next = { ...f, parent_id }
+                // 親ストーリー選択時は epic・story タイプ不可
+                if (parent_id && (next.type === 'epic' || next.type === 'story')) next.type = 'task'
+                return next
+              })
+            }}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">なし</option>
+            {stories.map(s => (
+              <option key={s.id} value={s.id}>#{s.number} {s.title}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">タイトル *</label>
         <input
@@ -163,25 +241,13 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">タイプ</label>
           <select
-            value={form.type}
-            onChange={e => {
-              const newType = e.target.value as IssueType
-              setForm(f => ({
-                ...f,
-                type: newType,
-                // Story・Epicは親を持てないので parent_id をクリア
-                parent_id: (newType === 'story' || newType === 'epic') ? '' : f.parent_id,
-                // Epicはエピックに属せない
-                epic_id: newType === 'epic' ? '' : f.epic_id,
-              }))
-            }}
+            value={effectiveType}
+            onChange={e => setForm(f => ({ ...f, type: e.target.value as IssueType }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
           >
-            <option value="epic">Epic</option>
-            <option value="story">Story</option>
-            <option value="task">Task</option>
-            <option value="bug">Bug</option>
-            <option value="spike">Spike</option>
+            {allowedTypes.map(t => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
           </select>
         </div>
 
@@ -273,40 +339,6 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
               )
             })}
           </div>
-        </div>
-      )}
-
-      {/* エピック（Epic・Story タイプ以外のとき表示） */}
-      {form.type !== 'epic' && form.type !== 'story' && epics.length > 0 && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">エピック</label>
-          <select
-            value={form.epic_id}
-            onChange={e => setForm(f => ({ ...f, epic_id: e.target.value }))}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          >
-            <option value="">なし</option>
-            {epics.map(ep => (
-              <option key={ep.id} value={ep.id}>#{ep.number} {ep.title}</option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* 親ストーリー（Story タイプ以外のとき表示） */}
-      {form.type !== 'story' && form.type !== 'epic' && stories.length > 0 && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">親ストーリー</label>
-          <select
-            value={form.parent_id}
-            onChange={e => setForm(f => ({ ...f, parent_id: e.target.value }))}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          >
-            <option value="">なし</option>
-            {stories.map(s => (
-              <option key={s.id} value={s.id}>#{s.number} {s.title}</option>
-            ))}
-          </select>
         </div>
       )}
 
