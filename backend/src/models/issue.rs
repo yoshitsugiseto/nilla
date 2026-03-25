@@ -7,6 +7,8 @@ pub struct IssueRow {
     pub project_id: String,
     pub sprint_id: Option<String>,
     pub parent_id: Option<String>,
+    pub epic_id: Option<String>,
+    pub epic_title: Option<String>,
     pub number: i64,
     pub title: String,
     pub description: Option<String>,
@@ -30,6 +32,8 @@ pub struct Issue {
     pub project_id: String,
     pub sprint_id: Option<String>,
     pub parent_id: Option<String>,
+    pub epic_id: Option<String>,
+    pub epic_title: Option<String>,
     pub number: i64,
     pub title: String,
     pub description: Option<String>,
@@ -63,6 +67,8 @@ impl From<IssueRow> for Issue {
             project_id: row.project_id,
             sprint_id: row.sprint_id,
             parent_id: row.parent_id,
+            epic_id: row.epic_id,
+            epic_title: row.epic_title,
             number: row.number,
             title: row.title,
             description: row.description,
@@ -93,6 +99,7 @@ pub struct CreateIssue {
     pub labels: Option<Vec<String>>,
     pub sprint_id: Option<String>,
     pub parent_id: Option<String>,
+    pub epic_id: Option<String>,
     pub due_date: Option<NaiveDate>,
 }
 
@@ -108,6 +115,7 @@ pub struct UpdateIssue {
     pub labels: Option<Vec<String>>,
     pub sprint_id: Option<String>,
     pub parent_id: Option<String>,
+    pub epic_id: Option<String>,
     pub due_date: Option<NaiveDate>,
 }
 

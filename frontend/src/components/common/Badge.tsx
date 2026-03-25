@@ -1,4 +1,4 @@
-import { BookOpen, CheckSquare, Bug, Zap } from 'lucide-react'
+import { BookOpen, CheckSquare, Bug, Zap, Layers } from 'lucide-react'
 import type { IssueStatus, IssuePriority, IssueType } from '../../types'
 
 const statusConfig: Record<IssueStatus, { label: string; className: string }> = {
@@ -16,6 +16,7 @@ const priorityConfig: Record<IssuePriority, { label: string; className: string }
 }
 
 const typeConfig: Record<IssueType, { label: string; icon: React.ReactNode; className: string }> = {
+  epic:   { label: 'Epic',  icon: <Layers size={11} />,      className: 'bg-purple-100 text-purple-700' },
   story:  { label: 'Story', icon: <BookOpen size={11} />,    className: 'bg-green-100 text-green-700' },
   task:   { label: 'Task',  icon: <CheckSquare size={11} />, className: 'bg-blue-100 text-blue-700' },
   bug:    { label: 'Bug',   icon: <Bug size={11} />,         className: 'bg-red-100 text-red-700' },

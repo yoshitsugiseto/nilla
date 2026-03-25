@@ -20,9 +20,9 @@ use crate::{
 };
 
 const ISSUE_SELECT: &str =
-    "SELECT i.id, i.project_id, i.sprint_id, i.parent_id, i.number, i.title, i.description, i.type, i.status, i.priority, i.points, i.assignee_id, u.name as assignee_name, u.avatar_url as assignee_avatar_url, i.labels, i.position, i.due_date, i.created_at, i.updated_at FROM issues i LEFT JOIN users u ON i.assignee_id = u.id";
+    "SELECT i.id, i.project_id, i.sprint_id, i.parent_id, i.epic_id, e.title as epic_title, i.number, i.title, i.description, i.type, i.status, i.priority, i.points, i.assignee_id, u.name as assignee_name, u.avatar_url as assignee_avatar_url, i.labels, i.position, i.due_date, i.created_at, i.updated_at FROM issues i LEFT JOIN users u ON i.assignee_id = u.id LEFT JOIN issues e ON i.epic_id = e.id";
 const GET_ISSUE_SQL: &str =
-    "SELECT i.id, i.project_id, i.sprint_id, i.parent_id, i.number, i.title, i.description, i.type, i.status, i.priority, i.points, i.assignee_id, u.name as assignee_name, u.avatar_url as assignee_avatar_url, i.labels, i.position, i.due_date, i.created_at, i.updated_at FROM issues i LEFT JOIN users u ON i.assignee_id = u.id WHERE i.id = ?";
+    "SELECT i.id, i.project_id, i.sprint_id, i.parent_id, i.epic_id, e.title as epic_title, i.number, i.title, i.description, i.type, i.status, i.priority, i.points, i.assignee_id, u.name as assignee_name, u.avatar_url as assignee_avatar_url, i.labels, i.position, i.due_date, i.created_at, i.updated_at FROM issues i LEFT JOIN users u ON i.assignee_id = u.id LEFT JOIN issues e ON i.epic_id = e.id WHERE i.id = ?";
 
 fn validate_status(status: &str) -> crate::error::Result<()> {
     match status {
@@ -33,7 +33,7 @@ fn validate_status(status: &str) -> crate::error::Result<()> {
 
 fn validate_issue_type(t: &str) -> crate::error::Result<()> {
     match t {
-        "story" | "task" | "bug" | "spike" => Ok(()),
+        "story" | "task" | "bug" | "spike" | "epic" => Ok(()),
         _ => Err(AppError::BadRequest(format!("Invalid issue type: {t}"))),
     }
 }
@@ -249,6 +249,27 @@ pub async fn create_issue(
         }
     }
 
+    // Validate epic_id points to an actual epic
+    if let Some(ref epic_id) = body.epic_id {
+        let epic_type: Option<String> =
+            sqlx::query_scalar("SELECT type FROM issues WHERE id = ? AND project_id = ?")
+                .bind(epic_id)
+                .bind(&project_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        match epic_type.as_deref() {
+            Some("epic") => {}
+            Some(_) => {
+                return Err(AppError::BadRequest(
+                    "Epic issue must be of type epic".to_string(),
+                ))
+            }
+            None => {
+                return Err(AppError::BadRequest("Epic issue not found".to_string()))
+            }
+        }
+    }
+
     let number: i64 = sqlx::query_scalar(
         "SELECT COALESCE(MAX(number), 0) + 1 FROM issues WHERE project_id = ?",
     )
@@ -257,12 +278,13 @@ pub async fn create_issue(
     .await?;
 
     sqlx::query(
-        "INSERT INTO issues (id, project_id, sprint_id, parent_id, number, title, description, type, priority, points, assignee_id, labels, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO issues (id, project_id, sprint_id, parent_id, epic_id, number, title, description, type, priority, points, assignee_id, labels, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&project_id)
     .bind(&body.sprint_id)
     .bind(&body.parent_id)
+    .bind(&body.epic_id)
     .bind(number)
     .bind(&body.title)
     .bind(&body.description)
@@ -372,6 +394,11 @@ pub async fn update_issue(
     } else {
         current.parent_id.clone()
     };
+    let epic_id = if body.epic_id.is_some() {
+        body.epic_id.clone()
+    } else {
+        current.epic_id.clone()
+    };
     let due_date = if body.due_date.is_some() {
         body.due_date
     } else {
@@ -381,7 +408,7 @@ pub async fn update_issue(
     let mut tx = pool.begin().await?;
 
     sqlx::query(
-        "UPDATE issues SET title=?, description=?, type=?, status=?, priority=?, points=?, assignee_id=?, labels=?, sprint_id=?, parent_id=?, due_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        "UPDATE issues SET title=?, description=?, type=?, status=?, priority=?, points=?, assignee_id=?, labels=?, sprint_id=?, parent_id=?, epic_id=?, due_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
     )
     .bind(&title)
     .bind(&description)
@@ -393,6 +420,7 @@ pub async fn update_issue(
     .bind(&labels_json)
     .bind(&sprint_id)
     .bind(&parent_id)
+    .bind(&epic_id)
     .bind(due_date)
     .bind(&id)
     .execute(&mut *tx)

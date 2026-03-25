@@ -28,16 +28,18 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
     points: issue?.points?.toString() ?? '',
     assignee_id: issue?.assignee_id ?? '',
     parent_id: issue?.parent_id ?? parentId ?? '',
+    epic_id: issue?.epic_id ?? '',
     due_date: issue?.due_date ?? '',
     labels: issue?.labels ?? [] as string[],
   })
 
-  // ストーリー一覧（親候補）
+  // 全イシュー（親候補・エピック候補）
   const { data: allIssues = [] } = useQuery({
     queryKey: ['issues', projectId],
     queryFn: () => getIssues(projectId),
   })
   const stories = allIssues.filter(i => i.type === 'story' && i.id !== issue?.id)
+  const epics = allIssues.filter(i => i.type === 'epic' && i.id !== issue?.id)
 
   // テンプレート
   const { data: templates = [] } = useQuery({
@@ -69,6 +71,7 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
         points: form.points ? parseInt(form.points) : undefined,
         sprint_id: sprintId,
         parent_id: form.parent_id || undefined,
+        epic_id: form.epic_id || undefined,
         due_date: form.due_date || undefined,
         labels: form.labels.length > 0 ? form.labels : undefined,
       }),
@@ -83,6 +86,7 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
         assignee_id: form.assignee_id || undefined,
         points: form.points ? parseInt(form.points) : undefined,
         parent_id: form.parent_id || null,
+        epic_id: form.epic_id || null,
         due_date: form.due_date || null,
         labels: form.labels,
       }
@@ -165,14 +169,17 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
               setForm(f => ({
                 ...f,
                 type: newType,
-                // Storiesは親を持てないので parent_id をクリア
-                parent_id: newType === 'story' ? '' : f.parent_id,
+                // Story・Epicは親を持てないので parent_id をクリア
+                parent_id: (newType === 'story' || newType === 'epic') ? '' : f.parent_id,
+                // Epicはエピックに属せない
+                epic_id: newType === 'epic' ? '' : f.epic_id,
               }))
             }}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
           >
-            <option value="task">Task</option>
+            <option value="epic">Epic</option>
             <option value="story">Story</option>
+            <option value="task">Task</option>
             <option value="bug">Bug</option>
             <option value="spike">Spike</option>
           </select>
@@ -269,8 +276,25 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
         </div>
       )}
 
+      {/* エピック（Epic・Story タイプ以外のとき表示） */}
+      {form.type !== 'epic' && form.type !== 'story' && epics.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">エピック</label>
+          <select
+            value={form.epic_id}
+            onChange={e => setForm(f => ({ ...f, epic_id: e.target.value }))}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">なし</option>
+            {epics.map(ep => (
+              <option key={ep.id} value={ep.id}>#{ep.number} {ep.title}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* 親ストーリー（Story タイプ以外のとき表示） */}
-      {form.type !== 'story' && stories.length > 0 && (
+      {form.type !== 'story' && form.type !== 'epic' && stories.length > 0 && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">親ストーリー</label>
           <select

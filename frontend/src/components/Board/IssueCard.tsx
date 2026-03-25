@@ -44,6 +44,16 @@ export function IssueCard({ issue, index, projectId }: Props) {
                 : 'border-gray-200 hover:shadow-md hover:border-blue-200'
             }`}
           >
+            {/* エピックバッジ */}
+            {issue.epic_id && issue.epic_title && (
+              <div className="flex items-center gap-1 mb-1.5">
+                <TypeIcon type="epic" />
+                <span className="text-xs text-purple-600 truncate max-w-full font-medium">
+                  {issue.epic_title}
+                </span>
+              </div>
+            )}
+
             {/* 親ストーリーバッジ */}
             {parent && (
               <div className="flex items-center gap-1 mb-1.5">

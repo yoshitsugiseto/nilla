@@ -50,13 +50,15 @@ export interface Sprint {
 
 export type IssueStatus = 'todo' | 'in_progress' | 'in_review' | 'done'
 export type IssuePriority = 'critical' | 'high' | 'medium' | 'low'
-export type IssueType = 'story' | 'task' | 'bug' | 'spike'
+export type IssueType = 'story' | 'task' | 'bug' | 'spike' | 'epic'
 
 export interface Issue {
   id: string
   project_id: string
   sprint_id: string | null
   parent_id: string | null
+  epic_id: string | null
+  epic_title: string | null
   number: number
   title: string
   description: string | null
@@ -166,6 +168,7 @@ export interface CreateIssue {
   labels?: string[]
   sprint_id?: string
   parent_id?: string
+  epic_id?: string
   due_date?: string
 }
 
@@ -180,6 +183,7 @@ export interface UpdateIssue {
   labels?: string[]
   sprint_id?: string | null
   parent_id?: string | null
+  epic_id?: string | null
   due_date?: string | null
 }
 

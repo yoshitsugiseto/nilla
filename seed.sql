@@ -79,6 +79,15 @@ INSERT OR IGNORE INTO issues (id, project_id, sprint_id, number, title, type, st
   ('demo-i-029', 'demo-project-001', NULL, 29, '[DEMO] Webhook通知機能',                     'spike', 'todo', 'medium', 5, NULL,              5000),
   ('demo-i-030', 'demo-project-001', NULL, 30, '[DEMO] ユーザー設定画面',                    'task',  'todo', 'medium', 3, NULL,              6000);
 
+-- エピック — 2件
+INSERT OR IGNORE INTO issues (id, project_id, sprint_id, number, title, type, status, priority, points, assignee_id, position) VALUES
+  ('demo-epic-001', 'demo-project-001', NULL, 31, '[DEMO] Epic: コアAPI基盤整備',             'epic', 'in_progress', 'high',   20, 'demo-user-alice', 100),
+  ('demo-epic-002', 'demo-project-001', NULL, 32, '[DEMO] Epic: フロントエンド実装',          'epic', 'todo',        'high',   30, 'demo-user-bob',   200);
+
+-- エピックに既存イシューを紐付け
+UPDATE issues SET epic_id = 'demo-epic-001' WHERE id IN ('demo-i-001','demo-i-002','demo-i-003','demo-i-004','demo-i-005','demo-i-006','demo-i-007','demo-i-008') AND epic_id IS NULL;
+UPDATE issues SET epic_id = 'demo-epic-002' WHERE id IN ('demo-i-009','demo-i-010','demo-i-011','demo-i-012','demo-i-013','demo-i-014','demo-i-015','demo-i-016','demo-i-017','demo-i-018') AND epic_id IS NULL;
+
 -- アクティビティログ (Sprint 1 完了分)
 INSERT OR IGNORE INTO activity_logs (id, issue_id, field, old_value, new_value, created_at) VALUES
   ('demo-al-001', 'demo-i-001', 'status', 'todo',        'in_progress', '2026-01-07 09:00:00'),

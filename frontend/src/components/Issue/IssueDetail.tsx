@@ -173,6 +173,22 @@ export function IssueDetail({ issueId, projectId }: Props) {
     onError: () => showToast('ステータスの更新に失敗しました', 'error'),
   })
 
+  const epicMutation = useMutation({
+    mutationFn: (epic_id: string | null) => updateIssue(issueId, { epic_id }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['issue', issueId] })
+      qc.invalidateQueries({ queryKey: ['issues', projectId] })
+    },
+    onError: () => showToast('エピックの更新に失敗しました', 'error'),
+  })
+
+  const { data: allIssues = [] } = useQuery({
+    queryKey: ['issues', projectId],
+    queryFn: () => getIssues(projectId),
+    staleTime: 30_000,
+  })
+  const epics = allIssues.filter(i => i.type === 'epic' && i.id !== issueId)
+
   const commentMutation = useMutation({
     mutationFn: () => createComment(issueId, commentText),
     onSuccess: () => {
@@ -563,6 +579,23 @@ export function IssueDetail({ issueId, projectId }: Props) {
             <span className="capitalize text-gray-700">{issue.type}</span>
           </span>
         </div>
+
+        {issue.type !== 'epic' && (
+          <div>
+            <p className="text-xs text-gray-400 mb-1">エピック</p>
+            <select
+              value={issue.epic_id ?? ''}
+              onChange={e => epicMutation.mutate(e.target.value || null)}
+              disabled={epicMutation.isPending}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs"
+            >
+              <option value="">なし</option>
+              {epics.map(ep => (
+                <option key={ep.id} value={ep.id}>#{ep.number} {ep.title}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {issue.points != null && (
           <div>

@@ -126,6 +126,12 @@ function IssueRow({
             <span className="flex-1 text-sm text-gray-900 truncate font-medium hover:text-blue-600">
               {issue.title}
             </span>
+            {issue.epic_id && issue.epic_title && (
+              <span className="flex items-center gap-1 text-xs text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded shrink-0 max-w-28 truncate">
+                <TypeIcon type="epic" />
+                {issue.epic_title}
+              </span>
+            )}
             <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
               {issue.type === 'story' && subtasks.length > 0 && (() => {
                 const done = subtasks.filter(s => s.status === 'done').length
