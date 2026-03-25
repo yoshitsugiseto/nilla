@@ -68,7 +68,7 @@ async fn create_issue_invalid_type_returns_400() {
         &app,
         common::post(
             &format!("/api/projects/{pid}/issues"),
-            json!({ "title": "Issue", "type": "epic" }),
+            json!({ "title": "Issue", "type": "invalid_type" }),
         ),
     )
     .await;
