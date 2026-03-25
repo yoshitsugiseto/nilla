@@ -7,32 +7,11 @@ use uuid::Uuid;
 
 use crate::{
     auth::middleware::UserId,
+    db::check_project_access,
     error::{AppError, Result},
     models::label::{CreateLabel, ProjectLabel, UpdateLabel},
 };
 
-async fn check_project_access(pool: &SqlitePool, user_id: &str, project_id: &str) -> Result<()> {
-    let has_access: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM projects p JOIN workspace_members wm ON p.workspace_id = wm.workspace_id WHERE p.id = ? AND wm.user_id = ?)"
-    )
-    .bind(project_id)
-    .bind(user_id)
-    .fetch_one(pool)
-    .await?;
-
-    if !has_access {
-        let is_legacy: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM projects WHERE id = ? AND workspace_id IS NULL)"
-        )
-        .bind(project_id)
-        .fetch_one(pool)
-        .await?;
-        if !is_legacy {
-            return Err(AppError::Forbidden);
-        }
-    }
-    Ok(())
-}
 
 pub async fn list_labels(
     State(pool): State<SqlitePool>,

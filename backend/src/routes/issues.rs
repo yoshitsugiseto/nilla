@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::middleware::UserId,
+    db::check_project_access,
     error::{AppError, Result},
     models::issue::{
         BulkUpdateIssues, CreateIssue, CreateIssueLink, Issue, IssueFilters, IssueLink, IssueRow,
@@ -45,31 +46,6 @@ fn validate_priority(p: &str) -> crate::error::Result<()> {
     }
 }
 
-async fn check_project_access(pool: &SqlitePool, user_id: &str, project_id: &str) -> Result<()> {
-    let has_access: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM projects p JOIN workspace_members wm ON p.workspace_id = wm.workspace_id WHERE p.id = ? AND wm.user_id = ?)"
-    )
-    .bind(project_id)
-    .bind(user_id)
-    .fetch_one(pool)
-    .await?;
-
-    if !has_access {
-        // Also allow access if workspace_id is NULL (legacy data)
-        let is_legacy: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM projects WHERE id = ? AND workspace_id IS NULL)"
-        )
-        .bind(project_id)
-        .fetch_one(pool)
-        .await?;
-
-        if !is_legacy {
-            return Err(AppError::Forbidden);
-        }
-    }
-
-    Ok(())
-}
 
 fn broadcast_event(ws_tx: &broadcast::Sender<String>, event_type: &str, project_id: &str) {
     let _ = ws_tx.send(
