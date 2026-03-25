@@ -83,6 +83,59 @@ async fn delete_template_success() {
 }
 
 #[tokio::test]
+async fn update_template_fields() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let tid = common::create_template(&app, &pid, "Old Name").await;
+
+    let (status, json) = common::send(
+        &app,
+        common::put(
+            &format!("/api/templates/{tid}"),
+            json!({ "name": "New Name", "type": "bug", "priority": "high", "points": 3 }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["name"], "New Name");
+    assert_eq!(json["type"], "bug");
+    assert_eq!(json["priority"], "high");
+    assert_eq!(json["points"], 3);
+}
+
+#[tokio::test]
+async fn update_template_partial() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let tid = common::create_template(&app, &pid, "My Template").await;
+
+    // Only update priority, other fields should stay
+    let (status, json) = common::send(
+        &app,
+        common::put(&format!("/api/templates/{tid}"), json!({ "priority": "critical" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["name"], "My Template");
+    assert_eq!(json["priority"], "critical");
+    assert_eq!(json["type"], "task"); // default unchanged
+}
+
+#[tokio::test]
+async fn update_template_empty_name_returns_400() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let tid = common::create_template(&app, &pid, "Template").await;
+
+    let (status, _) = common::send(
+        &app,
+        common::put(&format!("/api/templates/{tid}"), json!({ "name": "" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn delete_template_not_found() {
     let app = common::setup_app().await;
 

@@ -81,6 +81,56 @@ async fn delete_label_success() {
 }
 
 #[tokio::test]
+async fn update_label_name_and_color() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let lid = common::create_label(&app, &pid, "OldName").await;
+
+    let (status, json) = common::send(
+        &app,
+        common::put(
+            &format!("/api/labels/{lid}"),
+            json!({ "name": "NewName", "color": "#ff0000" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["name"], "NewName");
+    assert_eq!(json["color"], "#ff0000");
+}
+
+#[tokio::test]
+async fn update_label_partial() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let lid = common::create_label(&app, &pid, "Feature").await;
+
+    // Only update color, name should stay
+    let (status, json) = common::send(
+        &app,
+        common::put(&format!("/api/labels/{lid}"), json!({ "color": "#00ff00" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["name"], "Feature");
+    assert_eq!(json["color"], "#00ff00");
+}
+
+#[tokio::test]
+async fn update_label_empty_name_returns_400() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let lid = common::create_label(&app, &pid, "Label").await;
+
+    let (status, _) = common::send(
+        &app,
+        common::put(&format!("/api/labels/{lid}"), json!({ "name": "" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn delete_label_not_found() {
     let app = common::setup_app().await;
 

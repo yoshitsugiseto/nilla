@@ -291,6 +291,213 @@ async fn delete_issue_cascades_subtasks() {
 }
 
 #[tokio::test]
+async fn update_issue_fields() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let iid = common::create_issue(&app, &pid, "Original").await;
+
+    let (status, json) = common::send(
+        &app,
+        common::put(
+            &format!("/api/issues/{iid}"),
+            json!({
+                "title": "Updated Title",
+                "description": "Some description",
+                "priority": "critical",
+                "points": 5
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["title"], "Updated Title");
+    assert_eq!(json["description"], "Some description");
+    assert_eq!(json["priority"], "critical");
+    assert_eq!(json["points"], 5);
+}
+
+#[tokio::test]
+async fn update_issue_empty_title_returns_400() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let iid = common::create_issue(&app, &pid, "Issue").await;
+
+    let (status, _) = common::send(
+        &app,
+        common::put(&format!("/api/issues/{iid}"), json!({ "title": "" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn create_issue_with_labels() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+
+    let (status, json) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Labeled", "labels": ["frontend", "bug"] }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let labels = json["labels"].as_array().unwrap();
+    assert_eq!(labels.len(), 2);
+    assert!(labels.iter().any(|l| l == "frontend"));
+    assert!(labels.iter().any(|l| l == "bug"));
+}
+
+#[tokio::test]
+async fn create_epic_success() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+
+    let (status, json) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Big Feature Epic", "type": "epic" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["type"], "epic");
+    assert!(json["epic_id"].is_null());
+}
+
+#[tokio::test]
+async fn create_issue_with_valid_epic_id() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+
+    // create epic first
+    let (_, epic) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Epic", "type": "epic" }),
+        ),
+    )
+    .await;
+    let epic_id = epic["id"].as_str().unwrap().to_string();
+
+    let (status, json) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Story under epic", "type": "story", "epic_id": epic_id }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["epic_id"], epic_id);
+    assert_eq!(json["epic_title"], "Epic");
+}
+
+#[tokio::test]
+async fn create_issue_non_epic_as_epic_id_returns_400() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let task_id = common::create_issue(&app, &pid, "Task").await;
+
+    let (status, _) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Story", "epic_id": task_id }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn create_and_list_issue_links() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let iid1 = common::create_issue(&app, &pid, "Issue A").await;
+    let iid2 = common::create_issue(&app, &pid, "Issue B").await;
+
+    let (status, json) = common::send(
+        &app,
+        common::post(
+            &format!("/api/issues/{iid1}/links"),
+            json!({ "target_issue_id": iid2, "link_type": "blocks" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["link_type"], "blocks");
+    assert_eq!(json["linked_issue_title"], "Issue B");
+
+    let (status, links) =
+        common::send(&app, common::get(&format!("/api/issues/{iid1}/links"))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(links.as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn delete_issue_link() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let iid1 = common::create_issue(&app, &pid, "Issue A").await;
+    let iid2 = common::create_issue(&app, &pid, "Issue B").await;
+
+    let (_, link) = common::send(
+        &app,
+        common::post(
+            &format!("/api/issues/{iid1}/links"),
+            json!({ "target_issue_id": iid2, "link_type": "relates_to" }),
+        ),
+    )
+    .await;
+    let link_id = link["id"].as_str().unwrap().to_string();
+
+    let (status, json) =
+        common::send(&app, common::delete(&format!("/api/issue-links/{link_id}"))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["ok"], true);
+
+    let (_, links) =
+        common::send(&app, common::get(&format!("/api/issues/{iid1}/links"))).await;
+    assert_eq!(links.as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn update_issue_sprint() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let iid = common::create_issue(&app, &pid, "Issue").await;
+    let sid = common::create_sprint(&app, &pid, "Sprint 1").await;
+
+    let (status, json) = common::send(
+        &app,
+        common::patch(
+            &format!("/api/issues/{iid}/sprint"),
+            json!({ "sprint_id": sid }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["sprint_id"], sid);
+
+    // Move back to backlog
+    let (status, json) = common::send(
+        &app,
+        common::patch(
+            &format!("/api/issues/{iid}/sprint"),
+            json!({ "sprint_id": null }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(json["sprint_id"].is_null());
+}
+
+#[tokio::test]
 async fn add_and_list_comments() {
     let app = common::setup_app().await;
     let pid = common::create_project(&app, "P", "PI").await;
