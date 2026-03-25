@@ -1,3 +1,4 @@
+use chrono;
 use sqlx::{sqlite::SqliteConnectOptions, SqlitePool, sqlite::SqlitePoolOptions};
 use std::str::FromStr;
 
@@ -42,6 +43,17 @@ pub async fn create_pool(database_url: &str) -> anyhow::Result<SqlitePool> {
         .await?;
 
     sqlx::migrate!("./migrations").run(&pool).await?;
+
+    // 起動時に期限切れのセッションと OAuth state を削除
+    let now = chrono::Utc::now().to_rfc3339();
+    let _ = sqlx::query("DELETE FROM sessions WHERE expires_at < ?")
+        .bind(&now)
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("DELETE FROM oauth_states WHERE expires_at < ?")
+        .bind(&now)
+        .execute(&pool)
+        .await;
 
     Ok(pool)
 }

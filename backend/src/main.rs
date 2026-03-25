@@ -3,6 +3,7 @@ use std::sync::Arc;
 use axum::http::{HeaderValue, Method, header};
 use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
+use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::trace::TraceLayer;
 
 use nilla::{AppState, Config};
@@ -79,6 +80,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = nilla::create_app(state, static_dir)
         .layer(cors)
+        .layer(RequestBodyLimitLayer::new(1 * 1024 * 1024)) // 1 MB (multipart は別途制限済み)
         .layer(TraceLayer::new_for_http());
 
     let addr = "0.0.0.0:8080";
