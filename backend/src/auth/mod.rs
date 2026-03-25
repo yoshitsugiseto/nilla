@@ -14,7 +14,7 @@ use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
 use crate::AppState;
 
 /// 429 レスポンスをアプリのデザインに合わせた HTML/JSON に差し替えるミドルウェア
-async fn rate_limit_response(req: Request<Body>, next: Next) -> Response {
+pub async fn rate_limit_response(req: Request<Body>, next: Next) -> Response {
     let path = req.uri().path().to_string();
     let resp = next.run(req).await;
 

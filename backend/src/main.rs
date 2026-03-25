@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use axum::http::{HeaderValue, Method, header};
 use std::net::SocketAddr;
+use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
 use tower_http::cors::CorsLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::trace::TraceLayer;
@@ -78,9 +79,21 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("Serving static files from: {}", static_dir.as_deref().unwrap());
     }
 
+    // API 全体のレート制限: 100ms に 1 トークン補充、バースト 200
+    // → 定常 10 req/s、最大バースト 200 req (per IP)
+    let governor_conf = Arc::new(
+        GovernorConfigBuilder::default()
+            .period(std::time::Duration::from_millis(100))
+            .burst_size(200)
+            .finish()
+            .unwrap(),
+    );
+
     let app = nilla::create_app(state, static_dir)
         .layer(cors)
         .layer(RequestBodyLimitLayer::new(1 * 1024 * 1024)) // 1 MB (multipart は別途制限済み)
+        .layer(GovernorLayer::new(governor_conf))
+        .layer(axum::middleware::from_fn(nilla::auth::rate_limit_response))
         .layer(TraceLayer::new_for_http());
 
     let addr = "0.0.0.0:8080";
