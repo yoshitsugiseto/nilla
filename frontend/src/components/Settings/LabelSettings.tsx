@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Trash2, Pencil, Check, X, Tag } from 'lucide-react'
 import { getLabels, createLabel, updateLabel, deleteLabel } from '../../api/labels'
 import { useToast } from '../common/useToast'
+import { useProjectPermissions } from '../../hooks/useProjectPermissions'
 
 interface Props {
   projectId: string
@@ -11,6 +12,7 @@ interface Props {
 export function LabelSettings({ projectId }: Props) {
   const qc = useQueryClient()
   const showToast = useToast()
+  const { canAdminProject } = useProjectPermissions(projectId)
 
   const [newLabelName, setNewLabelName] = useState('')
   const [newLabelColor, setNewLabelColor] = useState('#6366f1')
@@ -110,21 +112,25 @@ export function LabelSettings({ projectId }: Props) {
                   <div className="flex items-center gap-3 px-4 py-2.5">
                     <span className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: label.color }} />
                     <span className="flex-1 text-sm text-gray-800">{label.name}</span>
-                    <button
-                      onClick={() => { setEditingLabelId(label.id); setEditLabelForm({ name: label.name, color: label.color }) }}
-                      className="text-gray-300 hover:text-blue-500 transition-colors"
-                      aria-label="編集"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => deleteLabelMutation.mutate(label.id)}
-                      disabled={deleteLabelMutation.isPending}
-                      className="text-gray-300 hover:text-red-500 transition-colors"
-                      aria-label="削除"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    {canAdminProject && (
+                      <>
+                        <button
+                          onClick={() => { setEditingLabelId(label.id); setEditLabelForm({ name: label.name, color: label.color }) }}
+                          className="text-gray-300 hover:text-blue-500 transition-colors"
+                          aria-label="編集"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => deleteLabelMutation.mutate(label.id)}
+                          disabled={deleteLabelMutation.isPending}
+                          className="text-gray-300 hover:text-red-500 transition-colors"
+                          aria-label="削除"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </li>
@@ -132,29 +138,33 @@ export function LabelSettings({ projectId }: Props) {
           </ul>
         )}
       </div>
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex items-center gap-2">
-          <input
-            type="color"
-            value={newLabelColor}
-            onChange={e => setNewLabelColor(e.target.value)}
-            className="w-8 h-8 rounded border border-gray-200 cursor-pointer p-0.5"
-          />
-          <input
-            value={newLabelName}
-            onChange={e => setNewLabelName(e.target.value)}
-            placeholder="ラベル名"
-            className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            onClick={() => createLabelMutation.mutate()}
-            disabled={!newLabelName.trim() || createLabelMutation.isPending}
-            className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40 whitespace-nowrap"
-          >
-            追加
-          </button>
+      {canAdminProject ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={newLabelColor}
+              onChange={e => setNewLabelColor(e.target.value)}
+              className="w-8 h-8 rounded border border-gray-200 cursor-pointer p-0.5"
+            />
+            <input
+              value={newLabelName}
+              onChange={e => setNewLabelName(e.target.value)}
+              placeholder="ラベル名"
+              className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={() => createLabelMutation.mutate()}
+              disabled={!newLabelName.trim() || createLabelMutation.isPending}
+              className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40 whitespace-nowrap"
+            >
+              追加
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <p className="text-xs text-gray-400">ラベルの編集は project admin のみ利用できます</p>
+      )}
     </section>
   )
 }

@@ -16,6 +16,7 @@ import { Avatar } from '../components/common/Avatar'
 import { ConfirmDialog } from '../components/common/ConfirmDialog'
 import { useToast } from '../components/common/useToast'
 import { useCurrentTime } from '../hooks/useCurrentTime'
+import { useProjectPermissions } from '../hooks/useProjectPermissions'
 import { deadlineLabel, dueDateLabel } from '../utils/date'
 import type { Issue, IssuePriority, IssueStatus } from '../types'
 
@@ -54,6 +55,7 @@ function IssueRow({
   bulkMode,
   bulkSelected,
   onBulkToggle,
+  canEdit,
 }: {
   issue: Issue
   index: number
@@ -64,6 +66,7 @@ function IssueRow({
   bulkMode?: boolean
   bulkSelected?: boolean
   onBulkToggle?: (id: string) => void
+  canEdit: boolean
 }) {
   const qc = useQueryClient()
   const [editing, setEditing] = useState(false)
@@ -80,12 +83,12 @@ function IssueRow({
 
   return (
     <>
-      <Draggable draggableId={issue.id} index={index}>
+      <Draggable draggableId={issue.id} index={index} isDragDisabled={bulkMode || !canEdit}>
         {(provided, snapshot) => (
           <div
             ref={provided.innerRef}
             {...provided.draggableProps}
-            {...provided.dragHandleProps}
+            {...(canEdit && !bulkMode ? provided.dragHandleProps : {})}
             style={{
               ...provided.draggableProps.style,
               opacity: snapshot.isDropAnimating ? 0 : undefined,
@@ -113,7 +116,7 @@ function IssueRow({
                 {bulkSelected ? <CheckSquare size={15} /> : <Square size={15} className="text-gray-300" />}
               </button>
             ) : (
-              <GripVertical size={14} className="text-gray-300 shrink-0" />
+              <GripVertical size={14} className={`shrink-0 ${canEdit ? 'text-gray-300' : 'text-gray-200'}`} />
             )}
             {subtasks.length > 0 ? (
               <button
@@ -167,24 +170,26 @@ function IssueRow({
                 </span>
               )}
               {issue.assignee_name && <Avatar name={issue.assignee_name} size="sm" />}
-              <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
-                <button
-                  onClick={e => { e.stopPropagation(); setEditing(true) }}
-                  className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                  title="Edit"
-                  aria-label="イシューを編集"
-                >
-                  <Pencil size={12} aria-hidden="true" />
-                </button>
-                <button
-                  onClick={e => { e.stopPropagation(); setConfirmDelete(true) }}
-                  className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                  title="Delete"
-                  aria-label="イシューを削除"
-                >
-                  <Trash2 size={12} aria-hidden="true" />
-                </button>
-              </div>
+              {canEdit && (
+                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                  <button
+                    onClick={e => { e.stopPropagation(); setEditing(true) }}
+                    className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                    title="Edit"
+                    aria-label="イシューを編集"
+                  >
+                    <Pencil size={12} aria-hidden="true" />
+                  </button>
+                  <button
+                    onClick={e => { e.stopPropagation(); setConfirmDelete(true) }}
+                    className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                    title="Delete"
+                    aria-label="イシューを削除"
+                  >
+                    <Trash2 size={12} aria-hidden="true" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -194,13 +199,13 @@ function IssueRow({
         <SubtaskRow key={sub.id} issue={sub} selectedId={selectedId} onDetail={onDetail} />
       ))}
 
-      {editing && (
+      {editing && canEdit && (
         <Modal title={`Edit #${issue.number}`} onClose={() => setEditing(false)}>
           <IssueForm projectId={projectId} issue={issue} onClose={() => setEditing(false)} />
         </Modal>
       )}
 
-      {confirmDelete && (
+      {confirmDelete && canEdit && (
         <ConfirmDialog
           message={
             subtasks.length > 0
@@ -230,6 +235,7 @@ function SprintGroup({
   bulkMode,
   bulkSelected,
   onBulkToggle,
+  canEdit,
 }: {
   label: string
   status?: string
@@ -245,6 +251,7 @@ function SprintGroup({
   bulkMode?: boolean
   bulkSelected?: Set<string>
   onBulkToggle?: (id: string) => void
+  canEdit: boolean
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const [maxVisible, setMaxVisible] = useState(50)
@@ -273,7 +280,7 @@ function SprintGroup({
         <span className="text-xs font-mono text-gray-500">{totalPts}pt</span>
       </div>
 
-      <Droppable droppableId={droppableId} isDropDisabled={!open}>
+      <Droppable droppableId={droppableId} isDropDisabled={!open || !canEdit}>
         {(provided, snapshot) => (
           <div
             ref={provided.innerRef}
@@ -299,6 +306,7 @@ function SprintGroup({
                       bulkMode={bulkMode}
                       bulkSelected={bulkSelected?.has(issue.id)}
                       onBulkToggle={onBulkToggle}
+                      canEdit={canEdit}
                     />
                   ))
                 )}
@@ -324,6 +332,7 @@ export function BacklogPage() {
   const { activeProjectId } = useAppStore()
   const qc = useQueryClient()
   const showToast = useToast()
+  const { canEditProject } = useProjectPermissions(activeProjectId)
   const [creating, setCreating] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [filterQuery, setFilterQuery] = useState('')
@@ -416,6 +425,7 @@ export function BacklogPage() {
   })
 
   const handleDragEnd = (result: DropResult) => {
+    if (!canEditProject) return
     const { draggableId, source, destination } = result
     if (!destination) return
     if (source.droppableId === destination.droppableId && source.index === destination.index) return
@@ -470,20 +480,24 @@ export function BacklogPage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-gray-900">Backlog</h1>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => { setBulkMode(v => !v); setBulkSelected(new Set()) }}
-            className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border transition-colors ${
-              bulkMode ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            <CheckSquare size={14} /> 一括操作
-          </button>
-          <button
-            onClick={() => setCreating(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-          >
-            <Plus size={16} /> Issueを作成
-          </button>
+          {canEditProject && (
+            <button
+              onClick={() => { setBulkMode(v => !v); setBulkSelected(new Set()) }}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border transition-colors ${
+                bulkMode ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <CheckSquare size={14} /> 一括操作
+            </button>
+          )}
+          {canEditProject && (
+            <button
+              onClick={() => setCreating(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+            >
+              <Plus size={16} /> Issueを作成
+            </button>
+          )}
         </div>
       </div>
       <div className="relative mb-4">
@@ -504,7 +518,7 @@ export function BacklogPage() {
         )}
       </div>
 
-      {bulkMode && bulkSelected.size > 0 && (
+      {canEditProject && bulkMode && bulkSelected.size > 0 && (
         <div className="flex items-center gap-3 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
           <span className="text-blue-700 font-medium shrink-0">{bulkSelected.size}件選択中</span>
           <select
@@ -598,6 +612,7 @@ export function BacklogPage() {
                 bulkMode={bulkMode}
                 bulkSelected={bulkSelected}
                 onBulkToggle={toggleBulkSelect}
+                canEdit={canEditProject}
               />
             ))}
 
@@ -613,12 +628,13 @@ export function BacklogPage() {
               bulkMode={bulkMode}
               bulkSelected={bulkSelected}
               onBulkToggle={toggleBulkSelect}
+              canEdit={canEditProject}
             />
           </div>
         </DragDropContext>
       )}
 
-      {creating && (
+      {creating && canEditProject && (
         <Modal title="New Issue" onClose={() => setCreating(false)}>
           <IssueForm projectId={activeProjectId} onClose={() => setCreating(false)} />
         </Modal>

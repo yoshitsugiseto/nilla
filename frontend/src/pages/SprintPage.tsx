@@ -8,6 +8,7 @@ import { Modal } from '../components/common/Modal'
 import { BurndownChart } from '../components/Board/BurndownChart'
 import { useToast } from '../components/common/useToast'
 import { useCurrentTime } from '../hooks/useCurrentTime'
+import { useProjectPermissions } from '../hooks/useProjectPermissions'
 import { extractErrorMessage } from '../api/client'
 import { deadlineLabel } from '../utils/date'
 import type { Issue, Sprint, IssueType } from '../types'
@@ -297,6 +298,7 @@ function CompleteSprintDialog({
 
 function SprintCard({
   sprint, sprintIssues, totalPts, donePts, projectId, onStart, onComplete,
+  canEdit,
 }: {
   sprint: Sprint
   sprintIssues: Issue[]
@@ -305,6 +307,7 @@ function SprintCard({
   projectId: string
   onStart: () => void
   onComplete: () => void
+  canEdit: boolean
 }) {
   const [showBurndown, setShowBurndown] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -336,13 +339,15 @@ function SprintCard({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setEditing(true)}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-gray-50 text-gray-600 hover:bg-gray-100"
-            title="Edit sprint"
-          >
-            <Pencil size={14} />
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => setEditing(true)}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-gray-50 text-gray-600 hover:bg-gray-100"
+              title="Edit sprint"
+            >
+              <Pencil size={14} />
+            </button>
+          )}
           {(sprint.status === 'active' || sprint.status === 'completed') && (
             <button
               onClick={() => setShowBurndown(v => !v)}
@@ -353,13 +358,13 @@ function SprintCard({
               <BarChart2 size={14} /> バーンダウン
             </button>
           )}
-          {sprint.status === 'planning' && (
+          {canEdit && sprint.status === 'planning' && (
             <button onClick={onStart}
               className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 text-sm rounded-lg hover:bg-blue-100">
               <Play size={14} /> 開始
             </button>
           )}
-          {sprint.status === 'active' && (
+          {canEdit && sprint.status === 'active' && (
             <button onClick={onComplete}
               className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 text-sm rounded-lg hover:bg-emerald-100">
               <CheckCircle size={14} /> 完了
@@ -387,7 +392,7 @@ function SprintCard({
         </div>
       )}
 
-      {editing && (
+      {editing && canEdit && (
         <Modal title={`「${sprint.name}」を編集`} onClose={() => setEditing(false)}>
           <SprintForm projectId={projectId} sprint={sprint} onClose={() => setEditing(false)} />
         </Modal>
@@ -400,6 +405,7 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
   const { activeProjectId } = useAppStore()
   const qc = useQueryClient()
   const showToast = useToast()
+  const { canEditProject } = useProjectPermissions(activeProjectId)
   const [creating, setCreating] = useState(false)
   const [completing, setCompleting] = useState<string | null>(null)
   const [report, setReport] = useState<SprintReportData | null>(null)
@@ -488,10 +494,12 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
             className="flex items-center gap-2 px-4 py-2 text-gray-600 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">
             <History size={16} /> 履歴
           </button>
-          <button onClick={() => setCreating(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
-            <Plus size={16} /> Sprintを作成
-          </button>
+          {canEditProject && (
+            <button onClick={() => setCreating(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
+              <Plus size={16} /> Sprintを作成
+            </button>
+          )}
         </div>
       </div>
 
@@ -514,6 +522,7 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
                 projectId={activeProjectId}
                 onStart={() => startMutation.mutate(sprint.id)}
                 onComplete={() => setCompleting(sprint.id)}
+                canEdit={canEditProject}
               />
             )
           })}
@@ -526,13 +535,13 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
         </div>
       )}
 
-      {creating && (
+      {creating && canEditProject && (
         <Modal title="Sprintを作成" onClose={() => setCreating(false)}>
           <SprintForm projectId={activeProjectId} onClose={() => setCreating(false)} />
         </Modal>
       )}
 
-      {completing && (() => {
+      {canEditProject && completing && (() => {
         const sprint = sprints.find(s => s.id === completing)!
         const incompleteIssues = issues.filter(i => i.sprint_id === completing && i.status !== 'done' && !i.parent_id)
         return (

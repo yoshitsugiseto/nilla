@@ -6,6 +6,7 @@ import { useAppStore } from '../../store'
 import { getWorkspaces } from '../../api/workspaces'
 import { getProjects } from '../../api/projects'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
+import { useProjectPermissions } from '../../hooks/useProjectPermissions'
 import client from '../../api/client'
 import { NotificationBell } from './NotificationBell'
 
@@ -42,9 +43,10 @@ export function Sidebar({
 }: SidebarProps) {
   const { activeProjectId, setActiveProject, activeWorkspaceId, setActiveWorkspace } = useAppStore()
   const { user, clearAuth } = useAuthStore()
+  const { canEditProject } = useProjectPermissions(activeProjectId)
 
   useKeyboardShortcuts({
-    'n': () => { if (activeProjectId) setCreatingIssue(true) },
+    'n': () => { if (activeProjectId && canEditProject) setCreatingIssue(true) },
     '/': () => { searchInputRef.current?.focus() },
     '?': () => setShowShortcuts(true),
     'b': () => { setPage('backlog'); setSearching(false); setSearchInput(''); setSearchQuery('') },

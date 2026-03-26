@@ -4,6 +4,7 @@ import { Sidebar } from './components/Layout'
 import type { Page } from './components/Layout'
 import { useAppStore } from './store'
 import { useWebSocket } from './hooks/useWebSocket'
+import { useProjectPermissions } from './hooks/useProjectPermissions'
 
 const BoardPage = lazy(() => import('./pages/BoardPage').then((m) => ({ default: m.BoardPage })))
 const BacklogPage = lazy(() => import('./pages/BacklogPage').then((m) => ({ default: m.BacklogPage })))
@@ -44,6 +45,7 @@ export default function App() {
     setPendingOpenIssueId,
     setPendingOpenIssueTitle,
   } = useAppStore()
+  const { canEditProject } = useProjectPermissions(activeProjectId)
   useWebSocket()
 
   const applySearchPreset = (query: string) => {
@@ -103,7 +105,7 @@ export default function App() {
         </Modal>
       )}
 
-      {creatingIssue && activeProjectId && (
+      {creatingIssue && activeProjectId && canEditProject && (
         <Modal title="New Issue" onClose={() => setCreatingIssue(false)}>
           <Suspense fallback={<ContentFallback />}>
             <IssueForm projectId={activeProjectId} onClose={() => setCreatingIssue(false)} />

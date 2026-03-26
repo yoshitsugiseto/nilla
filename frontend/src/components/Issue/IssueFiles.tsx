@@ -6,9 +6,10 @@ import { useToast } from '../common/useToast'
 
 interface Props {
   issueId: string
+  canEdit?: boolean
 }
 
-export function IssueFiles({ issueId }: Props) {
+export function IssueFiles({ issueId, canEdit = true }: Props) {
   const qc = useQueryClient()
   const showToast = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -55,36 +56,42 @@ export function IssueFiles({ issueId }: Props) {
               {(a.size / 1024).toFixed(1)} KB
             </span>
           </div>
-          <button
-            onClick={() => deleteMutation.mutate(a.id)}
-            disabled={deleteMutation.isPending}
-            className="text-gray-400 hover:text-red-500 transition-colors"
-            aria-label="削除"
-          >
-            <Trash2 size={14} />
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => deleteMutation.mutate(a.id)}
+              disabled={deleteMutation.isPending}
+              className="text-gray-400 hover:text-red-500 transition-colors"
+              aria-label="削除"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       ))}
-      <div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          className="hidden"
-          onChange={e => {
-            const file = e.target.files?.[0]
-            if (file) uploadMutation.mutate(file)
-            e.target.value = ''
-          }}
-        />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploadMutation.isPending}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 disabled:opacity-50"
-        >
-          <Upload size={14} />
-          {uploadMutation.isPending ? 'アップロード中...' : 'ファイルを追加'}
-        </button>
-      </div>
+      {canEdit ? (
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={e => {
+              const file = e.target.files?.[0]
+              if (file) uploadMutation.mutate(file)
+              e.target.value = ''
+            }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadMutation.isPending}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 disabled:opacity-50"
+          >
+            <Upload size={14} />
+            {uploadMutation.isPending ? 'アップロード中...' : 'ファイルを追加'}
+          </button>
+        </div>
+      ) : (
+        <p className="text-xs text-gray-400">ファイル操作は editor 以上で利用できます</p>
+      )}
     </div>
   )
 }

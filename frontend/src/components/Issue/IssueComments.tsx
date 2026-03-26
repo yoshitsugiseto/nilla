@@ -6,9 +6,10 @@ import { useToast } from '../common/useToast'
 
 interface Props {
   issueId: string
+  canEdit?: boolean
 }
 
-export function IssueComments({ issueId }: Props) {
+export function IssueComments({ issueId, canEdit = true }: Props) {
   const qc = useQueryClient()
   const showToast = useToast()
   const [commentText, setCommentText] = useState('')
@@ -47,22 +48,26 @@ export function IssueComments({ issueId }: Props) {
         </div>
       ))}
 
-      <div className="pt-2 space-y-2">
-        <textarea
-          value={commentText}
-          onChange={e => setCommentText(e.target.value)}
-          placeholder="コメントを入力..."
-          rows={3}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none"
-        />
-        <button
-          onClick={() => commentMutation.mutate()}
-          disabled={!commentText.trim() || commentMutation.isPending}
-          className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40"
-        >
-          {commentMutation.isPending ? '保存中...' : 'コメント'}
-        </button>
-      </div>
+      {canEdit ? (
+        <div className="pt-2 space-y-2">
+          <textarea
+            value={commentText}
+            onChange={e => setCommentText(e.target.value)}
+            placeholder="コメントを入力..."
+            rows={3}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none"
+          />
+          <button
+            onClick={() => commentMutation.mutate()}
+            disabled={!commentText.trim() || commentMutation.isPending}
+            className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40"
+          >
+            {commentMutation.isPending ? '保存中...' : 'コメント'}
+          </button>
+        </div>
+      ) : (
+        <p className="text-xs text-gray-400 pt-2">コメントの追加は editor 以上で利用できます</p>
+      )}
     </div>
   )
 }

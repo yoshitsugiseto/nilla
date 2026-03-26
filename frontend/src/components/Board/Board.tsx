@@ -14,9 +14,10 @@ interface Props {
   issues: Issue[]
   projectId: string
   queryKey: readonly unknown[]
+  canEdit: boolean
 }
 
-export function Board({ issues, projectId, queryKey }: Props) {
+export function Board({ issues, projectId, queryKey, canEdit }: Props) {
   const qc = useQueryClient()
   const showToast = useToast()
 
@@ -44,6 +45,7 @@ export function Board({ issues, projectId, queryKey }: Props) {
   })
 
   const handleDragEnd = (result: DropResult) => {
+    if (!canEdit) return
     const { draggableId, source, destination } = result
     if (!destination) return
 
@@ -88,6 +90,7 @@ export function Board({ issues, projectId, queryKey }: Props) {
             status={status}
             issues={byStatus(status)}
             projectId={projectId}
+            canEdit={canEdit}
           />
         ))}
       </div>

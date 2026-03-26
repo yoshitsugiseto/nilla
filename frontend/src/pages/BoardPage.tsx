@@ -9,6 +9,7 @@ import { BoardFilters, type Filters } from '../components/Board/BoardFilters'
 import { BurndownChart } from '../components/Board/BurndownChart'
 import { Modal } from '../components/common/Modal'
 import { IssueForm } from '../components/Issue/IssueForm'
+import { useProjectPermissions } from '../hooks/useProjectPermissions'
 import type { Issue, Sprint } from '../types'
 
 const PRIORITY_ORDER: Record<string, number> = {
@@ -23,6 +24,7 @@ const statusLabel: Record<string, { text: string; className: string }> = {
 
 export function BoardPage() {
   const { activeProjectId, activeSprint, setActiveSprint } = useAppStore()
+  const { canEditProject } = useProjectPermissions(activeProjectId)
   const [creating, setCreating] = useState(false)
   const [filters, setFilters] = useState<Filters>({})
   const [showFilters, setShowFilters] = useState(true)
@@ -180,12 +182,14 @@ export function BoardPage() {
               バーンダウン
             </button>
 
-            <button
-              onClick={() => setCreating(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-            >
-              <Plus size={16} /> Issueを作成
-            </button>
+            {canEditProject && (
+              <button
+                onClick={() => setCreating(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+              >
+                <Plus size={16} /> Issueを作成
+              </button>
+            )}
           </div>
         </div>
 
@@ -228,11 +232,11 @@ export function BoardPage() {
         {isLoading ? (
           <div role="status" aria-label="読み込み中" className="text-gray-400 text-center py-12">読み込み中...</div>
         ) : (
-          <Board issues={issues} projectId={activeProjectId} queryKey={issuesQueryKey} />
+          <Board issues={issues} projectId={activeProjectId} queryKey={issuesQueryKey} canEdit={canEditProject} />
         )}
       </div>
 
-      {creating && (
+      {creating && canEditProject && (
         <Modal title="New Issue" onClose={() => setCreating(false)}>
           <IssueForm
             projectId={activeProjectId}

@@ -13,9 +13,10 @@ interface Props {
   status: IssueStatus
   issues: Issue[]
   projectId: string
+  canEdit: boolean
 }
 
-export function Column({ status, issues, projectId }: Props) {
+export function Column({ status, issues, projectId, canEdit }: Props) {
   const meta = statusMeta[status]
 
   return (
@@ -27,7 +28,7 @@ export function Column({ status, issues, projectId }: Props) {
         </span>
       </div>
 
-      <Droppable droppableId={status}>
+      <Droppable droppableId={status} isDropDisabled={!canEdit}>
         {(provided, snapshot) => (
           <div
             ref={provided.innerRef}
@@ -51,6 +52,7 @@ export function Column({ status, issues, projectId }: Props) {
                 issue={issue}
                 index={index}
                 projectId={projectId}
+                canEdit={canEdit}
               />
             ))}
             {provided.placeholder}

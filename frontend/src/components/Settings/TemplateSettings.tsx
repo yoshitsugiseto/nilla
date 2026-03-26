@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Trash2, Pencil, Check, X, Layout } from 'lucide-react'
 import { getTemplates, createTemplate, updateTemplate, deleteTemplate } from '../../api/templates'
 import { useToast } from '../common/useToast'
+import { useProjectPermissions } from '../../hooks/useProjectPermissions'
 
 interface Props {
   projectId: string
@@ -11,6 +12,7 @@ interface Props {
 export function TemplateSettings({ projectId }: Props) {
   const qc = useQueryClient()
   const showToast = useToast()
+  const { canAdminProject } = useProjectPermissions(projectId)
 
   const [newTplName, setNewTplName] = useState('')
   const [newTplType, setNewTplType] = useState('task')
@@ -157,21 +159,25 @@ export function TemplateSettings({ projectId }: Props) {
                     {tpl.points != null && (
                       <span className="text-xs text-gray-400 font-mono">{tpl.points}pt</span>
                     )}
-                    <button
-                      onClick={() => startEditTpl(tpl)}
-                      className="text-gray-300 hover:text-blue-500 transition-colors"
-                      aria-label="編集"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => deleteTemplateMutation.mutate(tpl.id)}
-                      disabled={deleteTemplateMutation.isPending}
-                      className="text-gray-300 hover:text-red-500 transition-colors"
-                      aria-label="削除"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    {canAdminProject && (
+                      <>
+                        <button
+                          onClick={() => startEditTpl(tpl)}
+                          className="text-gray-300 hover:text-blue-500 transition-colors"
+                          aria-label="編集"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => deleteTemplateMutation.mutate(tpl.id)}
+                          disabled={deleteTemplateMutation.isPending}
+                          className="text-gray-300 hover:text-red-500 transition-colors"
+                          aria-label="削除"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </li>
@@ -179,43 +185,47 @@ export function TemplateSettings({ projectId }: Props) {
           </ul>
         )}
       </div>
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex items-center gap-2">
-          <input
-            value={newTplName}
-            onChange={e => setNewTplName(e.target.value)}
-            placeholder="テンプレート名"
-            className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <select
-            value={newTplType}
-            onChange={e => setNewTplType(e.target.value)}
-            className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-          >
-            <option value="task">Task</option>
-            <option value="story">Story</option>
-            <option value="bug">Bug</option>
-            <option value="spike">Spike</option>
-          </select>
-          <select
-            value={newTplPriority}
-            onChange={e => setNewTplPriority(e.target.value)}
-            className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-          >
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="critical">Critical</option>
-          </select>
-          <button
-            onClick={() => createTemplateMutation.mutate()}
-            disabled={!newTplName.trim() || createTemplateMutation.isPending}
-            className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40 whitespace-nowrap"
-          >
-            追加
-          </button>
+      {canAdminProject ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center gap-2">
+            <input
+              value={newTplName}
+              onChange={e => setNewTplName(e.target.value)}
+              placeholder="テンプレート名"
+              className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <select
+              value={newTplType}
+              onChange={e => setNewTplType(e.target.value)}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+            >
+              <option value="task">Task</option>
+              <option value="story">Story</option>
+              <option value="bug">Bug</option>
+              <option value="spike">Spike</option>
+            </select>
+            <select
+              value={newTplPriority}
+              onChange={e => setNewTplPriority(e.target.value)}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+            <button
+              onClick={() => createTemplateMutation.mutate()}
+              disabled={!newTplName.trim() || createTemplateMutation.isPending}
+              className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40 whitespace-nowrap"
+            >
+              追加
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <p className="text-xs text-gray-400">テンプレートの編集は project admin のみ利用できます</p>
+      )}
     </section>
   )
 }

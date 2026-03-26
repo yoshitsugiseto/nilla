@@ -12,6 +12,7 @@ import { IssueActivity } from './IssueActivity'
 import { Modal } from '../common/Modal'
 import { useToast } from '../common/useToast'
 import { useCurrentTime } from '../../hooks/useCurrentTime'
+import { useProjectPermissions } from '../../hooks/useProjectPermissions'
 import { dueDateLabel } from '../../utils/date'
 import type { IssueStatus, IssueLinkType } from '../../types'
 import { Pencil, MessageSquare, Clock, Plus, ListTodo, Paperclip, Link2, X } from 'lucide-react'
@@ -47,6 +48,7 @@ export function IssueDetail({ issueId, projectId }: Props) {
   const qc = useQueryClient()
   const showToast = useToast()
   const nowMs = useCurrentTime()
+  const { canEditProject } = useProjectPermissions(projectId)
   const [tab, setTab] = useState<'comments' | 'files' | 'activity'>('comments')
   const [linkSearch, setLinkSearch] = useState('')
   const [linkTargetId, setLinkTargetId] = useState('')
@@ -173,7 +175,7 @@ export function IssueDetail({ issueId, projectId }: Props) {
     return <div className="p-8 text-center text-red-400">イシューの取得に失敗しました</div>
   }
 
-  if (editing) {
+  if (editing && canEditProject) {
     return (
       <IssueForm
         projectId={projectId}
@@ -189,7 +191,7 @@ export function IssueDetail({ issueId, projectId }: Props) {
 
   return (
     <>
-    {addingSubtask && (
+    {addingSubtask && canEditProject && (
       <Modal title="サブタスクを追加" onClose={() => setAddingSubtask(false)}>
         <IssueForm
           projectId={projectId}
@@ -213,13 +215,15 @@ export function IssueDetail({ issueId, projectId }: Props) {
             <span className="text-xs text-gray-400 font-mono shrink-0">#{issue.number}</span>
             <h2 className="text-lg font-semibold text-gray-900 truncate">{issue.title}</h2>
           </div>
-          <button
-            onClick={() => setEditing(true)}
-            className="shrink-0 flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 px-2 py-1 rounded hover:bg-blue-50"
-            aria-label="イシューを編集"
-          >
-            <Pencil size={12} aria-hidden="true" /> 編集
-          </button>
+          {canEditProject && (
+            <button
+              onClick={() => setEditing(true)}
+              className="shrink-0 flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 px-2 py-1 rounded hover:bg-blue-50"
+              aria-label="イシューを編集"
+            >
+              <Pencil size={12} aria-hidden="true" /> 編集
+            </button>
+          )}
         </div>
 
         {/* Description */}
@@ -241,12 +245,14 @@ export function IssueDetail({ issueId, projectId }: Props) {
               <p className="text-sm font-medium text-gray-500 flex items-center gap-1">
                 <ListTodo size={14} /> 子タスク ({subtasks.length})
               </p>
-              <button
-                onClick={() => setAddingSubtask(true)}
-                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50"
-              >
-                <Plus size={12} /> 追加
-              </button>
+              {canEditProject && (
+                <button
+                  onClick={() => setAddingSubtask(true)}
+                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50"
+                >
+                  <Plus size={12} /> 追加
+                </button>
+              )}
             </div>
             {subtasksError ? (
               <p className="text-xs text-red-400">サブタスクの取得に失敗しました</p>
@@ -295,17 +301,20 @@ export function IssueDetail({ issueId, projectId }: Props) {
                     link.linked_issue_status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
                     'bg-gray-100 text-gray-600'
                   }`}>{link.linked_issue_status.replace('_', ' ')}</span>
-                  <button
-                    onClick={() => deleteLinkMutation.mutate(link.id)}
-                    disabled={deleteLinkMutation.isPending}
-                    className="text-gray-400 hover:text-red-500 transition-colors"
-                    aria-label="リンクを削除"
-                  >
-                    <X size={12} />
-                  </button>
+                  {canEditProject && (
+                    <button
+                      onClick={() => deleteLinkMutation.mutate(link.id)}
+                      disabled={deleteLinkMutation.isPending}
+                      className="text-gray-400 hover:text-red-500 transition-colors"
+                      aria-label="リンクを削除"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
                 </div>
               ))}
-              <div className="pt-1 flex gap-2">
+              {canEditProject && (
+                <div className="pt-1 flex gap-2">
                 <div className="relative flex-1" ref={linkComboRef}>
                   <input
                     value={linkSearch}
@@ -367,7 +376,8 @@ export function IssueDetail({ issueId, projectId }: Props) {
                 >
                   <Plus size={14} /> 追加
                 </button>
-              </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -400,8 +410,8 @@ export function IssueDetail({ issueId, projectId }: Props) {
           </button>
         </div>
 
-        {tab === 'comments' && <IssueComments issueId={issueId} />}
-        {tab === 'files' && <IssueFiles issueId={issueId} />}
+        {tab === 'comments' && <IssueComments issueId={issueId} canEdit={canEditProject} />}
+        {tab === 'files' && <IssueFiles issueId={issueId} canEdit={canEditProject} />}
         {tab === 'activity' && <IssueActivity issueId={issueId} />}
 
       </div>
@@ -413,6 +423,7 @@ export function IssueDetail({ issueId, projectId }: Props) {
           <select
             value={issue.status}
             onChange={e => statusMutation.mutate(e.target.value as IssueStatus)}
+            disabled={!canEditProject}
             className="w-full border border-gray-200 rounded px-2 py-1 text-sm"
           >
             {STATUS_OPTIONS.map(o => (
@@ -440,7 +451,7 @@ export function IssueDetail({ issueId, projectId }: Props) {
             <select
               value={issue.epic_id ?? ''}
               onChange={e => epicMutation.mutate(e.target.value || null)}
-              disabled={epicMutation.isPending}
+              disabled={!canEditProject || epicMutation.isPending}
               className="w-full border border-gray-200 rounded px-2 py-1 text-xs"
             >
               <option value="">なし</option>
@@ -500,11 +511,12 @@ export function IssueDetail({ issueId, projectId }: Props) {
                         : [...issue.labels, label.name]
                       labelsMutation.mutate(next)
                     }}
+                    disabled={!canEditProject || labelsMutation.isPending}
                     className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium border transition-all ${
                       selected
                         ? 'border-transparent text-white'
                         : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                    }`}
+                    } disabled:opacity-50`}
                     style={selected ? { backgroundColor: label.color } : {}}
                     title={selected ? 'クリックで削除' : 'クリックで追加'}
                   >

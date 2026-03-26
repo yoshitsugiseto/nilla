@@ -14,9 +14,10 @@ interface Props {
   issue: Issue
   index: number
   projectId: string
+  canEdit: boolean
 }
 
-export function IssueCard({ issue, index, projectId }: Props) {
+export function IssueCard({ issue, index, projectId, canEdit }: Props) {
   const [detailOpen, setDetailOpen] = useState(false)
   const qc = useQueryClient()
   const nowMs = useCurrentTime()
@@ -33,7 +34,7 @@ export function IssueCard({ issue, index, projectId }: Props) {
 
   return (
     <>
-      <Draggable draggableId={issue.id} index={index}>
+      <Draggable draggableId={issue.id} index={index} isDragDisabled={!canEdit}>
         {(provided, snapshot) => (
           <div
             ref={provided.innerRef}
