@@ -30,6 +30,12 @@ FROM users u;
 INSERT OR IGNORE INTO projects (id, name, key, description, workspace_id) VALUES
   ('demo-project-001', 'Demo Project', 'SMPL', 'ページネーション確認用のサンプルプロジェクト', 'demo-workspace-001');
 
+-- プロジェクト権限 override（role UI の確認用）
+-- Alice は workspace owner の継承で admin のままにし、Bob/Carol だけ差を付ける
+INSERT OR IGNORE INTO project_members (project_id, user_id, role, assigned_at) VALUES
+  ('demo-project-001', 'demo-user-bob',   'viewer', '2026-01-01T00:00:00'),
+  ('demo-project-001', 'demo-user-carol', 'admin',  '2026-01-01T00:00:00');
+
 -- スプリント
 INSERT OR IGNORE INTO sprints (id, project_id, name, goal, status, start_date, end_date) VALUES
   ('demo-sprint-001', 'demo-project-001', 'Sprint 1', 'バックエンドAPIの基盤整備',        'completed', '2026-01-06', '2026-01-17'),
@@ -180,3 +186,4 @@ SELECT '  イシュー:         ' || COUNT(*) || '件' AS summary FROM issues WH
 SELECT '  コメント:         ' || COUNT(*) || '件' AS summary FROM comments WHERE id LIKE 'demo-c-%';
 SELECT '  ラベル:           ' || COUNT(*) || '件' AS summary FROM project_labels WHERE project_id = 'demo-project-001';
 SELECT '  テンプレート:     ' || COUNT(*) || '件' AS summary FROM issue_templates WHERE project_id = 'demo-project-001';
+SELECT '  権限override:     ' || COUNT(*) || '件' AS summary FROM project_members WHERE project_id = 'demo-project-001';

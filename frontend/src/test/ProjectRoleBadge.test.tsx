@@ -6,17 +6,17 @@ describe('ProjectRoleBadge', () => {
   test('maps legacy workspace roles to project role labels safely', () => {
     const { rerender } = render(<ProjectRoleBadge role="owner" />)
 
-    expect(screen.getByText('Project Admin')).toBeInTheDocument()
+    expect(screen.getByText('管理者')).toBeInTheDocument()
 
     rerender(<ProjectRoleBadge role="member" />)
-    expect(screen.getByText('Editor')).toBeInTheDocument()
+    expect(screen.getByText('編集可')).toBeInTheDocument()
   })
 
   test('ignores unknown roles without crashing', () => {
     render(<ProjectRoleBadge role="unexpected-role" />)
 
-    expect(screen.queryByText('Project Admin')).not.toBeInTheDocument()
-    expect(screen.queryByText('Editor')).not.toBeInTheDocument()
+    expect(screen.queryByText('管理者')).not.toBeInTheDocument()
+    expect(screen.queryByText('編集可')).not.toBeInTheDocument()
     expect(screen.queryByText('閲覧専用')).not.toBeInTheDocument()
   })
 })
