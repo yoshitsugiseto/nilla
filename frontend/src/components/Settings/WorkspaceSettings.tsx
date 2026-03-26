@@ -16,10 +16,10 @@ import { useAuthStore } from '../../store/auth'
 type Role = 'owner' | 'admin' | 'member' | 'viewer'
 
 const ROLE_OPTIONS: { value: Role; label: string; icon: React.ReactNode }[] = [
-  { value: 'owner', label: 'Owner', icon: <Crown size={12} /> },
-  { value: 'admin', label: 'Admin', icon: <Shield size={12} /> },
-  { value: 'member', label: 'Member', icon: <UserIcon size={12} /> },
-  { value: 'viewer', label: 'Viewer', icon: <Eye size={12} /> },
+  { value: 'owner', label: 'オーナー', icon: <Crown size={12} /> },
+  { value: 'admin', label: '管理者', icon: <Shield size={12} /> },
+  { value: 'member', label: 'メンバー', icon: <UserIcon size={12} /> },
+  { value: 'viewer', label: '閲覧専用', icon: <Eye size={12} /> },
 ]
 
 const roleColor: Record<Role, string> = {

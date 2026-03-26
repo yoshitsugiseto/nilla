@@ -75,7 +75,7 @@ export function ProjectSettings({ projectId }: Props) {
             : 'プロジェクト権限の変更はプロジェクト管理者のみ実行できます。'}
         </p>
         <p className="mt-1 text-xs text-blue-700">
-          継承ルール: Owner/Admin → プロジェクト管理者、Member → 編集可、Viewer → 閲覧専用
+          継承ルール: オーナー/管理者 → プロジェクト管理者、メンバー → 編集可、閲覧専用 → 閲覧専用
         </p>
         {readOnlyGuidance && !isProjectAdmin && (
           <p className="mt-1 text-xs text-blue-700">あなたの現在の権限: {readOnlyGuidance}</p>

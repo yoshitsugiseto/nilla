@@ -29,10 +29,10 @@ export const PROJECT_ROLE_META: Record<ProjectRole, {
 }
 
 const WORKSPACE_ROLE_LABELS: Record<WorkspaceRole, string> = {
-  owner: 'Owner',
-  admin: 'Admin',
-  member: 'Member',
-  viewer: 'Viewer',
+  owner: 'オーナー',
+  admin: '管理者',
+  member: 'メンバー',
+  viewer: '閲覧専用',
 }
 
 export function normalizeProjectRole(role?: string | null): ProjectRole | undefined {
@@ -55,7 +55,7 @@ export function getProjectRoleMeta(role?: string | null) {
 }
 
 export function getWorkspaceRoleLabel(role?: string | null) {
-  if (!role) return 'Unknown'
+  if (!role) return '不明'
   return WORKSPACE_ROLE_LABELS[role as WorkspaceRole] ?? role
 }
 
