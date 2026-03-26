@@ -5,12 +5,17 @@ import { Avatar } from '../common/Avatar'
 import { useToast } from '../common/useToast'
 import { useAuthStore } from '../../store/auth'
 import type { ProjectRole } from '../../types'
-import { resolveProjectRole } from '../../utils/projectRoles'
+import {
+  getProjectRoleGuidance,
+  getProjectRoleMeta,
+  getWorkspaceRoleLabel,
+  resolveProjectRole,
+} from '../../utils/projectRoles'
 
 const ROLE_OPTIONS: { value: ProjectRole; label: string; icon: React.ReactNode }[] = [
-  { value: 'admin', label: 'Admin', icon: <Shield size={12} /> },
-  { value: 'editor', label: 'Editor', icon: <Pencil size={12} /> },
-  { value: 'viewer', label: 'Viewer', icon: <Eye size={12} /> },
+  { value: 'admin', label: 'プロジェクト管理者', icon: <Shield size={12} /> },
+  { value: 'editor', label: '編集可', icon: <Pencil size={12} /> },
+  { value: 'viewer', label: '閲覧専用', icon: <Eye size={12} /> },
 ]
 
 const roleColor: Record<ProjectRole, string> = {
@@ -35,7 +40,9 @@ export function ProjectSettings({ projectId }: Props) {
   })
 
   const myMember = members.find(member => member.user_id === user?.id)
-  const isProjectAdmin = resolveProjectRole(myMember?.role, myMember?.workspace_role) === 'admin'
+  const myRole = resolveProjectRole(myMember?.role, myMember?.workspace_role)
+  const isProjectAdmin = myRole === 'admin'
+  const readOnlyGuidance = getProjectRoleGuidance(myRole)
 
   const roleMutation = useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: ProjectRole }) =>
@@ -61,6 +68,19 @@ export function ProjectSettings({ projectId }: Props) {
       <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
         <FolderCog size={13} /> プロジェクト権限
       </h2>
+      <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+        <p className="font-medium">
+          {isProjectAdmin
+            ? 'このセクションでプロジェクト権限を変更できます。継承に戻すと workspace role ベースの権限に戻ります。'
+            : 'プロジェクト権限の変更はプロジェクト管理者のみ実行できます。'}
+        </p>
+        <p className="mt-1 text-xs text-blue-700">
+          継承ルール: Owner/Admin → プロジェクト管理者、Member → 編集可、Viewer → 閲覧専用
+        </p>
+        {readOnlyGuidance && !isProjectAdmin && (
+          <p className="mt-1 text-xs text-blue-700">あなたの現在の権限: {readOnlyGuidance}</p>
+        )}
+      </div>
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="p-6 text-center text-gray-400 text-sm">読み込み中...</div>
@@ -69,6 +89,7 @@ export function ProjectSettings({ projectId }: Props) {
             {members.map(member => {
               const effectiveRole = resolveProjectRole(member.role, member.workspace_role) ?? 'viewer'
               const effectiveRoleOption = ROLE_OPTIONS.find(option => option.value === effectiveRole)
+              const effectiveRoleMeta = getProjectRoleMeta(effectiveRole)
 
               return (
                 <li key={member.user_id} className="flex items-center gap-3 px-4 py-3">
@@ -82,13 +103,16 @@ export function ProjectSettings({ projectId }: Props) {
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-gray-400">
-                        workspace: {member.workspace_role}
+                        workspace role: {getWorkspaceRoleLabel(member.workspace_role)}
                       </span>
                       <span className="text-xs text-gray-300">/</span>
                       <span className="text-xs text-gray-400">
-                        {member.inherited ? 'project: 継承' : 'project: override'}
+                        {member.inherited ? 'プロジェクト権限: 継承中' : 'プロジェクト権限: override'}
                       </span>
                     </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      実効権限: {effectiveRoleMeta?.label ?? effectiveRole}
+                    </p>
                   </div>
 
                   {isProjectAdmin ? (
@@ -114,7 +138,7 @@ export function ProjectSettings({ projectId }: Props) {
                   ) : (
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${roleColor[effectiveRole]}`}>
                       {effectiveRoleOption?.icon}
-                      {effectiveRoleOption?.label}
+                      {effectiveRoleMeta?.label ?? effectiveRoleOption?.label}
                     </span>
                   )}
                 </li>

@@ -224,7 +224,7 @@ export function TemplateSettings({ projectId }: Props) {
           </div>
         </div>
       ) : (
-        <p className="text-xs text-gray-400">テンプレートの編集は project admin のみ利用できます</p>
+        <p className="text-xs text-gray-400">現在のプロジェクト権限ではテンプレートを編集できません。変更が必要な場合はプロジェクト管理者に依頼してください。</p>
       )}
     </section>
   )

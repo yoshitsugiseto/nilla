@@ -106,6 +106,6 @@ describe('LabelSettings', () => {
     expect(screen.queryByRole('button', { name: '編集' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '削除' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '追加' })).not.toBeInTheDocument()
-    expect(screen.getByText('ラベルの編集は project admin のみ利用できます')).toBeInTheDocument()
+    expect(screen.getByText('現在のプロジェクト権限ではラベルを編集できません。変更が必要な場合はプロジェクト管理者に依頼してください。')).toBeInTheDocument()
   })
 })
