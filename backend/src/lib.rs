@@ -2,6 +2,7 @@ pub mod auth;
 pub mod db;
 pub mod error;
 pub mod models;
+pub mod realtime;
 pub mod routes;
 pub mod storage;
 
@@ -10,9 +11,9 @@ use std::sync::Arc;
 use axum::{Router, middleware, routing::get};
 use axum::http::HeaderValue;
 use sqlx::SqlitePool;
-use tokio::sync::broadcast;
 use tower_http::services::{ServeDir, ServeFile};
 
+use crate::realtime::RealtimeHub;
 use crate::storage::Storage;
 
 #[derive(Clone)]
@@ -31,7 +32,7 @@ pub struct Config {
 pub struct AppState {
     pub pool: SqlitePool,
     pub config: Arc<Config>,
-    pub ws_tx: broadcast::Sender<String>,
+    pub ws_tx: RealtimeHub,
     pub storage: Storage,
 }
 
@@ -42,7 +43,7 @@ impl axum::extract::FromRef<AppState> for SqlitePool {
     }
 }
 
-impl axum::extract::FromRef<AppState> for broadcast::Sender<String> {
+impl axum::extract::FromRef<AppState> for RealtimeHub {
     fn from_ref(state: &AppState) -> Self {
         state.ws_tx.clone()
     }

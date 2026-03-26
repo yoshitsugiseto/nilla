@@ -98,7 +98,11 @@ export function useWebSocket() {
       if (unmounted) return
 
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      ws = new WebSocket(`${protocol}//${window.location.host}/api/ws?ticket=${ticket}`)
+      const params = new URLSearchParams({ ticket })
+      if (activeWorkspaceId) {
+        params.set('workspace_id', activeWorkspaceId)
+      }
+      ws = new WebSocket(`${protocol}//${window.location.host}/api/ws?${params.toString()}`)
 
       ws.onopen = () => {
         console.debug('[WS] connected')

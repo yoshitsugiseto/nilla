@@ -8,6 +8,7 @@ use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::trace::TraceLayer;
 
 use nilla::{AppState, Config};
+use nilla::realtime::RealtimeHub;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -46,7 +47,7 @@ async fn main() -> anyhow::Result<()> {
         http_client: reqwest::Client::new(),
     };
 
-    let (ws_tx, _) = tokio::sync::broadcast::channel::<String>(256);
+    let ws_tx = RealtimeHub::new();
 
     let storage_path = std::env::var("STORAGE_PATH").unwrap_or_else(|_| "./uploads".to_string());
     let storage = nilla::storage::Storage::local(&storage_path)

@@ -7,7 +7,6 @@ use axum::{
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::{
@@ -18,6 +17,7 @@ use crate::{
         BulkUpdateIssues, CreateIssue, CreateIssueLink, Issue, IssueFilters, IssueLink, IssueRow,
         IssuePriority, IssueType, UpdateIssue, UpdateIssueSprint, UpdateIssueStatus,
     },
+    realtime::RealtimeHub,
 };
 
 const UNASSIGNED_FILTER: &str = "__unassigned__";
@@ -40,24 +40,29 @@ async fn get_workspace_id_for_project(pool: &SqlitePool, project_id: &str) -> Op
 /// Broadcast a WS event scoped to a workspace, so clients can filter by workspace.
 async fn broadcast_event_scoped(
     pool: &SqlitePool,
-    ws_tx: &broadcast::Sender<String>,
+    realtime: &RealtimeHub,
     event_type: &str,
     project_id: &str,
 ) {
-    let workspace_id = get_workspace_id_for_project(pool, project_id).await;
-    let _ = ws_tx.send(
-        serde_json::json!({
-            "type": event_type,
-            "project_id": project_id,
-            "workspace_id": workspace_id,
-        })
-        .to_string(),
-    );
+    let Some(workspace_id) = get_workspace_id_for_project(pool, project_id).await else {
+        return;
+    };
+    realtime
+        .publish_workspace(
+            &workspace_id,
+            serde_json::json!({
+                "type": event_type,
+                "project_id": project_id,
+                "workspace_id": workspace_id,
+            })
+            .to_string(),
+        )
+        .await;
 }
 
 async fn create_notification(
     pool: &SqlitePool,
-    ws_tx: &broadcast::Sender<String>,
+    realtime: &RealtimeHub,
     user_id: &str,
     issue_id: &str,
     notif_type: &str,
@@ -74,9 +79,12 @@ async fn create_notification(
     .bind(message)
     .execute(pool)
     .await;
-    let _ = ws_tx.send(
-        serde_json::json!({ "type": "notification.new", "user_id": user_id }).to_string(),
-    );
+    realtime
+        .publish_user(
+            user_id,
+            serde_json::json!({ "type": "notification.new", "user_id": user_id }).to_string(),
+        )
+        .await;
 }
 
 async fn get_project_id_for_issue(pool: &SqlitePool, issue_id: &str) -> Result<String> {
@@ -251,7 +259,7 @@ pub async fn list_issues(
 
 pub async fn create_issue(
     State(pool): State<SqlitePool>,
-    State(ws_tx): State<broadcast::Sender<String>>,
+    State(ws_tx): State<RealtimeHub>,
     Extension(user_id): Extension<UserId>,
     Path(project_id): Path<String>,
     Json(body): Json<CreateIssue>,
@@ -353,7 +361,7 @@ pub async fn get_issue(
 
 pub async fn update_issue(
     State(pool): State<SqlitePool>,
-    State(ws_tx): State<broadcast::Sender<String>>,
+    State(ws_tx): State<RealtimeHub>,
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
     Json(body): Json<UpdateIssue>,
@@ -503,7 +511,7 @@ pub async fn update_issue(
 
 pub async fn delete_issue(
     State(pool): State<SqlitePool>,
-    State(ws_tx): State<broadcast::Sender<String>>,
+    State(ws_tx): State<RealtimeHub>,
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>> {
@@ -535,7 +543,7 @@ pub async fn delete_issue(
 
 pub async fn update_issue_status(
     State(pool): State<SqlitePool>,
-    State(ws_tx): State<broadcast::Sender<String>>,
+    State(ws_tx): State<RealtimeHub>,
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
     Json(body): Json<UpdateIssueStatus>,
@@ -644,7 +652,7 @@ const POSITION_GAP: i64 = 1000;
 
 pub async fn reorder_issues(
     State(pool): State<SqlitePool>,
-    State(ws_tx): State<broadcast::Sender<String>>,
+    State(ws_tx): State<RealtimeHub>,
     Extension(user_id): Extension<UserId>,
     Path(project_id): Path<String>,
     Json(body): Json<ReorderBody>,
@@ -728,7 +736,7 @@ pub async fn list_comments(
 
 pub async fn create_comment(
     State(pool): State<SqlitePool>,
-    State(ws_tx): State<broadcast::Sender<String>>,
+    State(ws_tx): State<RealtimeHub>,
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
     Json(body): Json<CreateComment>,
@@ -768,16 +776,20 @@ pub async fn create_comment(
     .fetch_one(&pool)
     .await?;
 
-    let workspace_id = get_workspace_id_for_project(&pool, &project_id).await;
-    let _ = ws_tx.send(
-        serde_json::json!({
-            "type": "comment.created",
-            "issue_id": id,
-            "project_id": project_id,
-            "workspace_id": workspace_id,
-        })
-        .to_string(),
-    );
+    if let Some(workspace_id) = get_workspace_id_for_project(&pool, &project_id).await {
+        ws_tx
+            .publish_workspace(
+                &workspace_id,
+                serde_json::json!({
+                    "type": "comment.created",
+                    "issue_id": id,
+                    "project_id": project_id,
+                    "workspace_id": workspace_id,
+                })
+                .to_string(),
+            )
+            .await;
+    }
 
     // Notify issue assignee (if not the commenter)
     let issue_row: Option<(Option<String>, String)> =
@@ -973,7 +985,7 @@ pub async fn delete_link(
 
 pub async fn bulk_update_issues(
     State(pool): State<SqlitePool>,
-    State(ws_tx): State<broadcast::Sender<String>>,
+    State(ws_tx): State<RealtimeHub>,
     Extension(user_id): Extension<UserId>,
     Path(project_id): Path<String>,
     Json(body): Json<BulkUpdateIssues>,

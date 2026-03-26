@@ -8,12 +8,12 @@ use axum::{
 use chrono::NaiveDateTime;
 use serde::Serialize;
 use sqlx::SqlitePool;
-use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::{
     auth::middleware::UserId,
     error::{AppError, Result},
+    realtime::RealtimeHub,
     storage::Storage,
 };
 
@@ -101,7 +101,7 @@ async fn check_issue_access(pool: &SqlitePool, user_id: &str, issue_id: &str) ->
 pub async fn upload_attachment(
     State(pool): State<SqlitePool>,
     State(storage): State<Storage>,
-    State(ws_tx): State<broadcast::Sender<String>>,
+    State(ws_tx): State<RealtimeHub>,
     Extension(user_id): Extension<UserId>,
     Path(issue_id): Path<String>,
     mut multipart: Multipart,
@@ -194,22 +194,26 @@ pub async fn upload_attachment(
                 .fetch_optional(&pool)
                 .await?;
         if let Some(pid) = project_id {
-            let workspace_id: Option<String> =
-                sqlx::query_scalar("SELECT workspace_id FROM projects WHERE id = ?")
-                    .bind(&pid)
-                    .fetch_optional(&pool)
-                    .await
-                    .ok()
-                    .flatten();
-            let _ = ws_tx.send(
-                serde_json::json!({
-                    "type": "attachment.created",
-                    "issue_id": issue_id,
-                    "project_id": pid,
-                    "workspace_id": workspace_id,
-                })
-                .to_string(),
-            );
+            if let Some(workspace_id) = sqlx::query_scalar::<_, String>("SELECT workspace_id FROM projects WHERE id = ?")
+                .bind(&pid)
+                .fetch_optional(&pool)
+                .await
+                .ok()
+                .flatten()
+            {
+                ws_tx
+                    .publish_workspace(
+                        &workspace_id,
+                        serde_json::json!({
+                            "type": "attachment.created",
+                            "issue_id": issue_id,
+                            "project_id": pid,
+                            "workspace_id": workspace_id,
+                        })
+                        .to_string(),
+                    )
+                    .await;
+            }
         }
 
         return Ok(Json(AttachmentResponse::from_row(attachment)));

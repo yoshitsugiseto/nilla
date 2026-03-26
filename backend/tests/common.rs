@@ -11,6 +11,7 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 use nilla::auth::jwt;
+use nilla::realtime::RealtimeHub;
 use nilla::storage::Storage;
 use nilla::{AppState, Config, create_app};
 
@@ -62,7 +63,7 @@ pub async fn setup_app_with_pool() -> (Router, SqlitePool) {
 }
 
 fn build_app(pool: SqlitePool) -> Router {
-    let (ws_tx, _) = tokio::sync::broadcast::channel::<String>(16);
+    let ws_tx = RealtimeHub::new();
     let storage = Storage::local(
         &std::env::temp_dir()
             .join("nilla-test-uploads")

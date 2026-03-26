@@ -7,7 +7,6 @@ use axum::{
 };
 use chrono::NaiveDate;
 use sqlx::SqlitePool;
-use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::{
@@ -15,6 +14,7 @@ use crate::{
     db::check_project_access,
     error::{AppError, Result},
     models::sprint::{CreateSprint, Sprint, SprintRow, SprintStatus, UpdateSprint},
+    realtime::RealtimeHub,
 };
 
 async fn get_workspace_id_for_project(pool: &SqlitePool, project_id: &str) -> Option<String> {
@@ -200,7 +200,7 @@ pub async fn update_sprint(
 
 pub async fn start_sprint(
     State(pool): State<SqlitePool>,
-    State(ws_tx): State<broadcast::Sender<String>>,
+    State(ws_tx): State<RealtimeHub>,
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
 ) -> Result<Json<Sprint>> {
@@ -227,15 +227,19 @@ pub async fn start_sprint(
     .await?;
 
     let updated = Sprint::from(updated_row);
-    let workspace_id = get_workspace_id_for_project(&pool, &updated.project_id).await;
-    let _ = ws_tx.send(
-        serde_json::json!({
-            "type": "sprint.updated",
-            "project_id": updated.project_id,
-            "workspace_id": workspace_id,
-        })
-        .to_string(),
-    );
+    if let Some(workspace_id) = get_workspace_id_for_project(&pool, &updated.project_id).await {
+        ws_tx
+            .publish_workspace(
+                &workspace_id,
+                serde_json::json!({
+                    "type": "sprint.updated",
+                    "project_id": updated.project_id,
+                    "workspace_id": workspace_id,
+                })
+                .to_string(),
+            )
+            .await;
+    }
     Ok(Json(updated))
 }
 
@@ -246,7 +250,7 @@ pub struct CompleteSprintBody {
 
 pub async fn complete_sprint(
     State(pool): State<SqlitePool>,
-    State(ws_tx): State<broadcast::Sender<String>>,
+    State(ws_tx): State<RealtimeHub>,
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
     body: Option<Json<CompleteSprintBody>>,
@@ -292,15 +296,19 @@ pub async fn complete_sprint(
     tx.commit().await?;
 
     let updated = Sprint::from(updated_row);
-    let workspace_id = get_workspace_id_for_project(&pool, &updated.project_id).await;
-    let _ = ws_tx.send(
-        serde_json::json!({
-            "type": "sprint.updated",
-            "project_id": updated.project_id,
-            "workspace_id": workspace_id,
-        })
-        .to_string(),
-    );
+    if let Some(workspace_id) = get_workspace_id_for_project(&pool, &updated.project_id).await {
+        ws_tx
+            .publish_workspace(
+                &workspace_id,
+                serde_json::json!({
+                    "type": "sprint.updated",
+                    "project_id": updated.project_id,
+                    "workspace_id": workspace_id,
+                })
+                .to_string(),
+            )
+            .await;
+    }
     Ok(Json(updated))
 }
 
