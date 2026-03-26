@@ -16,6 +16,7 @@ use nilla::{AppState, Config, create_app};
 
 pub const TEST_JWT_SECRET: &str = "test-secret";
 pub const TEST_USER_ID: &str = "test-user-001";
+pub const TEST_USER_B_ID: &str = "test-user-002";
 
 pub async fn setup_pool() -> SqlitePool {
     let opts = SqliteConnectOptions::from_str("sqlite::memory:")
@@ -49,6 +50,18 @@ pub async fn setup_pool() -> SqlitePool {
 
 pub async fn setup_app() -> Router {
     let pool = setup_pool().await;
+    build_app(pool)
+}
+
+/// Return both the Router and the underlying pool so tests can insert
+/// additional rows (e.g. extra users) directly via SQL.
+pub async fn setup_app_with_pool() -> (Router, SqlitePool) {
+    let pool = setup_pool().await;
+    let app = build_app(pool.clone());
+    (app, pool)
+}
+
+fn build_app(pool: SqlitePool) -> Router {
     let (ws_tx, _) = tokio::sync::broadcast::channel::<String>(16);
     let storage = Storage::local(
         &std::env::temp_dir()
@@ -78,6 +91,28 @@ pub async fn setup_app() -> Router {
 
 pub fn test_token() -> String {
     jwt::encode_access_token(TEST_USER_ID, TEST_JWT_SECRET).unwrap()
+}
+
+pub fn token_for(user_id: &str) -> String {
+    jwt::encode_access_token(user_id, TEST_JWT_SECRET).unwrap()
+}
+
+/// Insert a second test user (user B) into the pool.
+pub async fn insert_user_b(pool: &SqlitePool) {
+    sqlx::query(
+        "INSERT INTO users (id, provider, provider_id, email, name, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(TEST_USER_B_ID)
+    .bind("test")
+    .bind("test-provider-002")
+    .bind("testb@example.com")
+    .bind("Test User B")
+    .bind("2026-01-01T00:00:00")
+    .bind("2026-01-01T00:00:00")
+    .execute(pool)
+    .await
+    .unwrap();
 }
 
 // ---------------------------------------------------------------
@@ -148,6 +183,58 @@ pub fn delete(uri: &str) -> Request<Body> {
         .method("DELETE")
         .uri(uri)
         .header("Authorization", format!("Bearer {}", test_token()))
+        .body(Body::empty())
+        .unwrap()
+}
+
+// ---------------------------------------------------------------
+// Request helpers with custom token (for multi-user tests)
+// ---------------------------------------------------------------
+
+pub fn get_as(uri: &str, token: &str) -> Request<Body> {
+    Request::builder()
+        .method("GET")
+        .uri(uri)
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap()
+}
+
+pub fn post_as(uri: &str, body: serde_json::Value, token: &str) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header("content-type", "application/json")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::from(serde_json::to_vec(&body).unwrap()))
+        .unwrap()
+}
+
+pub fn put_as(uri: &str, body: serde_json::Value, token: &str) -> Request<Body> {
+    Request::builder()
+        .method("PUT")
+        .uri(uri)
+        .header("content-type", "application/json")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::from(serde_json::to_vec(&body).unwrap()))
+        .unwrap()
+}
+
+pub fn patch_as(uri: &str, body: serde_json::Value, token: &str) -> Request<Body> {
+    Request::builder()
+        .method("PATCH")
+        .uri(uri)
+        .header("content-type", "application/json")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::from(serde_json::to_vec(&body).unwrap()))
+        .unwrap()
+}
+
+pub fn delete_as(uri: &str, token: &str) -> Request<Body> {
+    Request::builder()
+        .method("DELETE")
+        .uri(uri)
+        .header("Authorization", format!("Bearer {}", token))
         .body(Body::empty())
         .unwrap()
 }
