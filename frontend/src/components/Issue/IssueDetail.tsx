@@ -1,15 +1,17 @@
 import { useRef, useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getIssue, updateIssue, getComments, createComment, getActivity, getIssueChildren, getIssueLinks, createIssueLink, deleteIssueLink, getIssues } from '../../api/issues'
-import { getAttachments, uploadAttachment, deleteAttachment } from '../../api/attachments'
+import { getIssue, updateIssue, getIssueChildren, getIssueLinks, createIssueLink, deleteIssueLink, getIssues } from '../../api/issues'
 import { getLabels } from '../../api/labels'
 import { TypeIcon, PriorityBadge } from '../common/Badge'
 import { Avatar } from '../common/Avatar'
 import { IssueForm } from './IssueForm'
+import { IssueComments } from './IssueComments'
+import { IssueFiles } from './IssueFiles'
+import { IssueActivity } from './IssueActivity'
 import { Modal } from '../common/Modal'
 import { useToast } from '../common/Toast'
 import type { IssueStatus, IssueLinkType } from '../../types'
-import { Pencil, MessageSquare, Clock, Plus, ListTodo, Paperclip, Trash2, Upload, Link2, X } from 'lucide-react'
+import { Pencil, MessageSquare, Clock, Plus, ListTodo, Paperclip, Link2, X } from 'lucide-react'
 
 const LINK_TYPE_LABELS: Record<IssueLinkType, string> = {
   blocks: 'Blocks',
@@ -50,8 +52,6 @@ export function IssueDetail({ issueId, projectId }: Props) {
   const linkComboRef = useRef<HTMLDivElement>(null)
   const [editing, setEditing] = useState(false)
   const [addingSubtask, setAddingSubtask] = useState(false)
-  const [commentText, setCommentText] = useState('')
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: issue, isLoading } = useQuery({
     queryKey: ['issue', issueId],
@@ -63,21 +63,12 @@ export function IssueDetail({ issueId, projectId }: Props) {
     queryFn: () => getIssueChildren(issueId),
   })
 
-  const { data: comments = [], isError: commentsError } = useQuery({
-    queryKey: ['comments', issueId],
-    queryFn: () => getComments(issueId),
-    enabled: tab === 'comments',
-  })
-
-  const { data: activity = [], isError: activityError } = useQuery({
-    queryKey: ['activity', issueId],
-    queryFn: () => getActivity(issueId),
-    enabled: tab === 'activity',
-  })
-
-  const { data: attachments = [], isError: attachmentsError } = useQuery({
+  const { data: attachments = [] } = useQuery({
     queryKey: ['attachments', issueId],
-    queryFn: () => getAttachments(issueId),
+    queryFn: async () => {
+      const { getAttachments } = await import('../../api/attachments')
+      return getAttachments(issueId)
+    },
     enabled: tab === 'files',
     refetchOnWindowFocus: false,
   })
@@ -134,22 +125,6 @@ export function IssueDetail({ issueId, projectId }: Props) {
     onError: () => showToast('リンクの削除に失敗しました', 'error'),
   })
 
-  const uploadMutation = useMutation({
-    mutationFn: (file: File) => uploadAttachment(issueId, file),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['attachments', issueId] })
-    },
-    onError: () => showToast('ファイルのアップロードに失敗しました', 'error'),
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteAttachment(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['attachments', issueId] })
-    },
-    onError: () => showToast('ファイルの削除に失敗しました', 'error'),
-  })
-
   const { data: projectLabels = [] } = useQuery({
     queryKey: ['labels', projectId],
     queryFn: () => getLabels(projectId),
@@ -188,15 +163,6 @@ export function IssueDetail({ issueId, projectId }: Props) {
     staleTime: 30_000,
   })
   const epics = allIssues.filter(i => i.type === 'epic' && i.id !== issueId)
-
-  const commentMutation = useMutation({
-    mutationFn: () => createComment(issueId, commentText),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['comments', issueId] })
-      setCommentText('')
-    },
-    onError: () => showToast('コメントの投稿に失敗しました', 'error'),
-  })
 
   if (isLoading) {
     return <div role="status" aria-label="読み込み中" className="p-8 text-center text-gray-400">Loading...</div>
@@ -433,122 +399,9 @@ export function IssueDetail({ issueId, projectId }: Props) {
           </button>
         </div>
 
-        {tab === 'comments' && (
-          <div className="space-y-3">
-            {commentsError && (
-              <p className="text-sm text-red-400">コメントの取得に失敗しました</p>
-            )}
-            {comments.map(c => (
-              <div key={c.id} className="flex gap-3">
-                <Avatar name={c.author_name} avatarUrl={c.author_avatar_url ?? undefined} />
-                <div className="flex-1 bg-gray-50 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-medium text-gray-700">{c.author_name}</span>
-                    <span className="text-xs text-gray-400">
-                      {new Date(c.created_at).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{c.body}</p>
-                </div>
-              </div>
-            ))}
-
-            <div className="pt-2 space-y-2">
-              <textarea
-                value={commentText}
-                onChange={e => setCommentText(e.target.value)}
-                placeholder="コメントを入力..."
-                rows={3}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none"
-              />
-              <button
-                onClick={() => commentMutation.mutate()}
-                disabled={!commentText.trim() || commentMutation.isPending}
-                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-40"
-              >
-                {commentMutation.isPending ? '保存中...' : 'コメント'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {tab === 'files' && (
-          <div className="space-y-3">
-            {attachmentsError && (
-              <p className="text-sm text-red-400">ファイルの取得に失敗しました</p>
-            )}
-            {attachments.map(a => (
-              <div key={a.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
-                <Paperclip size={14} className="text-gray-400 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <a
-                    href={a.url}
-                    download={a.filename}
-                    className="text-sm text-blue-600 hover:underline truncate block"
-                  >
-                    {a.filename}
-                  </a>
-                  <span className="text-xs text-gray-400">
-                    {(a.size / 1024).toFixed(1)} KB
-                  </span>
-                </div>
-                <button
-                  onClick={() => deleteMutation.mutate(a.id)}
-                  disabled={deleteMutation.isPending}
-                  className="text-gray-400 hover:text-red-500 transition-colors"
-                  aria-label="削除"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-            <div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                onChange={e => {
-                  const file = e.target.files?.[0]
-                  if (file) uploadMutation.mutate(file)
-                  e.target.value = ''
-                }}
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadMutation.isPending}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 disabled:opacity-50"
-              >
-                <Upload size={14} />
-                {uploadMutation.isPending ? 'アップロード中...' : 'ファイルを追加'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {tab === 'activity' && (
-          <div className="space-y-2">
-            {activityError && (
-              <p className="text-sm text-red-400">アクティビティの取得に失敗しました</p>
-            )}
-            {!activityError && activity.length === 0 && (
-              <p className="text-sm text-gray-400">アクティビティなし</p>
-            )}
-            {activity.map(a => (
-              <div key={a.id} className="flex items-center gap-2 text-sm text-gray-600">
-                <span className="w-2 h-2 rounded-full bg-gray-300 shrink-0" />
-                <span>
-                  <strong>{a.field}</strong> changed from{' '}
-                  <span className="font-mono text-xs bg-gray-100 px-1 rounded">{a.old_value ?? '—'}</span>
-                  {' → '}
-                  <span className="font-mono text-xs bg-blue-50 text-blue-700 px-1 rounded">{a.new_value ?? '—'}</span>
-                </span>
-                <span className="text-xs text-gray-400 ml-auto shrink-0">
-                  {new Date(a.created_at).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+        {tab === 'comments' && <IssueComments issueId={issueId} />}
+        {tab === 'files' && <IssueFiles issueId={issueId} />}
+        {tab === 'activity' && <IssueActivity issueId={issueId} />}
 
       </div>
 

@@ -8,6 +8,7 @@ import { Modal } from '../components/common/Modal'
 import { BurndownChart } from '../components/Board/BurndownChart'
 import { useToast } from '../components/common/Toast'
 import { extractErrorMessage } from '../api/client'
+import { deadlineLabel } from '../utils/date'
 import type { Issue, Sprint, IssueType } from '../types'
 
 interface SprintReportData {
@@ -184,15 +185,6 @@ function SprintForm({
       </div>
     </form>
   )
-}
-
-function deadlineLabel(endDate: string): { text: string; className: string } {
-  const days = Math.ceil((new Date(endDate).getTime() - Date.now()) / 86400000)
-  if (days < 0)   return { text: `${Math.abs(days)}日超過`, className: 'text-red-600 font-semibold' }
-  if (days === 0)  return { text: '今日が期限',              className: 'text-red-600 font-semibold' }
-  if (days <= 2)   return { text: `残り${days}日`,           className: 'text-orange-500 font-semibold' }
-  if (days <= 5)   return { text: `残り${days}日`,           className: 'text-yellow-600 font-medium' }
-  return                { text: `残り${days}日`,             className: 'text-gray-400' }
 }
 
 function CompleteSprintDialog({

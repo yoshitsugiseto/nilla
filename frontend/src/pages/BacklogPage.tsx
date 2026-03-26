@@ -14,6 +14,7 @@ import { TypeIcon, PriorityBadge, StatusBadge } from '../components/common/Badge
 import { Avatar } from '../components/common/Avatar'
 import { ConfirmDialog } from '../components/common/ConfirmDialog'
 import { useToast } from '../components/common/Toast'
+import { deadlineLabel } from '../utils/date'
 import type { Issue, IssueStatus } from '../types'
 
 function SubtaskRow({ issue, selectedId, onDetail }: { issue: Issue; selectedId?: string | null; onDetail: (id: string) => void }) {
@@ -210,15 +211,6 @@ function IssueRow({
       )}
     </>
   )
-}
-
-function deadlineLabel(endDate: string): { text: string; className: string } {
-  const days = Math.ceil((new Date(endDate).getTime() - Date.now()) / 86400000)
-  if (days < 0)  return { text: `${Math.abs(days)}日超過`, className: 'text-red-600 font-medium' }
-  if (days === 0) return { text: '今日が期限',              className: 'text-red-600 font-medium' }
-  if (days <= 2)  return { text: `残り${days}日`,           className: 'text-orange-500 font-medium' }
-  if (days <= 5)  return { text: `残り${days}日`,           className: 'text-yellow-600' }
-  return               { text: `残り${days}日`,             className: 'text-gray-400' }
 }
 
 function SprintGroup({

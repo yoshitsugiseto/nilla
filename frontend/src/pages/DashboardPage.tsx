@@ -7,15 +7,7 @@ import { DetailPanel } from '../components/common/DetailPanel'
 import { IssueDetail } from '../components/Issue/IssueDetail'
 import { useState } from 'react'
 import { CheckCircle2, AlertCircle, Clock, BarChart3 } from 'lucide-react'
-
-function deadlineLabel(endDate: string): { text: string; className: string } {
-  const days = Math.ceil((new Date(endDate).getTime() - Date.now()) / 86400000)
-  if (days < 0)   return { text: `${Math.abs(days)}日超過`, className: 'text-red-600 font-semibold' }
-  if (days === 0)  return { text: '今日が期限',              className: 'text-red-600 font-semibold' }
-  if (days <= 2)   return { text: `残り${days}日`,           className: 'text-orange-500 font-semibold' }
-  if (days <= 5)   return { text: `残り${days}日`,           className: 'text-yellow-600 font-medium' }
-  return                { text: `残り${days}日`,             className: 'text-gray-500' }
-}
+import { deadlineLabel } from '../utils/date'
 
 const STATUS_COLORS: Record<string, string> = {
   todo: 'bg-gray-200',
