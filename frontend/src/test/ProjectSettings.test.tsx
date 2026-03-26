@@ -116,6 +116,7 @@ describe('ProjectSettings', () => {
 
     const bobRow = screen.getByText('Bob').closest('li')
     expect(bobRow).not.toBeNull()
+    expect(within(bobRow!).getByText('プロジェクト権限: 個別設定')).toBeInTheDocument()
 
     await user.click(within(bobRow!).getByRole('button', { name: '継承に戻す' }))
 
@@ -149,6 +150,6 @@ describe('ProjectSettings', () => {
     expect(screen.getByText('閲覧専用')).toBeInTheDocument()
     expect(screen.getByText('実効権限: 編集可')).toBeInTheDocument()
     expect(screen.getAllByText('プロジェクト権限: 継承中')).toHaveLength(2)
-    expect(screen.getByText('workspace role: Viewer')).toBeInTheDocument()
+    expect(screen.getByText('ワークスペース権限: Viewer')).toBeInTheDocument()
   })
 })

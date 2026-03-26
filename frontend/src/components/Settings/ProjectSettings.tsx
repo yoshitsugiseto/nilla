@@ -71,7 +71,7 @@ export function ProjectSettings({ projectId }: Props) {
       <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
         <p className="font-medium">
           {isProjectAdmin
-            ? 'このセクションでプロジェクト権限を変更できます。継承に戻すと workspace role ベースの権限に戻ります。'
+            ? 'このセクションでプロジェクト権限を変更できます。継承に戻すと ワークスペースベースの権限に戻ります。'
             : 'プロジェクト権限の変更はプロジェクト管理者のみ実行できます。'}
         </p>
         <p className="mt-1 text-xs text-blue-700">
@@ -103,11 +103,11 @@ export function ProjectSettings({ projectId }: Props) {
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-gray-400">
-                        workspace role: {getWorkspaceRoleLabel(member.workspace_role)}
+                        ワークスペース権限: {getWorkspaceRoleLabel(member.workspace_role)}
                       </span>
                       <span className="text-xs text-gray-300">/</span>
                       <span className="text-xs text-gray-400">
-                        {member.inherited ? 'プロジェクト権限: 継承中' : 'プロジェクト権限: override'}
+                        {member.inherited ? 'プロジェクト権限: 継承中' : 'プロジェクト権限: 個別設定'}
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-gray-500">
