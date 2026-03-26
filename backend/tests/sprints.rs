@@ -207,6 +207,131 @@ async fn complete_sprint_rejects_cross_project_next_sprint() {
 }
 
 #[tokio::test]
+async fn complete_sprint_with_valid_next_sprint_moves_incomplete_issues() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "SP").await;
+    let current_sid = common::create_sprint(&app, &pid, "Sprint 1").await;
+    let next_sid = common::create_sprint(&app, &pid, "Sprint 2").await;
+
+    let (_, todo_issue) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Todo issue", "sprint_id": current_sid }),
+        ),
+    )
+    .await;
+    let todo_issue_id = todo_issue["id"].as_str().unwrap().to_string();
+
+    let (_, done_issue) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Done issue", "sprint_id": current_sid }),
+        ),
+    )
+    .await;
+    let done_issue_id = done_issue["id"].as_str().unwrap().to_string();
+
+    common::send(
+        &app,
+        common::patch(
+            &format!("/api/issues/{done_issue_id}/status"),
+            json!({ "status": "done" }),
+        ),
+    )
+    .await;
+
+    common::send(
+        &app,
+        common::post(&format!("/api/sprints/{current_sid}/start"), json!({})),
+    )
+    .await;
+
+    let (status, json) = common::send(
+        &app,
+        common::post(
+            &format!("/api/sprints/{current_sid}/complete"),
+            json!({ "next_sprint_id": next_sid }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["status"], "completed");
+
+    let (_, todo_issue) =
+        common::send(&app, common::get(&format!("/api/issues/{todo_issue_id}"))).await;
+    assert_eq!(todo_issue["sprint_id"], next_sid);
+
+    let (_, done_issue) =
+        common::send(&app, common::get(&format!("/api/issues/{done_issue_id}"))).await;
+    assert_eq!(done_issue["sprint_id"], current_sid);
+}
+
+#[tokio::test]
+async fn complete_sprint_rejects_same_sprint_as_next_sprint() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "SP").await;
+    let sid = common::create_sprint(&app, &pid, "Sprint 1").await;
+
+    common::send(
+        &app,
+        common::post(&format!("/api/sprints/{sid}/start"), json!({})),
+    )
+    .await;
+
+    let (status, json) = common::send(
+        &app,
+        common::post(
+            &format!("/api/sprints/{sid}/complete"),
+            json!({ "next_sprint_id": sid }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        json["error"],
+        "next_sprint_id must be different from the current sprint"
+    );
+}
+
+#[tokio::test]
+async fn complete_sprint_rejects_completed_next_sprint() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "SP").await;
+    let current_sid = common::create_sprint(&app, &pid, "Current Sprint").await;
+    let next_sid = common::create_sprint(&app, &pid, "Completed Sprint").await;
+
+    common::send(
+        &app,
+        common::post(&format!("/api/sprints/{next_sid}/start"), json!({})),
+    )
+    .await;
+    common::send(
+        &app,
+        common::post(&format!("/api/sprints/{next_sid}/complete"), json!({})),
+    )
+    .await;
+
+    common::send(
+        &app,
+        common::post(&format!("/api/sprints/{current_sid}/start"), json!({})),
+    )
+    .await;
+
+    let (status, json) = common::send(
+        &app,
+        common::post(
+            &format!("/api/sprints/{current_sid}/complete"),
+            json!({ "next_sprint_id": next_sid }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"], "Cannot move issues to a completed sprint");
+}
+
+#[tokio::test]
 async fn delete_sprint_unassigns_issues() {
     let app = common::setup_app().await;
     let pid = common::create_project(&app, "P", "SP").await;

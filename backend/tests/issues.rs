@@ -235,6 +235,110 @@ async fn list_issues_search_query() {
 }
 
 #[tokio::test]
+async fn list_issues_filter_by_priority() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+
+    common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Critical issue", "priority": "critical" }),
+        ),
+    )
+    .await;
+    common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Low issue", "priority": "low" }),
+        ),
+    )
+    .await;
+
+    let (_, headers, json) = common::send_with_headers(
+        &app,
+        common::get(&format!("/api/projects/{pid}/issues?priority=critical")),
+    )
+    .await;
+    let items = json.as_array().unwrap();
+    assert_eq!(headers.get("x-total-count").unwrap(), "1");
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["title"], "Critical issue");
+    assert_eq!(items[0]["priority"], "critical");
+}
+
+#[tokio::test]
+async fn list_issues_orders_same_position_by_created_at_desc() {
+    let (app, pool) = common::setup_app_with_pool().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let first_id = common::create_issue(&app, &pid, "First").await;
+    let second_id = common::create_issue(&app, &pid, "Second").await;
+    let third_id = common::create_issue(&app, &pid, "Third").await;
+
+    sqlx::query("UPDATE issues SET created_at = ? WHERE id = ?")
+        .bind("2026-01-01T00:00:01")
+        .bind(&first_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE issues SET created_at = ? WHERE id = ?")
+        .bind("2026-01-01T00:00:02")
+        .bind(&second_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE issues SET created_at = ? WHERE id = ?")
+        .bind("2026-01-01T00:00:03")
+        .bind(&third_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (_, _, json) =
+        common::send_with_headers(&app, common::get(&format!("/api/projects/{pid}/issues"))).await;
+    let titles: Vec<&str> = json
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["title"].as_str().unwrap())
+        .collect();
+
+    assert_eq!(titles, vec!["Third", "Second", "First"]);
+}
+
+#[tokio::test]
+async fn reorder_issues_changes_subsequent_list_order() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let first_id = common::create_issue(&app, &pid, "First").await;
+    let second_id = common::create_issue(&app, &pid, "Second").await;
+    let third_id = common::create_issue(&app, &pid, "Third").await;
+
+    let (status, json) = common::send(
+        &app,
+        common::put(
+            &format!("/api/projects/{pid}/issues/reorder"),
+            json!({ "ids": [third_id, first_id, second_id] }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["ok"], true);
+
+    let (_, _, json) =
+        common::send_with_headers(&app, common::get(&format!("/api/projects/{pid}/issues"))).await;
+    let titles: Vec<&str> = json
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["title"].as_str().unwrap())
+        .collect();
+
+    assert_eq!(titles, vec!["Third", "First", "Second"]);
+}
+
+#[tokio::test]
 async fn get_issue_not_found() {
     let app = common::setup_app().await;
     let (status, _) = common::send(&app, common::get("/api/issues/nonexistent")).await;
