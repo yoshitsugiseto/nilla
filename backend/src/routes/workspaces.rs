@@ -115,6 +115,11 @@ pub async fn create_workspace(
     if body.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".to_string()));
     }
+    if body.name.len() > 255 {
+        return Err(AppError::BadRequest(
+            "name must be 255 characters or less".to_string(),
+        ));
+    }
 
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
@@ -174,6 +179,17 @@ pub async fn update_workspace(
     Json(body): Json<UpdateWorkspace>,
 ) -> Result<Json<Workspace>> {
     check_workspace_admin(&pool, &user_id.0, &id).await?;
+
+    if let Some(ref name) = body.name {
+        if name.trim().is_empty() {
+            return Err(AppError::BadRequest("name must not be empty".to_string()));
+        }
+        if name.len() > 255 {
+            return Err(AppError::BadRequest(
+                "name must be 255 characters or less".to_string(),
+            ));
+        }
+    }
 
     let current = sqlx::query_as::<_, Workspace>(
         "SELECT id, name, created_by, created_at, updated_at FROM workspaces WHERE id = ?"

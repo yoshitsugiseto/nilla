@@ -14,8 +14,17 @@ use crate::{
     auth::middleware::UserId,
     db::check_project_access,
     error::{AppError, Result},
-    models::sprint::{CreateSprint, Sprint, UpdateSprint},
+    models::sprint::{CreateSprint, Sprint, SprintRow, SprintStatus, UpdateSprint},
 };
+
+async fn get_workspace_id_for_project(pool: &SqlitePool, project_id: &str) -> Option<String> {
+    sqlx::query_scalar::<_, String>("SELECT workspace_id FROM projects WHERE id = ?")
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+}
 
 async fn get_project_id_for_sprint(pool: &SqlitePool, sprint_id: &str) -> Result<String> {
     sqlx::query_scalar::<_, String>("SELECT project_id FROM sprints WHERE id = ?")
@@ -36,11 +45,11 @@ pub async fn list_sprints(
     Path(project_id): Path<String>,
 ) -> Result<Json<Vec<Sprint>>> {
     check_project_access(&pool, &user_id.0, &project_id).await?;
-    let sprints = sqlx::query_as::<_, Sprint>(LIST_SPRINTS_SQL)
+    let rows = sqlx::query_as::<_, SprintRow>(LIST_SPRINTS_SQL)
         .bind(&project_id)
         .fetch_all(&pool)
         .await?;
-    Ok(Json(sprints))
+    Ok(Json(rows.into_iter().map(Sprint::from).collect()))
 }
 
 pub async fn create_sprint(
@@ -53,6 +62,16 @@ pub async fn create_sprint(
     if body.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".to_string()));
     }
+    if body.name.len() > 255 {
+        return Err(AppError::BadRequest(
+            "name must be 255 characters or less".to_string(),
+        ));
+    }
+    if body.goal.as_deref().map_or(false, |g| g.len() > 10000) {
+        return Err(AppError::BadRequest(
+            "goal must be 10000 characters or less".to_string(),
+        ));
+    }
     if let (Some(start), Some(end)) = (body.start_date, body.end_date) {
         if start >= end {
             return Err(AppError::BadRequest(
@@ -63,7 +82,7 @@ pub async fn create_sprint(
 
     let id = Uuid::new_v4().to_string();
 
-    let sprint = sqlx::query_as::<_, Sprint>(
+    let row = sqlx::query_as::<_, SprintRow>(
         "INSERT INTO sprints (id, project_id, name, goal, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, project_id, name, goal, status, start_date, end_date, created_at, updated_at",
     )
     .bind(&id)
@@ -75,7 +94,7 @@ pub async fn create_sprint(
     .fetch_one(&pool)
     .await?;
 
-    Ok(Json(sprint))
+    Ok(Json(Sprint::from(row)))
 }
 
 pub async fn get_sprint(
@@ -83,13 +102,13 @@ pub async fn get_sprint(
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
 ) -> Result<Json<Sprint>> {
-    let sprint = sqlx::query_as::<_, Sprint>(GET_SPRINT_SQL)
+    let row = sqlx::query_as::<_, SprintRow>(GET_SPRINT_SQL)
         .bind(&id)
         .fetch_optional(&pool)
         .await?
         .ok_or(AppError::NotFound)?;
-    check_project_access(&pool, &user_id.0, &sprint.project_id).await?;
-    Ok(Json(sprint))
+    check_project_access(&pool, &user_id.0, &row.project_id).await?;
+    Ok(Json(Sprint::from(row)))
 }
 
 pub async fn update_sprint(
@@ -104,9 +123,19 @@ pub async fn update_sprint(
         if name.trim().is_empty() {
             return Err(AppError::BadRequest("name must not be empty".to_string()));
         }
+        if name.len() > 255 {
+            return Err(AppError::BadRequest(
+                "name must be 255 characters or less".to_string(),
+            ));
+        }
+    }
+    if body.goal.as_deref().map_or(false, |g| g.len() > 10000) {
+        return Err(AppError::BadRequest(
+            "goal must be 10000 characters or less".to_string(),
+        ));
     }
 
-    let current = sqlx::query_as::<_, Sprint>(GET_SPRINT_SQL)
+    let current = sqlx::query_as::<_, SprintRow>(GET_SPRINT_SQL)
         .bind(&id)
         .fetch_optional(&pool)
         .await?
@@ -125,7 +154,7 @@ pub async fn update_sprint(
         }
     }
 
-    let updated = sqlx::query_as::<_, Sprint>(
+    let row = sqlx::query_as::<_, SprintRow>(
         "UPDATE sprints SET name=?, goal=?, start_date=?, end_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING id, project_id, name, goal, status, start_date, end_date, created_at, updated_at",
     )
     .bind(&name)
@@ -136,7 +165,7 @@ pub async fn update_sprint(
     .fetch_one(&pool)
     .await?;
 
-    Ok(Json(updated))
+    Ok(Json(Sprint::from(row)))
 }
 
 pub async fn start_sprint(
@@ -147,27 +176,35 @@ pub async fn start_sprint(
 ) -> Result<Json<Sprint>> {
     let project_id = get_project_id_for_sprint(&pool, &id).await?;
     check_project_access(&pool, &user_id.0, &project_id).await?;
-    let sprint = sqlx::query_as::<_, Sprint>(GET_SPRINT_SQL)
+    let row = sqlx::query_as::<_, SprintRow>(GET_SPRINT_SQL)
         .bind(&id)
         .fetch_optional(&pool)
         .await?
         .ok_or(AppError::NotFound)?;
 
-    if sprint.status != "planning" {
+    let current_status = row.status.parse::<SprintStatus>().unwrap_or(SprintStatus::Planning);
+    if current_status != SprintStatus::Planning {
         return Err(AppError::BadRequest(
             "Only planning sprints can be started".to_string(),
         ));
     }
 
-    let updated = sqlx::query_as::<_, Sprint>(
+    let updated_row = sqlx::query_as::<_, SprintRow>(
         "UPDATE sprints SET status='active', updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING id, project_id, name, goal, status, start_date, end_date, created_at, updated_at",
     )
     .bind(&id)
     .fetch_one(&pool)
     .await?;
 
+    let updated = Sprint::from(updated_row);
+    let workspace_id = get_workspace_id_for_project(&pool, &updated.project_id).await;
     let _ = ws_tx.send(
-        serde_json::json!({ "type": "sprint.updated", "project_id": updated.project_id }).to_string(),
+        serde_json::json!({
+            "type": "sprint.updated",
+            "project_id": updated.project_id,
+            "workspace_id": workspace_id,
+        })
+        .to_string(),
     );
     Ok(Json(updated))
 }
@@ -186,13 +223,14 @@ pub async fn complete_sprint(
 ) -> Result<Json<Sprint>> {
     let project_id = get_project_id_for_sprint(&pool, &id).await?;
     check_project_access(&pool, &user_id.0, &project_id).await?;
-    let sprint = sqlx::query_as::<_, Sprint>(GET_SPRINT_SQL)
+    let row = sqlx::query_as::<_, SprintRow>(GET_SPRINT_SQL)
         .bind(&id)
         .fetch_optional(&pool)
         .await?
         .ok_or(AppError::NotFound)?;
 
-    if sprint.status != "active" {
+    let current_status = row.status.parse::<SprintStatus>().unwrap_or(SprintStatus::Planning);
+    if current_status != SprintStatus::Active {
         return Err(AppError::BadRequest(
             "Only active sprints can be completed".to_string(),
         ));
@@ -211,7 +249,7 @@ pub async fn complete_sprint(
     .execute(&mut *tx)
     .await?;
 
-    let updated = sqlx::query_as::<_, Sprint>(
+    let updated_row = sqlx::query_as::<_, SprintRow>(
         "UPDATE sprints SET status='completed', updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING id, project_id, name, goal, status, start_date, end_date, created_at, updated_at",
     )
     .bind(&id)
@@ -220,8 +258,15 @@ pub async fn complete_sprint(
 
     tx.commit().await?;
 
+    let updated = Sprint::from(updated_row);
+    let workspace_id = get_workspace_id_for_project(&pool, &updated.project_id).await;
     let _ = ws_tx.send(
-        serde_json::json!({ "type": "sprint.updated", "project_id": updated.project_id }).to_string(),
+        serde_json::json!({
+            "type": "sprint.updated",
+            "project_id": updated.project_id,
+            "workspace_id": workspace_id,
+        })
+        .to_string(),
     );
     Ok(Json(updated))
 }
@@ -238,11 +283,12 @@ pub async fn get_burndown(
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
 ) -> Result<Json<Vec<BurndownPoint>>> {
-    let sprint = sqlx::query_as::<_, Sprint>(GET_SPRINT_SQL)
+    let row = sqlx::query_as::<_, SprintRow>(GET_SPRINT_SQL)
         .bind(&id)
         .fetch_optional(&pool)
         .await?
         .ok_or(AppError::NotFound)?;
+    let sprint = Sprint::from(row);
     check_project_access(&pool, &user_id.0, &sprint.project_id).await?;
 
     let Some(start) = sprint.start_date else {

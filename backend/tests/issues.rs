@@ -72,7 +72,8 @@ async fn create_issue_invalid_type_returns_400() {
         ),
     )
     .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    // Invalid enum variant is rejected at deserialization (422 Unprocessable Entity)
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[tokio::test]
@@ -253,7 +254,8 @@ async fn update_issue_status_invalid_returns_400() {
         ),
     )
     .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    // Invalid enum variant is rejected at deserialization (422 Unprocessable Entity)
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[tokio::test]

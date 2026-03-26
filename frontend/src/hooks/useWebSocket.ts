@@ -1,16 +1,30 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import axios from 'axios'
 import { useAuthStore } from '../store/auth'
+import { useAppStore } from '../store'
 
 type WsEvent = {
   type: string
   project_id?: string
   issue_id?: string
   user_id?: string
+  workspace_id?: string
 }
 
-function handleEvent(event: WsEvent, qc: ReturnType<typeof useQueryClient>, currentUserId?: string) {
-  const { type, project_id, issue_id, user_id } = event
+function handleEvent(
+  event: WsEvent,
+  qc: ReturnType<typeof useQueryClient>,
+  currentUserId?: string,
+  activeWorkspaceId?: string | null,
+) {
+  const { type, project_id, issue_id, user_id, workspace_id } = event
+
+  // Filter events by workspace scope: ignore events from other workspaces.
+  // Notifications and events without workspace_id are always processed.
+  if (workspace_id && activeWorkspaceId && workspace_id !== activeWorkspaceId) {
+    return
+  }
 
   switch (type) {
     case 'issue.created':
@@ -52,6 +66,7 @@ function handleEvent(event: WsEvent, qc: ReturnType<typeof useQueryClient>, curr
 
 export function useWebSocket() {
   const { accessToken, user } = useAuthStore()
+  const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId)
   const qc = useQueryClient()
 
   useEffect(() => {
@@ -61,11 +76,29 @@ export function useWebSocket() {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let unmounted = false
 
-    const connect = () => {
+    const connect = async () => {
+      if (unmounted) return
+
+      // Obtain a one-time ticket before opening the WebSocket connection
+      // so the JWT never appears in the URL.
+      let ticket: string
+      try {
+        const res = await axios.post('/api/auth/ws-ticket', null, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        ticket = res.data.ticket as string
+      } catch {
+        console.debug('[WS] failed to obtain ticket')
+        if (!unmounted) {
+          reconnectTimer = setTimeout(connect, 3000)
+        }
+        return
+      }
+
       if (unmounted) return
 
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      ws = new WebSocket(`${protocol}//${window.location.host}/api/ws?token=${accessToken}`)
+      ws = new WebSocket(`${protocol}//${window.location.host}/api/ws?ticket=${ticket}`)
 
       ws.onopen = () => {
         console.debug('[WS] connected')
@@ -74,7 +107,7 @@ export function useWebSocket() {
       ws.onmessage = (e) => {
         try {
           const msg: WsEvent = JSON.parse(e.data)
-          handleEvent(msg, qc, user?.id)
+          handleEvent(msg, qc, user?.id, activeWorkspaceId)
         } catch {
           // ignore malformed messages
         }
@@ -101,5 +134,5 @@ export function useWebSocket() {
       if (reconnectTimer) clearTimeout(reconnectTimer)
       ws?.close()
     }
-  }, [accessToken, qc, user?.id])
+  }, [accessToken, qc, user?.id, activeWorkspaceId])
 }

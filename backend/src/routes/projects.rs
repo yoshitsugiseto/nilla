@@ -37,7 +37,7 @@ pub async fn list_projects(
         .await?
     } else {
         sqlx::query_as::<_, Project>(
-            "SELECT id, name, key, description, workspace_id, created_at, updated_at FROM projects WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = ?) OR workspace_id IS NULL ORDER BY created_at DESC"
+            "SELECT id, name, key, description, workspace_id, created_at, updated_at FROM projects WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = ?) ORDER BY created_at DESC"
         )
         .bind(&user_id.0)
         .fetch_all(&pool)
@@ -54,12 +54,27 @@ pub async fn create_project(
     if body.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".to_string()));
     }
+    if body.name.len() > 255 {
+        return Err(AppError::BadRequest(
+            "name must be 255 characters or less".to_string(),
+        ));
+    }
     if body.key.trim().is_empty() {
         return Err(AppError::BadRequest("key is required".to_string()));
+    }
+    if body.key.len() > 20 {
+        return Err(AppError::BadRequest(
+            "key must be 20 characters or less".to_string(),
+        ));
     }
     if !body.key.chars().all(|c| c.is_ascii_alphanumeric()) {
         return Err(AppError::BadRequest(
             "key must be alphanumeric".to_string(),
+        ));
+    }
+    if body.description.as_deref().map_or(false, |d| d.len() > 10000) {
+        return Err(AppError::BadRequest(
+            "description must be 10000 characters or less".to_string(),
         ));
     }
 
@@ -114,6 +129,22 @@ pub async fn update_project(
     Json(body): Json<UpdateProject>,
 ) -> Result<Json<Project>> {
     check_project_access(&pool, &user_id.0, &id).await?;
+
+    if let Some(ref name) = body.name {
+        if name.trim().is_empty() {
+            return Err(AppError::BadRequest("name must not be empty".to_string()));
+        }
+        if name.len() > 255 {
+            return Err(AppError::BadRequest(
+                "name must be 255 characters or less".to_string(),
+            ));
+        }
+    }
+    if body.description.as_deref().map_or(false, |d| d.len() > 10000) {
+        return Err(AppError::BadRequest(
+            "description must be 10000 characters or less".to_string(),
+        ));
+    }
 
     let current = sqlx::query_as::<_, Project>(GET_PROJECT_SQL)
         .bind(&id)

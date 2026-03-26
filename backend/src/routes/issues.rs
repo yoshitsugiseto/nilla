@@ -16,7 +16,7 @@ use crate::{
     error::{AppError, Result},
     models::issue::{
         BulkUpdateIssues, CreateIssue, CreateIssueLink, Issue, IssueFilters, IssueLink, IssueRow,
-        UpdateIssue, UpdateIssueSprint, UpdateIssueStatus,
+        IssuePriority, IssueType, UpdateIssue, UpdateIssueSprint, UpdateIssueStatus,
     },
 };
 
@@ -25,31 +25,31 @@ const ISSUE_SELECT: &str =
 const GET_ISSUE_SQL: &str =
     "SELECT i.id, i.project_id, i.sprint_id, i.parent_id, i.epic_id, e.title as epic_title, i.number, i.title, i.description, i.type, i.status, i.priority, i.points, i.assignee_id, u.name as assignee_name, u.avatar_url as assignee_avatar_url, i.labels, i.position, i.due_date, i.created_at, i.updated_at FROM issues i LEFT JOIN users u ON i.assignee_id = u.id LEFT JOIN issues e ON i.epic_id = e.id WHERE i.id = ?";
 
-fn validate_status(status: &str) -> crate::error::Result<()> {
-    match status {
-        "todo" | "in_progress" | "in_review" | "done" => Ok(()),
-        _ => Err(AppError::BadRequest(format!("Invalid status: {status}"))),
-    }
+/// Look up the workspace_id for a given project_id.
+async fn get_workspace_id_for_project(pool: &SqlitePool, project_id: &str) -> Option<String> {
+    sqlx::query_scalar::<_, String>("SELECT workspace_id FROM projects WHERE id = ?")
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
 }
 
-fn validate_issue_type(t: &str) -> crate::error::Result<()> {
-    match t {
-        "story" | "task" | "bug" | "spike" | "epic" => Ok(()),
-        _ => Err(AppError::BadRequest(format!("Invalid issue type: {t}"))),
-    }
-}
-
-fn validate_priority(p: &str) -> crate::error::Result<()> {
-    match p {
-        "critical" | "high" | "medium" | "low" => Ok(()),
-        _ => Err(AppError::BadRequest(format!("Invalid priority: {p}"))),
-    }
-}
-
-
-fn broadcast_event(ws_tx: &broadcast::Sender<String>, event_type: &str, project_id: &str) {
+/// Broadcast a WS event scoped to a workspace, so clients can filter by workspace.
+async fn broadcast_event_scoped(
+    pool: &SqlitePool,
+    ws_tx: &broadcast::Sender<String>,
+    event_type: &str,
+    project_id: &str,
+) {
+    let workspace_id = get_workspace_id_for_project(pool, project_id).await;
     let _ = ws_tx.send(
-        serde_json::json!({ "type": event_type, "project_id": project_id }).to_string(),
+        serde_json::json!({
+            "type": event_type,
+            "project_id": project_id,
+            "workspace_id": workspace_id,
+        })
+        .to_string(),
     );
 }
 
@@ -189,10 +189,8 @@ pub async fn create_issue(
     }
 
     let id = Uuid::new_v4().to_string();
-    let issue_type = body.r#type.unwrap_or_else(|| "task".to_string());
-    validate_issue_type(&issue_type)?;
-    let priority = body.priority.unwrap_or_else(|| "medium".to_string());
-    validate_priority(&priority)?;
+    let issue_type = body.r#type.unwrap_or(IssueType::Task);
+    let priority = body.priority.unwrap_or(IssuePriority::Medium);
     let labels = body.labels.unwrap_or_default();
     if labels.len() > 20 {
         return Err(AppError::BadRequest("labels must be 20 or fewer".to_string()));
@@ -264,8 +262,8 @@ pub async fn create_issue(
     .bind(number)
     .bind(&body.title)
     .bind(&body.description)
-    .bind(&issue_type)
-    .bind(&priority)
+    .bind(issue_type.as_str())
+    .bind(priority.as_str())
     .bind(body.points)
     .bind(body.assignee_id.as_deref())
     .bind(&labels_json)
@@ -280,7 +278,7 @@ pub async fn create_issue(
 
     tx.commit().await?;
 
-    broadcast_event(&ws_tx, "issue.created", &project_id);
+    broadcast_event_scoped(&pool, &ws_tx, "issue.created", &project_id).await;
     Ok(Json(Issue::from(row)))
 }
 
@@ -322,15 +320,7 @@ pub async fn update_issue(
     if body.description.as_deref().map_or(false, |d| d.len() > 10000) {
         return Err(AppError::BadRequest("description must be 10000 characters or fewer".to_string()));
     }
-    if let Some(ref s) = body.status {
-        validate_status(s)?;
-    }
-    if let Some(ref t) = body.r#type {
-        validate_issue_type(t)?;
-    }
-    if let Some(ref p) = body.priority {
-        validate_priority(p)?;
-    }
+    // status, type, and priority are validated by serde deserialization (enum types)
     if let Some(ref labels) = body.labels {
         if labels.len() > 20 {
             return Err(AppError::BadRequest("labels must be 20 or fewer".to_string()));
@@ -348,11 +338,12 @@ pub async fn update_issue(
         .await?
         .ok_or(AppError::NotFound)?;
 
+    let status_changed = body.status.is_some();
     let title = body.title.unwrap_or(current.title.clone());
     let description = body.description.or(current.description.clone());
-    let issue_type = body.r#type.unwrap_or(current.r#type.clone());
-    let new_status = body.status.clone().unwrap_or(current.status.clone());
-    let priority = body.priority.unwrap_or(current.priority.clone());
+    let issue_type = body.r#type.map(|t| t.to_string()).unwrap_or(current.r#type.clone());
+    let new_status = body.status.map(|s| s.to_string()).unwrap_or(current.status.clone());
+    let priority = body.priority.map(|p| p.to_string()).unwrap_or(current.priority.clone());
     let points = body.points.or(current.points);
     let new_assignee_id_from_body = body.assignee_id.clone();
     let assignee_id = body.assignee_id.or(current.assignee_id.clone());
@@ -402,7 +393,7 @@ pub async fn update_issue(
     .execute(&mut *tx)
     .await?;
 
-    if body.status.is_some() && body.status.as_deref() != Some(&current.status) {
+    if status_changed && new_status != current.status {
         let log_id = Uuid::new_v4().to_string();
         sqlx::query(
             "INSERT INTO activity_logs (id, issue_id, field, old_value, new_value) VALUES (?, ?, 'status', ?, ?)",
@@ -422,7 +413,7 @@ pub async fn update_issue(
 
     tx.commit().await?;
 
-    broadcast_event(&ws_tx, "issue.updated", &project_id);
+    broadcast_event_scoped(&pool, &ws_tx, "issue.updated", &project_id).await;
 
     // Notify new assignee (if changed and not self-assign)
     let assignee_changed = new_assignee_id_from_body.is_some()
@@ -473,7 +464,7 @@ pub async fn delete_issue(
     }
 
     tx.commit().await?;
-    broadcast_event(&ws_tx, "issue.deleted", &project_id);
+    broadcast_event_scoped(&pool, &ws_tx, "issue.deleted", &project_id).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -484,7 +475,8 @@ pub async fn update_issue_status(
     Path(id): Path<String>,
     Json(body): Json<UpdateIssueStatus>,
 ) -> Result<Json<Issue>> {
-    validate_status(&body.status)?;
+    // Validation is handled by serde deserialization of IssueStatus enum
+    let status_str = body.status.as_str();
 
     let project_id = get_project_id_for_issue(&pool, &id).await?;
     check_project_access(&pool, &user_id.0, &project_id).await?;
@@ -502,7 +494,7 @@ pub async fn update_issue_status(
     sqlx::query(
         "UPDATE issues SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
     )
-    .bind(&body.status)
+    .bind(status_str)
     .bind(&id)
     .execute(&mut *tx)
     .await?;
@@ -514,7 +506,7 @@ pub async fn update_issue_status(
     .bind(&log_id)
     .bind(&id)
     .bind(&old_status)
-    .bind(&body.status)
+    .bind(status_str)
     .execute(&mut *tx)
     .await?;
 
@@ -525,7 +517,7 @@ pub async fn update_issue_status(
 
     tx.commit().await?;
 
-    broadcast_event(&ws_tx, "issue.updated", &project_id);
+    broadcast_event_scoped(&pool, &ws_tx, "issue.updated", &project_id).await;
     Ok(Json(Issue::from(row)))
 }
 
@@ -626,7 +618,7 @@ pub async fn reorder_issues(
             .await?;
     }
     tx.commit().await?;
-    broadcast_event(&ws_tx, "issue.reordered", &project_id);
+    broadcast_event_scoped(&pool, &ws_tx, "issue.reordered", &project_id).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -708,8 +700,15 @@ pub async fn create_comment(
     .fetch_one(&pool)
     .await?;
 
+    let workspace_id = get_workspace_id_for_project(&pool, &project_id).await;
     let _ = ws_tx.send(
-        serde_json::json!({ "type": "comment.created", "issue_id": id, "project_id": project_id }).to_string(),
+        serde_json::json!({
+            "type": "comment.created",
+            "issue_id": id,
+            "project_id": project_id,
+            "workspace_id": workspace_id,
+        })
+        .to_string(),
     );
 
     // Notify issue assignee (if not the commenter)
@@ -926,9 +925,9 @@ pub async fn bulk_update_issues(
 
     for issue_id in &body.issue_ids {
         if let Some(ref status) = body.status {
-            validate_status(status)?;
+            // Validation is handled by serde deserialization of IssueStatus enum
             sqlx::query("UPDATE issues SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=?")
-                .bind(status)
+                .bind(status.as_str())
                 .bind(issue_id)
                 .bind(&project_id)
                 .execute(&mut *tx)
@@ -956,7 +955,7 @@ pub async fn bulk_update_issues(
 
     tx.commit().await?;
 
-    broadcast_event(&ws_tx, "issue.updated", &project_id);
+    broadcast_event_scoped(&pool, &ws_tx, "issue.updated", &project_id).await;
 
     let placeholders = body.issue_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
     let sql = format!("{ISSUE_SELECT} WHERE i.id IN ({placeholders}) ORDER BY i.position ASC");

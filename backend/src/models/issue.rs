@@ -1,5 +1,153 @@
+use std::fmt;
+use std::str::FromStr;
+
 use chrono::{NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
+
+// ─── Issue Status Enum ───────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IssueStatus {
+    Todo,
+    InProgress,
+    InReview,
+    Done,
+}
+
+impl fmt::Display for IssueStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IssueStatus::Todo => write!(f, "todo"),
+            IssueStatus::InProgress => write!(f, "in_progress"),
+            IssueStatus::InReview => write!(f, "in_review"),
+            IssueStatus::Done => write!(f, "done"),
+        }
+    }
+}
+
+impl FromStr for IssueStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "todo" => Ok(IssueStatus::Todo),
+            "in_progress" => Ok(IssueStatus::InProgress),
+            "in_review" => Ok(IssueStatus::InReview),
+            "done" => Ok(IssueStatus::Done),
+            _ => Err(format!(
+                "Invalid status '{}'. Must be one of: todo, in_progress, in_review, done",
+                s
+            )),
+        }
+    }
+}
+
+impl IssueStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            IssueStatus::Todo => "todo",
+            IssueStatus::InProgress => "in_progress",
+            IssueStatus::InReview => "in_review",
+            IssueStatus::Done => "done",
+        }
+    }
+}
+
+// ─── Issue Type Enum ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IssueType {
+    Story,
+    Task,
+    Bug,
+    Spike,
+    Epic,
+}
+
+impl fmt::Display for IssueType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl FromStr for IssueType {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "story" => Ok(IssueType::Story),
+            "task" => Ok(IssueType::Task),
+            "bug" => Ok(IssueType::Bug),
+            "spike" => Ok(IssueType::Spike),
+            "epic" => Ok(IssueType::Epic),
+            _ => Err(format!(
+                "Invalid issue type '{}'. Must be one of: story, task, bug, spike, epic",
+                s
+            )),
+        }
+    }
+}
+
+impl IssueType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            IssueType::Story => "story",
+            IssueType::Task => "task",
+            IssueType::Bug => "bug",
+            IssueType::Spike => "spike",
+            IssueType::Epic => "epic",
+        }
+    }
+}
+
+// ─── Issue Priority Enum ─────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IssuePriority {
+    Critical,
+    High,
+    Medium,
+    Low,
+}
+
+impl fmt::Display for IssuePriority {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl FromStr for IssuePriority {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "critical" => Ok(IssuePriority::Critical),
+            "high" => Ok(IssuePriority::High),
+            "medium" => Ok(IssuePriority::Medium),
+            "low" => Ok(IssuePriority::Low),
+            _ => Err(format!(
+                "Invalid priority '{}'. Must be one of: critical, high, medium, low",
+                s
+            )),
+        }
+    }
+}
+
+impl IssuePriority {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            IssuePriority::Critical => "critical",
+            IssuePriority::High => "high",
+            IssuePriority::Medium => "medium",
+            IssuePriority::Low => "low",
+        }
+    }
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct IssueRow {
@@ -37,9 +185,9 @@ pub struct Issue {
     pub number: i64,
     pub title: String,
     pub description: Option<String>,
-    pub r#type: String,
-    pub status: String,
-    pub priority: String,
+    pub r#type: IssueType,
+    pub status: IssueStatus,
+    pub priority: IssuePriority,
     pub points: Option<i64>,
     pub assignee_id: Option<String>,
     pub assignee_name: Option<String>,
@@ -62,6 +210,9 @@ impl From<IssueRow> for Issue {
                     .ok()
             })
             .unwrap_or_default();
+        let issue_type = row.r#type.parse::<IssueType>().unwrap_or(IssueType::Task);
+        let status = row.status.parse::<IssueStatus>().unwrap_or(IssueStatus::Todo);
+        let priority = row.priority.parse::<IssuePriority>().unwrap_or(IssuePriority::Medium);
         Self {
             id: row.id,
             project_id: row.project_id,
@@ -72,9 +223,9 @@ impl From<IssueRow> for Issue {
             number: row.number,
             title: row.title,
             description: row.description,
-            r#type: row.r#type,
-            status: row.status,
-            priority: row.priority,
+            r#type: issue_type,
+            status,
+            priority,
             points: row.points,
             assignee_id: row.assignee_id,
             assignee_name: row.assignee_name,
@@ -92,8 +243,8 @@ impl From<IssueRow> for Issue {
 pub struct CreateIssue {
     pub title: String,
     pub description: Option<String>,
-    pub r#type: Option<String>,
-    pub priority: Option<String>,
+    pub r#type: Option<IssueType>,
+    pub priority: Option<IssuePriority>,
     pub points: Option<i64>,
     pub assignee_id: Option<String>,
     pub labels: Option<Vec<String>>,
@@ -107,9 +258,9 @@ pub struct CreateIssue {
 pub struct UpdateIssue {
     pub title: Option<String>,
     pub description: Option<String>,
-    pub r#type: Option<String>,
-    pub status: Option<String>,
-    pub priority: Option<String>,
+    pub r#type: Option<IssueType>,
+    pub status: Option<IssueStatus>,
+    pub priority: Option<IssuePriority>,
     pub points: Option<i64>,
     pub assignee_id: Option<String>,
     pub labels: Option<Vec<String>>,
@@ -121,7 +272,7 @@ pub struct UpdateIssue {
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateIssueStatus {
-    pub status: String,
+    pub status: IssueStatus,
 }
 
 #[derive(Debug, Deserialize)]
@@ -164,7 +315,7 @@ pub struct IssueFilters {
 #[derive(Debug, Deserialize)]
 pub struct BulkUpdateIssues {
     pub issue_ids: Vec<String>,
-    pub status: Option<String>,
+    pub status: Option<IssueStatus>,
     pub sprint_id: Option<String>, // "backlog" = set NULL
     pub assignee_id: Option<String>, // "" = clear
 }
