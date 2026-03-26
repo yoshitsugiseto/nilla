@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useState } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { SearchPage } from '../pages/SearchPage'
 import { useAppStore } from '../store'
-import type { Issue, WorkspaceMember } from '../types'
+import type { Issue, IssueSearchFilters, WorkspaceMember } from '../types'
 
 const {
   mockGetIssuesPaged,
@@ -75,7 +76,11 @@ function makeMember(overrides: Partial<WorkspaceMember> = {}): WorkspaceMember {
   }
 }
 
-function renderSearchPage(query: string) {
+function renderSearchPage(
+  query: string,
+  filters: IssueSearchFilters = { status: '', type: '', priority: '', assignee_id: '' },
+  onApplyPreset: (query: string, filters: IssueSearchFilters) => void = () => undefined,
+) {
   const queryClient = createQueryClient()
   useAppStore.setState({
     activeProjectId: 'project-1',
@@ -87,9 +92,22 @@ function renderSearchPage(query: string) {
     boardFilters: {},
   })
 
+  function Wrapper() {
+    const [currentFilters, setCurrentFilters] = useState(filters)
+
+    return (
+      <SearchPage
+        query={query}
+        filters={currentFilters}
+        onApplyPreset={onApplyPreset}
+        onFiltersChange={setCurrentFilters}
+      />
+    )
+  }
+
   render(
     <QueryClientProvider client={queryClient}>
-      <SearchPage query={query} onApplyPreset={() => undefined} />
+      <Wrapper />
     </QueryClientProvider>
   )
 }
@@ -124,6 +142,30 @@ describe('SearchPage', () => {
 
     expect(screen.getByText('2文字以上入力してください')).toBeInTheDocument()
     expect(mockGetIssuesPaged).not.toHaveBeenCalled()
+  })
+
+  test('searches when filters are active even without a text query', async () => {
+    renderSearchPage('', {
+      status: 'done',
+      type: '',
+      priority: '',
+      assignee_id: '',
+    })
+
+    await waitFor(() =>
+      expect(mockGetIssuesPaged).toHaveBeenCalledWith('project-1', {
+        q: undefined,
+        limit: 20,
+        offset: 0,
+        status: 'done',
+        type: undefined,
+        priority: undefined,
+        assignee_id: undefined,
+      })
+    )
+
+    expect(screen.getByText('フィルター結果')).toBeInTheDocument()
+    expect(screen.queryByText('2文字以上入力してください')).not.toBeInTheDocument()
   })
 
   test('applies filters including unassigned assignee', async () => {

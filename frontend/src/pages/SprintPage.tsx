@@ -531,11 +531,13 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
             )
           })}
 
-          {sprints.filter(s => s.status !== 'completed').length === 0 && (
-            <div className="text-center py-12 text-gray-400">
-              スプリントがありません。作成してください。
-            </div>
-          )}
+	          {sprints.filter(s => s.status !== 'completed').length === 0 && (
+	            <div className="text-center py-12 text-gray-400">
+	              {canEditProject
+                  ? 'スプリントがありません。作成してください。'
+                  : 'スプリントはまだありません。作成が必要な場合はプロジェクト管理者に依頼してください。'}
+	            </div>
+	          )}
         </div>
       )}
 

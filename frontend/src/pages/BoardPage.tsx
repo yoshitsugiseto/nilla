@@ -64,7 +64,11 @@ export function BoardPage() {
           <h1 className="text-xl font-bold text-gray-900 mb-6">Board</h1>
           <div className="text-center py-12 text-gray-400">
             <p>スプリントがありません</p>
-            <p className="text-sm mt-1">サイドバーの「Sprints」からスプリントを作成してください</p>
+            <p className="text-sm mt-1">
+              {canEditProject
+                ? 'サイドバーの「Sprints」からスプリントを作成してください'
+                : 'スプリントが作成されるとここにボードが表示されます'}
+            </p>
           </div>
         </div>
       </div>

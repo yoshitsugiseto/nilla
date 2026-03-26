@@ -210,6 +210,13 @@ export interface ProjectLabel {
   created_at: string
 }
 
+export interface IssueSearchFilters {
+  status: string
+  type: string
+  priority: string
+  assignee_id: string
+}
+
 export interface IssueTemplate {
   id: string
   project_id: string
@@ -236,12 +243,7 @@ export interface SearchPreset {
   project_id: string
   name: string
   query: string
-  filters: {
-    status: string
-    type: string
-    priority: string
-    assignee_id: string
-  }
+  filters: IssueSearchFilters
   created_at: string
   updated_at: string
 }

@@ -283,4 +283,20 @@ describe('SprintPage', () => {
     expect(screen.queryByRole('button', { name: '開始' })).not.toBeInTheDocument()
     expect(screen.queryByTitle('Edit sprint')).not.toBeInTheDocument()
   })
+
+  test('viewer empty state avoids asking for impossible sprint creation', async () => {
+    mockGetProjectMembers.mockResolvedValue([
+      makeMember({
+        role: 'viewer',
+        workspace_role: 'viewer',
+      }),
+    ])
+    mockGetSprints.mockResolvedValue([])
+
+    renderSprintPage()
+
+    await waitFor(() => expect(mockGetSprints).toHaveBeenCalled())
+    expect(await screen.findByText('スプリントはまだありません。作成が必要な場合はプロジェクト管理者に依頼してください。')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Sprintを作成' })).not.toBeInTheDocument()
+  })
 })

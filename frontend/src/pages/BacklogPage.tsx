@@ -21,6 +21,9 @@ import { useProjectPermissions } from '../hooks/useProjectPermissions'
 import { deadlineLabel, dueDateLabel } from '../utils/date'
 import type { Issue, IssuePriority, IssueStatus } from '../types'
 
+const BULK_SELECT_PLACEHOLDER = '__placeholder__'
+const BULK_UNASSIGNED_ASSIGNEE = '__unassigned__'
+
 function SubtaskRow({ issue, selectedId, onDetail }: { issue: Issue; selectedId?: string | null; onDetail: (id: string) => void }) {
   return (
     <div
@@ -522,48 +525,66 @@ export function BacklogPage() {
         )}
       </div>
 
-      {canEditProject && bulkMode && bulkSelected.size > 0 && (
-        <div className="flex items-center gap-3 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+	      {canEditProject && bulkMode && bulkSelected.size > 0 && (
+	        <div className="flex items-center gap-3 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
           <span className="text-blue-700 font-medium shrink-0">{bulkSelected.size}件選択中</span>
-          <select
-            defaultValue=""
-            onChange={e => { if (e.target.value) bulkMutation.mutate({ status: e.target.value as IssueStatus }); e.target.value = '' }}
-            className="border border-gray-200 rounded px-2 py-1 text-sm"
-          >
-            <option value="">ステータス変更...</option>
+	          <select
+	            defaultValue={BULK_SELECT_PLACEHOLDER}
+	            onChange={e => {
+                if (e.target.value === BULK_SELECT_PLACEHOLDER) return
+                bulkMutation.mutate({ status: e.target.value as IssueStatus })
+                e.target.value = BULK_SELECT_PLACEHOLDER
+              }}
+	            className="border border-gray-200 rounded px-2 py-1 text-sm"
+	          >
+	            <option value={BULK_SELECT_PLACEHOLDER}>ステータス変更...</option>
             <option value="todo">Todo</option>
             <option value="in_progress">In Progress</option>
             <option value="in_review">In Review</option>
             <option value="done">Done</option>
           </select>
-          <select
-            defaultValue=""
-            onChange={e => { if (e.target.value) bulkMutation.mutate({ sprint_id: e.target.value }); e.target.value = '' }}
-            className="border border-gray-200 rounded px-2 py-1 text-sm"
-          >
-            <option value="">スプリント変更...</option>
+	          <select
+	            defaultValue={BULK_SELECT_PLACEHOLDER}
+	            onChange={e => {
+                if (e.target.value === BULK_SELECT_PLACEHOLDER) return
+                bulkMutation.mutate({ sprint_id: e.target.value })
+                e.target.value = BULK_SELECT_PLACEHOLDER
+              }}
+	            className="border border-gray-200 rounded px-2 py-1 text-sm"
+	          >
+	            <option value={BULK_SELECT_PLACEHOLDER}>スプリント変更...</option>
             <option value="backlog">Backlog</option>
             {sprints.filter(s => s.status !== 'completed').map(s => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
-          <select
-            defaultValue=""
-            onChange={e => { bulkMutation.mutate({ assignee_id: e.target.value }); e.target.value = '' }}
-            className="border border-gray-200 rounded px-2 py-1 text-sm"
-          >
-            <option value="">担当者変更...</option>
-            <option value="">未割り当て</option>
+	          <select
+	            defaultValue={BULK_SELECT_PLACEHOLDER}
+	            onChange={e => {
+                if (e.target.value === BULK_SELECT_PLACEHOLDER) return
+                bulkMutation.mutate({
+                  assignee_id: e.target.value === BULK_UNASSIGNED_ASSIGNEE ? '' : e.target.value,
+                })
+                e.target.value = BULK_SELECT_PLACEHOLDER
+              }}
+	            className="border border-gray-200 rounded px-2 py-1 text-sm"
+	          >
+	            <option value={BULK_SELECT_PLACEHOLDER}>担当者変更...</option>
+	            <option value={BULK_UNASSIGNED_ASSIGNEE}>未割り当て</option>
             {members.map(m => (
               <option key={m.user_id} value={m.user_id}>{m.name}</option>
             ))}
           </select>
-          <select
-            defaultValue=""
-            onChange={e => { if (e.target.value) bulkMutation.mutate({ priority: e.target.value as IssuePriority }); e.target.value = '' }}
-            className="border border-gray-200 rounded px-2 py-1 text-sm"
-          >
-            <option value="">優先度変更...</option>
+	          <select
+	            defaultValue={BULK_SELECT_PLACEHOLDER}
+	            onChange={e => {
+                if (e.target.value === BULK_SELECT_PLACEHOLDER) return
+                bulkMutation.mutate({ priority: e.target.value as IssuePriority })
+                e.target.value = BULK_SELECT_PLACEHOLDER
+              }}
+	            className="border border-gray-200 rounded px-2 py-1 text-sm"
+	          >
+	            <option value={BULK_SELECT_PLACEHOLDER}>優先度変更...</option>
             <option value="critical">Critical</option>
             <option value="high">High</option>
             <option value="medium">Medium</option>

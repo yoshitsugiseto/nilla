@@ -19,7 +19,7 @@ interface SidebarProps {
   searchInput: string
   setSearchInput: (value: string) => void
   setSearchQuery: (value: string) => void
-  setSearching: (value: boolean) => void
+  clearSearch: () => void
   setCreatingProject: (value: boolean) => void
   setCreatingWorkspace: (value: boolean) => void
   setCreatingIssue: (value: boolean) => void
@@ -34,7 +34,7 @@ export function Sidebar({
   searchInput,
   setSearchInput,
   setSearchQuery,
-  setSearching,
+  clearSearch,
   setCreatingProject,
   setCreatingWorkspace,
   setCreatingIssue,
@@ -49,9 +49,9 @@ export function Sidebar({
     'n': () => { if (activeProjectId && canEditProject) setCreatingIssue(true) },
     '/': () => { searchInputRef.current?.focus() },
     '?': () => setShowShortcuts(true),
-    'b': () => { setPage('backlog'); setSearching(false); setSearchInput(''); setSearchQuery('') },
-    'd': () => { setPage('board'); setSearching(false); setSearchInput(''); setSearchQuery('') },
-    's': () => { setPage('sprints'); setSearching(false); setSearchInput(''); setSearchQuery('') },
+    'b': () => { setPage('backlog'); clearSearch() },
+    'd': () => { setPage('board'); clearSearch() },
+    's': () => { setPage('sprints'); clearSearch() },
   })
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -59,10 +59,9 @@ export function Sidebar({
   useEffect(() => {
     debounceRef.current = setTimeout(() => {
       setSearchQuery(searchInput)
-      setSearching(searchInput.length > 0)
     }, 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [searchInput, setSearchQuery, setSearching])
+  }, [searchInput, setSearchQuery])
 
   const { data: workspaces = [] } = useQuery({
     queryKey: ['workspaces'],
@@ -171,9 +170,7 @@ export function Sidebar({
             onChange={e => setSearchInput(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Escape') {
-                setSearchInput('')
-                setSearchQuery('')
-                setSearching(false)
+                clearSearch()
                 searchInputRef.current?.blur()
               }
             }}
@@ -193,7 +190,7 @@ export function Sidebar({
           {navItems.map(item => (
             <button
               key={item.id}
-              onClick={() => { setPage(item.id); setSearching(false); setSearchQuery(''); setSearchInput('') }}
+              onClick={() => { setPage(item.id); clearSearch() }}
               className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${
                 page === item.id && !searching
                   ? 'bg-blue-600 text-white'

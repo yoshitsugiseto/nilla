@@ -11,24 +11,19 @@ import { useProjectPermissions } from '../hooks/useProjectPermissions'
 import { dueDateLabel } from '../utils/date'
 import { ProjectRoleBadge } from '../components/common/ProjectRoleBadge'
 import { Search, ChevronLeft, ChevronRight, SlidersHorizontal, X } from 'lucide-react'
+import type { IssueSearchFilters } from '../types'
 
 const PAGE_SIZE = 20
+const EMPTY_FILTERS: IssueSearchFilters = { status: '', type: '', priority: '', assignee_id: '' }
 
 interface Props {
   query: string
-  onApplyPreset?: (query: string) => void
+  filters: IssueSearchFilters
+  onApplyPreset?: (query: string, filters: IssueSearchFilters) => void
+  onFiltersChange: (filters: IssueSearchFilters) => void
 }
 
-interface Filters {
-  status: string
-  type: string
-  priority: string
-  assignee_id: string
-}
-
-const EMPTY_FILTERS: Filters = { status: '', type: '', priority: '', assignee_id: '' }
-
-export function SearchPage({ query, onApplyPreset }: Props) {
+export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: Props) {
   const {
     activeProjectId,
     searchPresets,
@@ -44,13 +39,11 @@ export function SearchPage({ query, onApplyPreset }: Props) {
   const { role } = useProjectPermissions(activeProjectId)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [pageState, setPageState] = useState({ scope: '', page: 0 })
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   const [showFilters, setShowFilters] = useState(false)
   const searchScope = JSON.stringify({ query, filters })
-  const effectivePage =
-    query.length >= 2 && pageState.scope === searchScope ? pageState.page : 0
-
   const hasFilters = Object.values(filters).some(Boolean)
+  const effectivePage =
+    (query.length >= 2 || hasFilters) && pageState.scope === searchScope ? pageState.page : 0
   const projectPresets = searchPresets.filter((preset) => preset.project_id === activeProjectId)
   const canSavePreset = query.trim().length >= 2 || hasFilters
 
@@ -64,7 +57,7 @@ export function SearchPage({ query, onApplyPreset }: Props) {
     queryKey: ['issues', activeProjectId, 'search', query, effectivePage, filters],
     queryFn: () =>
       getIssuesPaged(activeProjectId!, {
-        q: query,
+        q: query.trim().length >= 2 ? query : undefined,
         limit: PAGE_SIZE,
         offset: effectivePage * PAGE_SIZE,
         status: filters.status || undefined,
@@ -72,7 +65,7 @@ export function SearchPage({ query, onApplyPreset }: Props) {
         priority: filters.priority || undefined,
         assignee_id: filters.assignee_id || undefined,
       }),
-    enabled: !!activeProjectId && query.length >= 2,
+    enabled: !!activeProjectId && (query.length >= 2 || hasFilters),
     placeholderData: prev => prev,
   })
 
@@ -82,10 +75,10 @@ export function SearchPage({ query, onApplyPreset }: Props) {
   const start = effectivePage * PAGE_SIZE + 1
   const end = Math.min(effectivePage * PAGE_SIZE + issues.length, total)
 
-  const setFilter = (key: keyof Filters, value: string) =>
-    setFilters(f => ({ ...f, [key]: value }))
+  const setFilter = (key: keyof IssueSearchFilters, value: string) =>
+    onFiltersChange({ ...filters, [key]: value })
 
-  const clearFilters = () => setFilters(EMPTY_FILTERS)
+  const clearFilters = () => onFiltersChange(EMPTY_FILTERS)
   const saveCurrentPreset = () => {
     if (!activeProjectId || !canSavePreset) return
     const defaultName = query.trim().length >= 2 ? query.trim() : 'フィルタ'
@@ -97,9 +90,9 @@ export function SearchPage({ query, onApplyPreset }: Props) {
   const applyPreset = (presetId: string) => {
     const preset = projectPresets.find((item) => item.id === presetId)
     if (!preset) return
-    onApplyPreset?.(preset.query)
-    setFilters(preset.filters)
+    onApplyPreset?.(preset.query, preset.filters)
     setPageState({ scope: JSON.stringify({ query: preset.query, filters: preset.filters }), page: 0 })
+    setShowFilters(Object.values(preset.filters).some(Boolean))
   }
 
   if (!activeProjectId) {
@@ -114,10 +107,10 @@ export function SearchPage({ query, onApplyPreset }: Props) {
           <div className="flex items-center gap-2">
             <Search size={18} className="text-gray-400" aria-hidden="true" />
             <h1 className="text-xl font-bold text-gray-900">
-              {query.length < 2 ? '検索' : `"${query}" の検索結果`}
+              {query.length >= 2 ? `"${query}" の検索結果` : hasFilters ? 'フィルター結果' : '検索'}
             </h1>
             <ProjectRoleBadge role={role} />
-            {query.length >= 2 && !isLoading && total > 0 && (
+            {(query.length >= 2 || hasFilters) && !isLoading && total > 0 && (
               <span className="text-sm text-gray-400 ml-1">{total}件</span>
             )}
           </div>
@@ -258,13 +251,13 @@ export function SearchPage({ query, onApplyPreset }: Props) {
         )}
 
         {/* Pagination info */}
-        {query.length >= 2 && !isLoading && total > 0 && (
+        {(query.length >= 2 || hasFilters) && !isLoading && total > 0 && (
           <p className="text-xs text-gray-400 mb-4">
             {start}〜{end}件目を表示
           </p>
         )}
 
-        {query.length < 2 && (
+        {query.length < 2 && !hasFilters && (
           <p className="text-gray-400 text-sm">2文字以上入力してください</p>
         )}
 
@@ -276,7 +269,7 @@ export function SearchPage({ query, onApplyPreset }: Props) {
           <p className="text-red-400 text-sm">検索に失敗しました</p>
         )}
 
-        {!isLoading && !isError && query.length >= 2 && issues.length === 0 && (
+        {!isLoading && !isError && (query.length >= 2 || hasFilters) && issues.length === 0 && (
           <p className="text-gray-400 text-sm">
             {hasFilters ? '条件に一致するイシューが見つかりません' : '該当するイシューが見つかりません'}
           </p>

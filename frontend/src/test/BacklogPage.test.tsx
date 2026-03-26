@@ -304,6 +304,30 @@ describe('BacklogPage', () => {
     )
   })
 
+  test('bulk assignee update can clear assignments back to unassigned', async () => {
+    const user = userEvent.setup()
+
+    renderBacklogPage()
+
+    await waitFor(() => expect(mockGetIssues).toHaveBeenCalled())
+    expect(await screen.findByRole('button', { name: '一括操作' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '一括操作' }))
+    await user.click(screen.getByText('Backlog task'))
+
+    const bulkBar = screen.getByText('1件選択中').closest('div')
+    if (!bulkBar) {
+      throw new Error('bulk action bar not found')
+    }
+
+    await user.selectOptions(within(bulkBar).getAllByRole('combobox')[2], '__unassigned__')
+    await waitFor(() =>
+      expect(mockBulkUpdateIssues).toHaveBeenLastCalledWith('project-1', {
+        issue_ids: ['issue-1'],
+        assignee_id: '',
+      })
+    )
+  })
+
   test('bulk labels update submits normalized payload', async () => {
     const user = userEvent.setup()
 

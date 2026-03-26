@@ -5,6 +5,7 @@ import type { Page } from './components/Layout'
 import { useAppStore } from './store'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useProjectPermissions } from './hooks/useProjectPermissions'
+import type { IssueSearchFilters } from './types'
 
 const BoardPage = lazy(() => import('./pages/BoardPage').then((m) => ({ default: m.BoardPage })))
 const BacklogPage = lazy(() => import('./pages/BacklogPage').then((m) => ({ default: m.BacklogPage })))
@@ -26,6 +27,13 @@ function ContentFallback() {
   )
 }
 
+const EMPTY_SEARCH_FILTERS: IssueSearchFilters = {
+  status: '',
+  type: '',
+  priority: '',
+  assignee_id: '',
+}
+
 export default function App() {
   const [page, setPage] = useState<Page>('dashboard')
   const [creatingProject, setCreatingProject] = useState(false)
@@ -34,7 +42,7 @@ export default function App() {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
-  const [searching, setSearching] = useState(false)
+  const [searchFilters, setSearchFilters] = useState<IssueSearchFilters>(EMPTY_SEARCH_FILTERS)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const {
     activeProjectId,
@@ -47,11 +55,18 @@ export default function App() {
   } = useAppStore()
   const { canEditProject } = useProjectPermissions(activeProjectId)
   useWebSocket()
+  const searching = searchQuery.length > 0 || Object.values(searchFilters).some(Boolean)
 
-  const applySearchPreset = (query: string) => {
+  const clearSearch = () => {
+    setSearchInput('')
+    setSearchQuery('')
+    setSearchFilters(EMPTY_SEARCH_FILTERS)
+  }
+
+  const applySearchPreset = (query: string, filters: IssueSearchFilters) => {
     setSearchInput(query)
     setSearchQuery(query)
-    setSearching(query.length > 0)
+    setSearchFilters(filters)
   }
 
   return (
@@ -64,7 +79,7 @@ export default function App() {
         searchInput={searchInput}
         setSearchInput={setSearchInput}
         setSearchQuery={setSearchQuery}
-        setSearching={setSearching}
+        clearSearch={clearSearch}
         setCreatingProject={setCreatingProject}
         setCreatingWorkspace={setCreatingWorkspace}
         setCreatingIssue={setCreatingIssue}
@@ -76,7 +91,14 @@ export default function App() {
       <main className="flex-1 flex overflow-hidden">
         <Suspense fallback={<ContentFallback />}>
           {searching
-            ? <SearchPage query={searchQuery} onApplyPreset={applySearchPreset} />
+            ? (
+              <SearchPage
+                query={searchQuery}
+                filters={searchFilters}
+                onApplyPreset={applySearchPreset}
+                onFiltersChange={setSearchFilters}
+              />
+            )
             : <>
                 {page === 'dashboard' && <DashboardPage />}
                 {page === 'board' && <BoardPage />}
