@@ -80,6 +80,7 @@ export async function mockAuth(page: Page) {
     route.fulfill({ json: { access_token: 'test-token' } })
   )
   await page.route('**/api/auth/me', route => route.fulfill({ json: TEST_USER }))
+  await page.route('**/api/auth/ws-ticket', route => route.fulfill({ json: { ticket: 'test-ticket' } }))
   await page.route('**/api/auth/logout', route => route.fulfill({ status: 204 }))
   await page.routeWebSocket('**/api/ws**', () => { /* accept, no messages */ })
 }
@@ -105,6 +106,7 @@ export async function mockProjectApi(page: Page) {
 
 export async function mockIssueDetailApi(page: Page, issue = SEARCH_ISSUE) {
   await page.route(`**/api/issues/${issue.id}`, route => route.fulfill({ json: issue }))
+  await page.route(`**/api/issues/${issue.id}/comments`, route => route.fulfill({ json: [] }))
   await page.route(`**/api/issues/${issue.id}/children`, route => route.fulfill({ json: [] }))
   await page.route(`**/api/issues/${issue.id}/links`, route => route.fulfill({ json: [] }))
   await page.route('**/api/projects/proj-1/labels', route => route.fulfill({ json: [] }))
