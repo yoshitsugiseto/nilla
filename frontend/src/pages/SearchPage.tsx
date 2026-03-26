@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getIssuesPaged } from '../api/issues'
 import { getProjectMembers } from '../api/workspaces'
@@ -26,14 +26,12 @@ const EMPTY_FILTERS: Filters = { status: '', type: '', priority: '', assignee_id
 export function SearchPage({ query }: Props) {
   const { activeProjectId } = useAppStore()
   const [detailId, setDetailId] = useState<string | null>(null)
-  const [page, setPage] = useState(0)
+  const [pageState, setPageState] = useState({ scope: '', page: 0 })
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   const [showFilters, setShowFilters] = useState(false)
-
-  // queryまたはフィルターが変わったらページをリセット
-  useEffect(() => { setPage(0) }, [query, filters])
-
-  const effectivePage = query.length >= 2 ? page : 0
+  const searchScope = JSON.stringify({ query, filters })
+  const effectivePage =
+    query.length >= 2 && pageState.scope === searchScope ? pageState.page : 0
 
   const hasFilters = Object.values(filters).some(Boolean)
 
@@ -247,7 +245,7 @@ export function SearchPage({ query }: Props) {
             className="mt-4 flex items-center justify-between"
           >
             <button
-              onClick={() => setPage(p => Math.max(0, p - 1))}
+              onClick={() => setPageState({ scope: searchScope, page: Math.max(0, effectivePage - 1) })}
               disabled={effectivePage === 0}
               className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
               aria-label="前のページ"
@@ -266,7 +264,7 @@ export function SearchPage({ query }: Props) {
                   return (
                     <button
                       key={i}
-                      onClick={() => setPage(i)}
+                      onClick={() => setPageState({ scope: searchScope, page: i })}
                       aria-current={i === effectivePage ? 'page' : undefined}
                       className={`w-8 h-8 text-sm rounded-lg ${
                         i === effectivePage
@@ -289,7 +287,7 @@ export function SearchPage({ query }: Props) {
             </div>
 
             <button
-              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              onClick={() => setPageState({ scope: searchScope, page: Math.min(totalPages - 1, effectivePage + 1) })}
               disabled={effectivePage >= totalPages - 1}
               className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
               aria-label="次のページ"

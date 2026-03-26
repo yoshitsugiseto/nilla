@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAttachments, uploadAttachment, deleteAttachment } from '../../api/attachments'
 import { Paperclip, Trash2, Upload } from 'lucide-react'
-import { useToast } from '../common/Toast'
+import { useToast } from '../common/useToast'
 
 interface Props {
   issueId: string

@@ -5,7 +5,7 @@ import { getProjectMembers } from '../../api/workspaces'
 import { getTemplates } from '../../api/templates'
 import { getLabels } from '../../api/labels'
 import type { Issue, IssueType, IssuePriority, UpdateIssue } from '../../types'
-import { useToast } from '../common/Toast'
+import { useToast } from '../common/useToast'
 import { extractErrorMessage } from '../../api/client'
 
 interface Props {
@@ -111,7 +111,7 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
       const data: UpdateIssue = {
         ...form,
         type: effectiveType,
-        assignee_id: form.assignee_id || undefined,
+        assignee_id: form.assignee_id || null,
         points: form.points ? parseInt(form.points) : undefined,
         parent_id: form.parent_id || null,
         epic_id: form.epic_id || null,

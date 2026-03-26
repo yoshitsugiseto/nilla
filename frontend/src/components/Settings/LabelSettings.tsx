@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Trash2, Pencil, Check, X, Tag } from 'lucide-react'
 import { getLabels, createLabel, updateLabel, deleteLabel } from '../../api/labels'
-import { useToast } from '../common/Toast'
+import { useToast } from '../common/useToast'
 
 interface Props {
   projectId: string

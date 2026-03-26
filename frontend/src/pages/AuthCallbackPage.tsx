@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import axios from 'axios'
 import { useAuthStore } from '../store/auth'
 
@@ -12,17 +12,15 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 export function AuthCallbackPage() {
   const { setAuth } = useAuthStore()
-  const [error, setError] = useState<string | null>(null)
+  const params = new URLSearchParams(window.location.search)
+  const code = params.get('code')
+  const errorCode = params.get('error')
+  const error = errorCode
+    ? (ERROR_MESSAGES[errorCode] ?? `認証エラー: ${errorCode}`)
+    : null
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const code = params.get('code')
-    const errorCode = params.get('error')
-
-    if (errorCode) {
-      setError(ERROR_MESSAGES[errorCode] ?? `認証エラー: ${errorCode}`)
-      return
-    }
+    if (error) return
 
     if (!code) {
       window.location.href = '/'
@@ -47,9 +45,9 @@ export function AuthCallbackPage() {
           })
       })
       .catch(() => {
-        setError('ログインに失敗しました。もう一度お試しください。')
+        window.location.href = '/auth/callback?error=session_error'
       })
-  }, [setAuth])
+  }, [code, error, setAuth])
 
   if (error) {
     return (

@@ -182,6 +182,31 @@ async fn complete_sprint_done_issues_stay() {
 }
 
 #[tokio::test]
+async fn complete_sprint_rejects_cross_project_next_sprint() {
+    let app = common::setup_app().await;
+    let pid_a = common::create_project(&app, "P1", "SP1").await;
+    let pid_b = common::create_project(&app, "P2", "SP2").await;
+    let sid_a = common::create_sprint(&app, &pid_a, "Sprint A").await;
+    let sid_b = common::create_sprint(&app, &pid_b, "Sprint B").await;
+
+    common::send(
+        &app,
+        common::post(&format!("/api/sprints/{sid_a}/start"), json!({})),
+    )
+    .await;
+
+    let (status, _) = common::send(
+        &app,
+        common::post(
+            &format!("/api/sprints/{sid_a}/complete"),
+            json!({ "next_sprint_id": sid_b }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn delete_sprint_unassigns_issues() {
     let app = common::setup_app().await;
     let pid = common::create_project(&app, "P", "SP").await;

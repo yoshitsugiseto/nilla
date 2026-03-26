@@ -192,6 +192,33 @@ async fn list_issues_filter_by_backlog() {
 }
 
 #[tokio::test]
+async fn list_issues_filter_by_unassigned() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+
+    common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Assigned", "assignee_id": common::TEST_USER_ID }),
+        ),
+    )
+    .await;
+    common::create_issue(&app, &pid, "Unassigned").await;
+
+    let (_, _, json) = common::send_with_headers(
+        &app,
+        common::get(&format!(
+            "/api/projects/{pid}/issues?assignee_id=__unassigned__"
+        )),
+    )
+    .await;
+    let items = json.as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["title"], "Unassigned");
+}
+
+#[tokio::test]
 async fn list_issues_search_query() {
     let app = common::setup_app().await;
     let pid = common::create_project(&app, "P", "PI").await;
@@ -316,6 +343,96 @@ async fn update_issue_fields() {
     assert_eq!(json["description"], "Some description");
     assert_eq!(json["priority"], "critical");
     assert_eq!(json["points"], 5);
+}
+
+#[tokio::test]
+async fn update_issue_can_clear_assignee() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+
+    let (_, created) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Assigned", "assignee_id": common::TEST_USER_ID }),
+        ),
+    )
+    .await;
+    let iid = created["id"].as_str().unwrap().to_string();
+
+    let (status, json) = common::send(
+        &app,
+        common::put(&format!("/api/issues/{iid}"), json!({ "assignee_id": null })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(json["assignee_id"].is_null());
+}
+
+#[tokio::test]
+async fn create_issue_with_cross_project_sprint_returns_400() {
+    let app = common::setup_app().await;
+    let pid_a = common::create_project(&app, "P1", "P1").await;
+    let pid_b = common::create_project(&app, "P2", "P2").await;
+    let sid_b = common::create_sprint(&app, &pid_b, "Sprint B").await;
+
+    let (status, _) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid_a}/issues"),
+            json!({ "title": "Cross sprint", "sprint_id": sid_b }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn update_issue_parent_must_be_story() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let iid = common::create_issue(&app, &pid, "Child").await;
+    let task_id = common::create_issue(&app, &pid, "Task").await;
+
+    let (status, _) = common::send(
+        &app,
+        common::put(
+            &format!("/api/issues/{iid}"),
+            json!({ "parent_id": task_id }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn update_issue_epic_must_be_epic() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let iid = common::create_issue(&app, &pid, "Task").await;
+    let (_, story) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Story", "type": "story" }),
+        ),
+    )
+    .await
+    ;
+    let story_id = story["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let (status, _) = common::send(
+        &app,
+        common::put(
+            &format!("/api/issues/{iid}"),
+            json!({ "epic_id": story_id }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

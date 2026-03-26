@@ -112,8 +112,8 @@ export interface IssueLink {
   linked_issue_id: string
   linked_issue_number: number
   linked_issue_title: string
-  linked_issue_status: string
-  linked_issue_type: string
+  linked_issue_status: IssueStatus
+  linked_issue_type: IssueType
   created_at: string
 }
 
@@ -179,7 +179,7 @@ export interface UpdateIssue {
   status?: IssueStatus
   priority?: IssuePriority
   points?: number
-  assignee_id?: string
+  assignee_id?: string | null
   labels?: string[]
   sprint_id?: string | null
   parent_id?: string | null

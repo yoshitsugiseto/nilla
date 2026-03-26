@@ -6,7 +6,7 @@ import { getIssues } from '../api/issues'
 import { useAppStore } from '../store'
 import { Modal } from '../components/common/Modal'
 import { BurndownChart } from '../components/Board/BurndownChart'
-import { useToast } from '../components/common/Toast'
+import { useToast } from '../components/common/useToast'
 import { extractErrorMessage } from '../api/client'
 import { deadlineLabel } from '../utils/date'
 import type { Issue, Sprint, IssueType } from '../types'
@@ -21,7 +21,7 @@ interface SprintReportData {
 }
 
 const TYPE_LABELS: Record<IssueType, string> = {
-  story: 'Story', task: 'Task', bug: 'Bug', spike: 'Spike',
+  epic: 'Epic', story: 'Story', task: 'Task', bug: 'Bug', spike: 'Spike',
 }
 
 function SprintReportModal({

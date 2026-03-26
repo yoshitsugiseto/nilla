@@ -1,7 +1,8 @@
 import { describe, test, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ToastProvider, useToast } from '../components/common/Toast'
+import { ToastProvider } from '../components/common/Toast'
+import { useToast } from '../components/common/useToast'
 
 function ShowToastButton({ message, type }: { message: string; type?: 'success' | 'error' | 'info' }) {
   const showToast = useToast()

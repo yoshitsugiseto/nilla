@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useToast } from '../common/Toast'
+import { useToast } from '../common/useToast'
 import { createWorkspace } from '../../api/workspaces'
 
 interface NewWorkspaceFormProps {

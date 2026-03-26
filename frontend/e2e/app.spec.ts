@@ -50,7 +50,7 @@ async function mockAuth(page: Page) {
   )
   await page.route('**/api/auth/me', route => route.fulfill({ json: TEST_USER }))
   await page.route('**/api/auth/logout', route => route.fulfill({ status: 204 }))
-  await page.routeWebSocket('**/api/ws**', _ws => { /* accept, no messages */ })
+  await page.routeWebSocket('**/api/ws**', () => { /* accept, no messages */ })
 }
 
 async function mockEmptyApi(page: Page) {

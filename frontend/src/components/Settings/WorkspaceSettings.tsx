@@ -10,7 +10,7 @@ import {
   getUsers,
 } from '../../api/workspaces'
 import { Avatar } from '../common/Avatar'
-import { useToast } from '../common/Toast'
+import { useToast } from '../common/useToast'
 import { useAuthStore } from '../../store/auth'
 
 type Role = 'owner' | 'admin' | 'member' | 'viewer'

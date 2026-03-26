@@ -20,6 +20,8 @@ use crate::{
     },
 };
 
+const UNASSIGNED_FILTER: &str = "__unassigned__";
+
 const ISSUE_SELECT: &str =
     "SELECT i.id, i.project_id, i.sprint_id, i.parent_id, i.epic_id, e.title as epic_title, i.number, i.title, i.description, i.type, i.status, i.priority, i.points, i.assignee_id, u.name as assignee_name, u.avatar_url as assignee_avatar_url, i.labels, i.position, i.due_date, i.created_at, i.updated_at FROM issues i LEFT JOIN users u ON i.assignee_id = u.id LEFT JOIN issues e ON i.epic_id = e.id";
 const GET_ISSUE_SQL: &str =
@@ -85,6 +87,84 @@ async fn get_project_id_for_issue(pool: &SqlitePool, issue_id: &str) -> Result<S
         .ok_or(AppError::NotFound)
 }
 
+async fn ensure_sprint_belongs_to_project(
+    pool: &SqlitePool,
+    project_id: &str,
+    sprint_id: &str,
+) -> Result<()> {
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sprints WHERE id = ? AND project_id = ?)",
+    )
+    .bind(sprint_id)
+    .bind(project_id)
+    .fetch_one(pool)
+    .await?;
+
+    if exists {
+        Ok(())
+    } else {
+        Err(AppError::BadRequest(
+            "Sprint must belong to the same project".to_string(),
+        ))
+    }
+}
+
+async fn ensure_parent_is_story(
+    pool: &SqlitePool,
+    project_id: &str,
+    issue_id: Option<&str>,
+    parent_id: &str,
+) -> Result<()> {
+    if issue_id == Some(parent_id) {
+        return Err(AppError::BadRequest(
+            "Issue cannot be its own parent".to_string(),
+        ));
+    }
+
+    let parent_type: Option<String> =
+        sqlx::query_scalar("SELECT type FROM issues WHERE id = ? AND project_id = ?")
+            .bind(parent_id)
+            .bind(project_id)
+            .fetch_optional(pool)
+            .await?;
+
+    match parent_type.as_deref() {
+        Some("story") => Ok(()),
+        Some(_) => Err(AppError::BadRequest(
+            "Parent issue must be a story".to_string(),
+        )),
+        None => Err(AppError::BadRequest("Parent issue not found".to_string())),
+    }
+}
+
+async fn ensure_epic_is_epic(
+    pool: &SqlitePool,
+    project_id: &str,
+    issue_id: Option<&str>,
+    epic_id: &str,
+) -> Result<()> {
+    if issue_id == Some(epic_id) {
+        return Err(AppError::BadRequest(
+            "Issue cannot be its own epic".to_string(),
+        ));
+    }
+
+    let epic_type: Option<String> =
+        sqlx::query_scalar("SELECT type FROM issues WHERE id = ? AND project_id = ?")
+            .bind(epic_id)
+            .bind(project_id)
+            .fetch_optional(pool)
+            .await?;
+
+    match epic_type.as_deref() {
+        Some("epic") => Ok(()),
+        Some(_) => Err(AppError::BadRequest(
+            "Epic issue must be of type epic".to_string(),
+        )),
+        None => Err(AppError::BadRequest("Epic issue not found".to_string())),
+    }
+}
+
 /// WHERE句と引数リストを構築する共通ヘルパー
 fn build_issue_where(project_id: &str, filters: &IssueFilters) -> (String, Vec<String>) {
     let mut clause = "WHERE i.project_id = ?".to_string();
@@ -111,8 +191,12 @@ fn build_issue_where(project_id: &str, filters: &IssueFilters) -> (String, Vec<S
         args.push(priority.clone());
     }
     if let Some(assignee_id) = &filters.assignee_id {
-        clause.push_str(" AND i.assignee_id = ?");
-        args.push(assignee_id.clone());
+        if assignee_id == UNASSIGNED_FILTER {
+            clause.push_str(" AND i.assignee_id IS NULL");
+        } else {
+            clause.push_str(" AND i.assignee_id = ?");
+            args.push(assignee_id.clone());
+        }
     }
     if let Some(q) = &filters.q {
         clause.push_str(" AND (i.title LIKE ? OR i.description LIKE ? OR CAST(i.number AS TEXT) LIKE ?)");
@@ -198,51 +282,19 @@ pub async fn create_issue(
     let labels_json = serde_json::to_string(&labels)
         .map_err(|e| AppError::Internal(e.into()))?;
 
-    let mut tx = pool.begin().await?;
+    if let Some(ref sprint_id) = body.sprint_id {
+        ensure_sprint_belongs_to_project(&pool, &project_id, sprint_id).await?;
+    }
 
-    // Validate parent issue exists and is a story
     if let Some(ref parent_id) = body.parent_id {
-        let parent_type: Option<String> =
-            sqlx::query_scalar("SELECT type FROM issues WHERE id = ? AND project_id = ?")
-                .bind(parent_id)
-                .bind(&project_id)
-                .fetch_optional(&mut *tx)
-                .await?;
-        match parent_type.as_deref() {
-            Some("story") => {}
-            Some(_) => {
-                return Err(AppError::BadRequest(
-                    "Parent issue must be a story".to_string(),
-                ))
-            }
-            None => {
-                return Err(AppError::BadRequest(
-                    "Parent issue not found".to_string(),
-                ))
-            }
-        }
+        ensure_parent_is_story(&pool, &project_id, None, parent_id).await?;
     }
 
-    // Validate epic_id points to an actual epic
     if let Some(ref epic_id) = body.epic_id {
-        let epic_type: Option<String> =
-            sqlx::query_scalar("SELECT type FROM issues WHERE id = ? AND project_id = ?")
-                .bind(epic_id)
-                .bind(&project_id)
-                .fetch_optional(&mut *tx)
-                .await?;
-        match epic_type.as_deref() {
-            Some("epic") => {}
-            Some(_) => {
-                return Err(AppError::BadRequest(
-                    "Epic issue must be of type epic".to_string(),
-                ))
-            }
-            None => {
-                return Err(AppError::BadRequest("Epic issue not found".to_string()))
-            }
-        }
+        ensure_epic_is_epic(&pool, &project_id, None, epic_id).await?;
     }
+
+    let mut tx = pool.begin().await?;
 
     let number: i64 = sqlx::query_scalar(
         "SELECT COALESCE(MAX(number), 0) + 1 FROM issues WHERE project_id = ?",
@@ -331,6 +383,15 @@ pub async fn update_issue(
             return Err(AppError::BadRequest("points must be between 0 and 999".to_string()));
         }
     }
+    if let Some(Some(ref sprint_id)) = body.sprint_id {
+        ensure_sprint_belongs_to_project(&pool, &project_id, sprint_id).await?;
+    }
+    if let Some(Some(ref parent_id)) = body.parent_id {
+        ensure_parent_is_story(&pool, &project_id, Some(&id), parent_id).await?;
+    }
+    if let Some(Some(ref epic_id)) = body.epic_id {
+        ensure_epic_is_epic(&pool, &project_id, Some(&id), epic_id).await?;
+    }
 
     let current = sqlx::query_as::<_, IssueRow>(GET_ISSUE_SQL)
         .bind(&id)
@@ -346,28 +407,31 @@ pub async fn update_issue(
     let priority = body.priority.map(|p| p.to_string()).unwrap_or(current.priority.clone());
     let points = body.points.or(current.points);
     let new_assignee_id_from_body = body.assignee_id.clone();
-    let assignee_id = body.assignee_id.or(current.assignee_id.clone());
+    let assignee_id = match body.assignee_id.clone() {
+        Some(value) => value,
+        None => current.assignee_id.clone(),
+    };
     let labels_json = match body.labels {
         Some(l) => serde_json::to_string(&l).map_err(|e| AppError::Internal(e.into()))?,
         None => current.labels.clone().unwrap_or_else(|| "[]".to_string()),
     };
-    let sprint_id = if body.sprint_id.is_some() {
-        body.sprint_id.clone()
+    let sprint_id = if let Some(value) = body.sprint_id.clone() {
+        value
     } else {
         current.sprint_id.clone()
     };
-    let parent_id = if body.parent_id.is_some() {
-        body.parent_id.clone()
+    let parent_id = if let Some(value) = body.parent_id.clone() {
+        value
     } else {
         current.parent_id.clone()
     };
-    let epic_id = if body.epic_id.is_some() {
-        body.epic_id.clone()
+    let epic_id = if let Some(value) = body.epic_id.clone() {
+        value
     } else {
         current.epic_id.clone()
     };
-    let due_date = if body.due_date.is_some() {
-        body.due_date
+    let due_date = if let Some(value) = body.due_date {
+        value
     } else {
         current.due_date
     };
@@ -417,7 +481,8 @@ pub async fn update_issue(
 
     // Notify new assignee (if changed and not self-assign)
     let assignee_changed = new_assignee_id_from_body.is_some()
-        && new_assignee_id_from_body.as_deref() != current.assignee_id.as_deref();
+        && new_assignee_id_from_body.as_ref().and_then(|value| value.as_deref())
+            != current.assignee_id.as_deref();
     if assignee_changed {
         if let Some(ref new_assignee) = assignee_id {
             if new_assignee != &user_id.0 {
@@ -529,6 +594,9 @@ pub async fn update_issue_sprint(
 ) -> Result<Json<Issue>> {
     let project_id = get_project_id_for_issue(&pool, &id).await?;
     check_project_access(&pool, &user_id.0, &project_id).await?;
+    if let Some(ref sprint_id) = body.sprint_id {
+        ensure_sprint_belongs_to_project(&pool, &project_id, sprint_id).await?;
+    }
 
     let result =
         sqlx::query("UPDATE issues SET sprint_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
@@ -919,6 +987,11 @@ pub async fn bulk_update_issues(
         return Err(AppError::BadRequest(
             "Cannot update more than 100 issues at once".to_string(),
         ));
+    }
+    if let Some(ref sprint_id) = body.sprint_id {
+        if sprint_id != "backlog" {
+            ensure_sprint_belongs_to_project(&pool, &project_id, sprint_id).await?;
+        }
     }
 
     let mut tx = pool.begin().await?;

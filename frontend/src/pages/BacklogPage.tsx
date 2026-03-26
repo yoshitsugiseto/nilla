@@ -13,7 +13,7 @@ import { IssueDetail } from '../components/Issue/IssueDetail'
 import { TypeIcon, PriorityBadge, StatusBadge } from '../components/common/Badge'
 import { Avatar } from '../components/common/Avatar'
 import { ConfirmDialog } from '../components/common/ConfirmDialog'
-import { useToast } from '../components/common/Toast'
+import { useToast } from '../components/common/useToast'
 import { deadlineLabel } from '../utils/date'
 import type { Issue, IssueStatus } from '../types'
 

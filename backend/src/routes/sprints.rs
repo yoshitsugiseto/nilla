@@ -34,6 +34,36 @@ async fn get_project_id_for_sprint(pool: &SqlitePool, sprint_id: &str) -> Result
         .ok_or(AppError::NotFound)
 }
 
+async fn validate_next_sprint_target(
+    pool: &SqlitePool,
+    current_sprint_id: &str,
+    project_id: &str,
+    next_sprint_id: &str,
+) -> Result<()> {
+    if next_sprint_id == current_sprint_id {
+        return Err(AppError::BadRequest(
+            "next_sprint_id must be different from the current sprint".to_string(),
+        ));
+    }
+
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT status FROM sprints WHERE id = ? AND project_id = ?")
+            .bind(next_sprint_id)
+            .bind(project_id)
+            .fetch_optional(pool)
+            .await?;
+
+    match row {
+        Some((status,)) if status != "completed" => Ok(()),
+        Some(_) => Err(AppError::BadRequest(
+            "Cannot move issues to a completed sprint".to_string(),
+        )),
+        None => Err(AppError::BadRequest(
+            "next_sprint_id must belong to the same project".to_string(),
+        )),
+    }
+}
+
 const LIST_SPRINTS_SQL: &str =
     "SELECT id, project_id, name, goal, status, start_date, end_date, created_at, updated_at FROM sprints WHERE project_id = ? ORDER BY created_at DESC";
 const GET_SPRINT_SQL: &str =
@@ -237,6 +267,9 @@ pub async fn complete_sprint(
     }
 
     let next_sprint_id = body.and_then(|b| b.next_sprint_id.clone());
+    if let Some(ref next_sprint_id) = next_sprint_id {
+        validate_next_sprint_target(&pool, &id, &project_id, next_sprint_id).await?;
+    }
 
     let mut tx = pool.begin().await?;
 

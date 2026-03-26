@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { updateIssueStatus, reorderIssues } from '../../api/issues'
 import type { Issue, IssueStatus } from '../../types'
 import { Column } from './Column'
-import { useToast } from '../common/Toast'
+import { useToast } from '../common/useToast'
 
 const STATUSES: IssueStatus[] = ['todo', 'in_progress', 'in_review', 'done']
 

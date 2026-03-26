@@ -9,7 +9,7 @@ import { IssueComments } from './IssueComments'
 import { IssueFiles } from './IssueFiles'
 import { IssueActivity } from './IssueActivity'
 import { Modal } from '../common/Modal'
-import { useToast } from '../common/Toast'
+import { useToast } from '../common/useToast'
 import type { IssueStatus, IssueLinkType } from '../../types'
 import { Pencil, MessageSquare, Clock, Plus, ListTodo, Paperclip, Link2, X } from 'lucide-react'
 
@@ -286,7 +286,7 @@ export function IssueDetail({ issueId, projectId }: Props) {
                   <span className={`text-xs font-medium px-1.5 py-0.5 rounded shrink-0 ${LINK_TYPE_COLORS[link.link_type]}`}>
                     {LINK_TYPE_LABELS[link.link_type]}
                   </span>
-                  <TypeIcon type={link.linked_issue_type as any} />
+                  <TypeIcon type={link.linked_issue_type} />
                   <span className="text-xs text-gray-400 font-mono shrink-0">#{link.linked_issue_number}</span>
                   <span className="flex-1 text-gray-800 truncate">{link.linked_issue_title}</span>
                   <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${

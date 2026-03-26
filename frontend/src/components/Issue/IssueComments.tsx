@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getComments, createComment } from '../../api/issues'
 import { Avatar } from '../common/Avatar'
-import { useToast } from '../common/Toast'
+import { useToast } from '../common/useToast'
 
 interface Props {
   issueId: string

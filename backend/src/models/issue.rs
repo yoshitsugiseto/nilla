@@ -2,7 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use chrono::{NaiveDate, NaiveDateTime};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 // ─── Issue Status Enum ───────────────────────────────────────────────────────
 
@@ -262,12 +262,17 @@ pub struct UpdateIssue {
     pub status: Option<IssueStatus>,
     pub priority: Option<IssuePriority>,
     pub points: Option<i64>,
-    pub assignee_id: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_nullable_field")]
+    pub assignee_id: Option<Option<String>>,
     pub labels: Option<Vec<String>>,
-    pub sprint_id: Option<String>,
-    pub parent_id: Option<String>,
-    pub epic_id: Option<String>,
-    pub due_date: Option<NaiveDate>,
+    #[serde(default, deserialize_with = "deserialize_nullable_field")]
+    pub sprint_id: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_nullable_field")]
+    pub parent_id: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_nullable_field")]
+    pub epic_id: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_nullable_field")]
+    pub due_date: Option<Option<NaiveDate>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -318,4 +323,14 @@ pub struct BulkUpdateIssues {
     pub status: Option<IssueStatus>,
     pub sprint_id: Option<String>, // "backlog" = set NULL
     pub assignee_id: Option<String>, // "" = clear
+}
+
+fn deserialize_nullable_field<'de, D, T>(
+    deserializer: D,
+) -> std::result::Result<Option<Option<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Some(Option::<T>::deserialize(deserializer)?))
 }
