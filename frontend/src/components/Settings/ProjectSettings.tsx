@@ -5,6 +5,7 @@ import { Avatar } from '../common/Avatar'
 import { useToast } from '../common/useToast'
 import { useAuthStore } from '../../store/auth'
 import type { ProjectRole } from '../../types'
+import { resolveProjectRole } from '../../utils/projectRoles'
 
 const ROLE_OPTIONS: { value: ProjectRole; label: string; icon: React.ReactNode }[] = [
   { value: 'admin', label: 'Admin', icon: <Shield size={12} /> },
@@ -34,7 +35,7 @@ export function ProjectSettings({ projectId }: Props) {
   })
 
   const myMember = members.find(member => member.user_id === user?.id)
-  const isProjectAdmin = myMember?.role === 'admin'
+  const isProjectAdmin = resolveProjectRole(myMember?.role, myMember?.workspace_role) === 'admin'
 
   const roleMutation = useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: ProjectRole }) =>
@@ -65,55 +66,60 @@ export function ProjectSettings({ projectId }: Props) {
           <div className="p-6 text-center text-gray-400 text-sm">読み込み中...</div>
         ) : (
           <ul className="divide-y divide-gray-100">
-            {members.map(member => (
-              <li key={member.user_id} className="flex items-center gap-3 px-4 py-3">
-                <Avatar name={member.name} avatarUrl={member.avatar_url ?? undefined} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-800 truncate">{member.name}</span>
-                    {member.user_id === user?.id && (
-                      <span className="text-xs text-blue-500">(あなた)</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs text-gray-400">
-                      workspace: {member.workspace_role}
-                    </span>
-                    <span className="text-xs text-gray-300">/</span>
-                    <span className="text-xs text-gray-400">
-                      {member.inherited ? 'project: 継承' : 'project: override'}
-                    </span>
-                  </div>
-                </div>
+            {members.map(member => {
+              const effectiveRole = resolveProjectRole(member.role, member.workspace_role) ?? 'viewer'
+              const effectiveRoleOption = ROLE_OPTIONS.find(option => option.value === effectiveRole)
 
-                {isProjectAdmin ? (
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={member.role}
-                      onChange={e => roleMutation.mutate({ userId: member.user_id, role: e.target.value as ProjectRole })}
-                      className="text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                    >
-                      {ROLE_OPTIONS.map(option => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={() => clearMutation.mutate(member.user_id)}
-                      disabled={member.inherited || clearMutation.isPending}
-                      className="p-1 text-gray-300 hover:text-gray-600 disabled:opacity-30"
-                      aria-label="継承に戻す"
-                    >
-                      <Undo2 size={13} />
-                    </button>
+              return (
+                <li key={member.user_id} className="flex items-center gap-3 px-4 py-3">
+                  <Avatar name={member.name} avatarUrl={member.avatar_url ?? undefined} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-800 truncate">{member.name}</span>
+                      {member.user_id === user?.id && (
+                        <span className="text-xs text-blue-500">(あなた)</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-gray-400">
+                        workspace: {member.workspace_role}
+                      </span>
+                      <span className="text-xs text-gray-300">/</span>
+                      <span className="text-xs text-gray-400">
+                        {member.inherited ? 'project: 継承' : 'project: override'}
+                      </span>
+                    </div>
                   </div>
-                ) : (
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${roleColor[member.role]}`}>
-                    {ROLE_OPTIONS.find(option => option.value === member.role)?.icon}
-                    {ROLE_OPTIONS.find(option => option.value === member.role)?.label}
-                  </span>
-                )}
-              </li>
-            ))}
+
+                  {isProjectAdmin ? (
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={effectiveRole}
+                        onChange={e => roleMutation.mutate({ userId: member.user_id, role: e.target.value as ProjectRole })}
+                        className="text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      >
+                        {ROLE_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => clearMutation.mutate(member.user_id)}
+                        disabled={member.inherited || clearMutation.isPending}
+                        className="p-1 text-gray-300 hover:text-gray-600 disabled:opacity-30"
+                        aria-label="継承に戻す"
+                      >
+                        <Undo2 size={13} />
+                      </button>
+                    </div>
+                  ) : (
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${roleColor[effectiveRole]}`}>
+                      {effectiveRoleOption?.icon}
+                      {effectiveRoleOption?.label}
+                    </span>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         )}
       </div>

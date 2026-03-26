@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { getProjectMembers } from '../api/workspaces'
 import { useAuthStore } from '../store/auth'
 import type { ProjectRole } from '../types'
+import { normalizeProjectRole } from '../utils/projectRoles'
 
 function canEdit(role?: ProjectRole) {
   return role === 'admin' || role === 'editor'
@@ -18,7 +19,7 @@ export function useProjectPermissions(projectId?: string | null) {
   })
 
   const member = members.find((item) => item.user_id === user?.id)
-  const role = member?.role
+  const role = normalizeProjectRole(member?.role)
 
   return {
     role,

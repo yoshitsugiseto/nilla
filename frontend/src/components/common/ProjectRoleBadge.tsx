@@ -1,4 +1,5 @@
 import type { ProjectRole } from '../../types'
+import { normalizeProjectRole } from '../../utils/projectRoles'
 
 const ROLE_META: Record<ProjectRole, { label: string; className: string }> = {
   admin: {
@@ -16,13 +17,14 @@ const ROLE_META: Record<ProjectRole, { label: string; className: string }> = {
 }
 
 interface Props {
-  role?: ProjectRole
+  role?: string | null
 }
 
 export function ProjectRoleBadge({ role }: Props) {
-  if (!role) return null
+  const normalizedRole = normalizeProjectRole(role)
+  if (!normalizedRole) return null
 
-  const meta = ROLE_META[role]
+  const meta = ROLE_META[normalizedRole]
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${meta.className}`}>
       {meta.label}
