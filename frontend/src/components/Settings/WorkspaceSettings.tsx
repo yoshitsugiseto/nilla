@@ -12,6 +12,7 @@ import {
 import { Avatar } from '../common/Avatar'
 import { useToast } from '../common/useToast'
 import { useAuthStore } from '../../store/auth'
+import { useAppStore } from '../../store'
 
 type Role = 'owner' | 'admin' | 'member' | 'viewer'
 
@@ -37,6 +38,7 @@ export function WorkspaceSettings({ workspaceId }: Props) {
   const qc = useQueryClient()
   const showToast = useToast()
   const { user } = useAuthStore()
+  const { activeProjectId } = useAppStore()
 
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState('')
@@ -60,6 +62,11 @@ export function WorkspaceSettings({ workspaceId }: Props) {
   const myRole = members.find(m => m.user_id === user?.id)?.role as Role | undefined
   const isAdmin = myRole === 'owner' || myRole === 'admin'
 
+  const invalidateProjectMembers = () => {
+    if (!activeProjectId) return
+    qc.invalidateQueries({ queryKey: ['project-members', activeProjectId] })
+  }
+
   const renameMutation = useMutation({
     mutationFn: (name: string) => updateWorkspace(workspaceId, name),
     onSuccess: () => {
@@ -74,6 +81,7 @@ export function WorkspaceSettings({ workspaceId }: Props) {
     mutationFn: () => addWorkspaceMember(workspaceId, addUserId, addRole),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workspace-members', workspaceId] })
+      invalidateProjectMembers()
       setAddUserId('')
       setAddRole('member')
       showToast('メンバーを追加しました', 'success')
@@ -86,6 +94,7 @@ export function WorkspaceSettings({ workspaceId }: Props) {
       updateMemberRole(workspaceId, userId, role),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workspace-members', workspaceId] })
+      invalidateProjectMembers()
     },
     onError: () => showToast('ロールの変更に失敗しました', 'error'),
   })
@@ -94,6 +103,7 @@ export function WorkspaceSettings({ workspaceId }: Props) {
     mutationFn: (userId: string) => removeWorkspaceMember(workspaceId, userId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workspace-members', workspaceId] })
+      invalidateProjectMembers()
       showToast('メンバーを削除しました', 'success')
     },
     onError: () => showToast('削除に失敗しました', 'error'),
