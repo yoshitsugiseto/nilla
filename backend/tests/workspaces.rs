@@ -416,6 +416,196 @@ async fn test_member_cannot_remove_another_member() {
 }
 
 #[tokio::test]
+async fn test_project_member_override_changes_effective_role() {
+    let (app, pool) = common::setup_app_with_pool().await;
+    common::insert_user_b(&pool).await;
+
+    let ws_id = common::create_workspace(&app).await;
+    let pid = common::create_project_in(&app, "Proj", "PR", &ws_id).await;
+
+    common::send(
+        &app,
+        common::post(
+            &format!("/api/workspaces/{ws_id}/members"),
+            json!({ "user_id": common::TEST_USER_B_ID }),
+        ),
+    )
+    .await;
+
+    let (status, json) = common::send(
+        &app,
+        common::patch(
+            &format!("/api/projects/{pid}/members/{}", common::TEST_USER_B_ID),
+            json!({ "role": "viewer" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["role"], "viewer");
+    assert_eq!(json["workspace_role"], "member");
+    assert_eq!(json["inherited"], false);
+}
+
+#[tokio::test]
+async fn test_project_viewer_can_read_but_cannot_create_issue() {
+    let (app, pool) = common::setup_app_with_pool().await;
+    common::insert_user_b(&pool).await;
+
+    let ws_id = common::create_workspace(&app).await;
+    let pid = common::create_project_in(&app, "Proj", "PR", &ws_id).await;
+
+    common::send(
+        &app,
+        common::post(
+            &format!("/api/workspaces/{ws_id}/members"),
+            json!({ "user_id": common::TEST_USER_B_ID }),
+        ),
+    )
+    .await;
+    common::send(
+        &app,
+        common::patch(
+            &format!("/api/projects/{pid}/members/{}", common::TEST_USER_B_ID),
+            json!({ "role": "viewer" }),
+        ),
+    )
+    .await;
+
+    let token_b = common::token_for(common::TEST_USER_B_ID);
+    let (status, _) = common::send(&app, common::get_as(&format!("/api/projects/{pid}"), &token_b)).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, _) = common::send(
+        &app,
+        common::post_as(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Should fail" }),
+            &token_b,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_project_editor_cannot_update_project_settings() {
+    let (app, pool) = common::setup_app_with_pool().await;
+    common::insert_user_b(&pool).await;
+
+    let ws_id = common::create_workspace(&app).await;
+    let pid = common::create_project_in(&app, "Proj", "PR", &ws_id).await;
+
+    common::send(
+        &app,
+        common::post(
+            &format!("/api/workspaces/{ws_id}/members"),
+            json!({ "user_id": common::TEST_USER_B_ID }),
+        ),
+    )
+    .await;
+
+    let token_b = common::token_for(common::TEST_USER_B_ID);
+    let (status, _) = common::send(
+        &app,
+        common::put_as(
+            &format!("/api/projects/{pid}"),
+            json!({ "name": "Editor should fail" }),
+            &token_b,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_project_admin_can_update_project_settings() {
+    let (app, pool) = common::setup_app_with_pool().await;
+    common::insert_user_b(&pool).await;
+
+    let ws_id = common::create_workspace(&app).await;
+    let pid = common::create_project_in(&app, "Proj", "PR", &ws_id).await;
+
+    common::send(
+        &app,
+        common::post(
+            &format!("/api/workspaces/{ws_id}/members"),
+            json!({ "user_id": common::TEST_USER_B_ID }),
+        ),
+    )
+    .await;
+    common::send(
+        &app,
+        common::patch(
+            &format!("/api/projects/{pid}/members/{}", common::TEST_USER_B_ID),
+            json!({ "role": "admin" }),
+        ),
+    )
+    .await;
+
+    let token_b = common::token_for(common::TEST_USER_B_ID);
+    let (status, json) = common::send(
+        &app,
+        common::put_as(
+            &format!("/api/projects/{pid}"),
+            json!({ "name": "Project Admin Updated" }),
+            &token_b,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["name"], "Project Admin Updated");
+}
+
+#[tokio::test]
+async fn test_clearing_project_override_reverts_to_inherited_role() {
+    let (app, pool) = common::setup_app_with_pool().await;
+    common::insert_user_b(&pool).await;
+
+    let ws_id = common::create_workspace(&app).await;
+    let pid = common::create_project_in(&app, "Proj", "PR", &ws_id).await;
+
+    common::send(
+        &app,
+        common::post(
+            &format!("/api/workspaces/{ws_id}/members"),
+            json!({ "user_id": common::TEST_USER_B_ID }),
+        ),
+    )
+    .await;
+    common::send(
+        &app,
+        common::patch(
+            &format!("/api/projects/{pid}/members/{}", common::TEST_USER_B_ID),
+            json!({ "role": "viewer" }),
+        ),
+    )
+    .await;
+
+    let (status, json) = common::send(
+        &app,
+        common::delete(&format!(
+            "/api/projects/{pid}/members/{}",
+            common::TEST_USER_B_ID
+        )),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["ok"], true);
+
+    let (status, members) =
+        common::send(&app, common::get(&format!("/api/projects/{pid}/members"))).await;
+    assert_eq!(status, StatusCode::OK);
+    let member_b = members
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|member| member["user_id"] == common::TEST_USER_B_ID)
+        .unwrap();
+    assert_eq!(member_b["role"], "editor");
+    assert_eq!(member_b["inherited"], true);
+}
+
+#[tokio::test]
 async fn test_non_member_cannot_access_workspace() {
     let (app, pool) = common::setup_app_with_pool().await;
     common::insert_user_b(&pool).await;

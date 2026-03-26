@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::middleware::UserId,
+    db::{check_project_permission, ProjectPermission},
     error::{AppError, Result},
     realtime::RealtimeHub,
     storage::Storage,
@@ -82,20 +83,18 @@ impl AttachmentResponse {
     }
 }
 
-async fn check_issue_access(pool: &SqlitePool, user_id: &str, issue_id: &str) -> Result<()> {
-    let has_access: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM issues i JOIN projects p ON i.project_id = p.id JOIN workspace_members wm ON p.workspace_id = wm.workspace_id WHERE i.id = ? AND wm.user_id = ?)"
-    )
-    .bind(issue_id)
-    .bind(user_id)
-    .fetch_one(pool)
-    .await?;
-
-    if has_access {
-        Ok(())
-    } else {
-        Err(AppError::Forbidden)
-    }
+async fn check_issue_permission(
+    pool: &SqlitePool,
+    user_id: &str,
+    issue_id: &str,
+    required: ProjectPermission,
+) -> Result<()> {
+    let project_id: Option<String> = sqlx::query_scalar("SELECT project_id FROM issues WHERE id = ?")
+        .bind(issue_id)
+        .fetch_optional(pool)
+        .await?;
+    let project_id = project_id.ok_or(AppError::NotFound)?;
+    check_project_permission(pool, user_id, &project_id, required).await
 }
 
 pub async fn upload_attachment(
@@ -106,7 +105,7 @@ pub async fn upload_attachment(
     Path(issue_id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<Json<AttachmentResponse>> {
-    check_issue_access(&pool, &user_id.0, &issue_id).await?;
+    check_issue_permission(&pool, &user_id.0, &issue_id, ProjectPermission::Editor).await?;
 
     while let Some(field) = multipart
         .next_field()
@@ -228,7 +227,7 @@ pub async fn list_attachments(
     Extension(user_id): Extension<UserId>,
     Path(issue_id): Path<String>,
 ) -> Result<Json<Vec<AttachmentResponse>>> {
-    check_issue_access(&pool, &user_id.0, &issue_id).await?;
+    check_issue_permission(&pool, &user_id.0, &issue_id, ProjectPermission::Viewer).await?;
 
     let rows = sqlx::query_as::<_, Attachment>(
         "SELECT id, issue_id, uploaded_by, filename, content_type, size, storage_key, created_at FROM attachments WHERE issue_id = ? ORDER BY created_at ASC",
@@ -256,7 +255,13 @@ pub async fn download_attachment(
     .await?
     .ok_or(AppError::NotFound)?;
 
-    check_issue_access(&pool, &user_id.0, &attachment.issue_id).await?;
+    check_issue_permission(
+        &pool,
+        &user_id.0,
+        &attachment.issue_id,
+        ProjectPermission::Viewer,
+    )
+    .await?;
 
     let data = storage.get(&attachment.storage_key).await.map_err(|e| {
         tracing::error!("Storage get failed: {e}");
@@ -293,7 +298,13 @@ pub async fn delete_attachment(
     .await?
     .ok_or(AppError::NotFound)?;
 
-    check_issue_access(&pool, &user_id.0, &attachment.issue_id).await?;
+    check_issue_permission(
+        &pool,
+        &user_id.0,
+        &attachment.issue_id,
+        ProjectPermission::Editor,
+    )
+    .await?;
 
     // Only uploader can delete
     if attachment.uploaded_by != user_id.0 {

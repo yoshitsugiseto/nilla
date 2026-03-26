@@ -32,6 +32,11 @@ pub fn router() -> Router<AppState> {
             "/api/projects/{id}/members",
             get(workspaces::get_project_members),
         )
+        .route(
+            "/api/projects/{id}/members/{uid}",
+            patch(workspaces::update_project_member_role)
+                .delete(workspaces::clear_project_member_role),
+        )
         // Sprints
         .route(
             "/api/projects/{id}/sprints",

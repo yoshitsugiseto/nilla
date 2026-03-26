@@ -7,15 +7,16 @@ use sqlx::SqlitePool;
 
 use crate::{
     auth::middleware::UserId,
-    db::check_project_access,
+    db::{check_project_access, check_project_permission, ProjectPermission},
     error::{AppError, Result},
     models::workspace::{
-        AddMember, CreateWorkspace, UpdateMemberRole, UpdateWorkspace, UserInfo, Workspace,
-        WorkspaceMember,
+        AddMember, CreateWorkspace, ProjectMember, UpdateMemberRole, UpdateProjectMemberRole,
+        UpdateWorkspace, UserInfo, Workspace, WorkspaceMember,
     },
 };
 
 const INVALID_WORKSPACE_ROLE_ERROR: &str = "role must be one of: owner, admin, member, viewer";
+const INVALID_PROJECT_ROLE_ERROR: &str = "role must be one of: admin, editor, viewer";
 
 async fn check_workspace_access(
     pool: &SqlitePool,
@@ -354,15 +355,128 @@ pub async fn get_project_members(
     State(pool): State<SqlitePool>,
     Extension(user_id): Extension<UserId>,
     Path(project_id): Path<String>,
-) -> Result<Json<Vec<WorkspaceMember>>> {
+) -> Result<Json<Vec<ProjectMember>>> {
     check_project_access(&pool, &user_id.0, &project_id).await?;
 
-    let members = sqlx::query_as::<_, WorkspaceMember>(
-        "SELECT wm.workspace_id, wm.user_id, u.name, u.email, u.avatar_url, wm.role, wm.joined_at FROM workspace_members wm JOIN users u ON wm.user_id = u.id JOIN projects p ON wm.workspace_id = p.workspace_id WHERE p.id = ? ORDER BY wm.joined_at ASC"
+    let members = sqlx::query_as::<_, ProjectMember>(
+        r#"SELECT
+                wm.workspace_id,
+                p.id as project_id,
+                wm.user_id,
+                u.name,
+                u.email,
+                u.avatar_url,
+                COALESCE(
+                    pm.role,
+                    CASE wm.role
+                        WHEN 'owner' THEN 'admin'
+                        WHEN 'admin' THEN 'admin'
+                        WHEN 'member' THEN 'editor'
+                        ELSE 'viewer'
+                    END
+                ) as role,
+                wm.role as workspace_role,
+                CASE WHEN pm.role IS NULL THEN 1 ELSE 0 END as inherited,
+                wm.joined_at
+           FROM projects p
+           JOIN workspace_members wm ON p.workspace_id = wm.workspace_id
+           JOIN users u ON wm.user_id = u.id
+           LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = wm.user_id
+           WHERE p.id = ?
+           ORDER BY wm.joined_at ASC"#,
     )
     .bind(&project_id)
     .fetch_all(&pool)
     .await?;
 
     Ok(Json(members))
+}
+
+pub async fn update_project_member_role(
+    State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
+    Path((project_id, target_uid)): Path<(String, String)>,
+    Json(body): Json<UpdateProjectMemberRole>,
+) -> Result<Json<ProjectMember>> {
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Admin).await?;
+
+    let valid_roles = ["admin", "editor", "viewer"];
+    if !valid_roles.contains(&body.role.as_str()) {
+        return Err(AppError::BadRequest(INVALID_PROJECT_ROLE_ERROR.to_string()));
+    }
+
+    let workspace_id: Option<String> = sqlx::query_scalar("SELECT workspace_id FROM projects WHERE id = ?")
+        .bind(&project_id)
+        .fetch_optional(&pool)
+        .await?;
+    let workspace_id = workspace_id.ok_or(AppError::NotFound)?;
+
+    let is_workspace_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM workspace_members WHERE workspace_id = ? AND user_id = ?)",
+    )
+    .bind(&workspace_id)
+    .bind(&target_uid)
+    .fetch_one(&pool)
+    .await?;
+    if !is_workspace_member {
+        return Err(AppError::BadRequest(
+            "User must belong to the workspace before assigning a project role".to_string(),
+        ));
+    }
+
+    let now = Utc::now().to_rfc3339();
+    sqlx::query(
+        r#"INSERT INTO project_members (project_id, user_id, role, assigned_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(project_id, user_id)
+           DO UPDATE SET role = excluded.role, assigned_at = excluded.assigned_at"#,
+    )
+    .bind(&project_id)
+    .bind(&target_uid)
+    .bind(&body.role)
+    .bind(&now)
+    .execute(&pool)
+    .await?;
+
+    let member = sqlx::query_as::<_, ProjectMember>(
+        r#"SELECT
+                wm.workspace_id,
+                p.id as project_id,
+                wm.user_id,
+                u.name,
+                u.email,
+                u.avatar_url,
+                COALESCE(pm.role, 'viewer') as role,
+                wm.role as workspace_role,
+                CASE WHEN pm.role IS NULL THEN 1 ELSE 0 END as inherited,
+                wm.joined_at
+           FROM projects p
+           JOIN workspace_members wm ON p.workspace_id = wm.workspace_id
+           JOIN users u ON wm.user_id = u.id
+           LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = wm.user_id
+           WHERE p.id = ? AND wm.user_id = ?"#,
+    )
+    .bind(&project_id)
+    .bind(&target_uid)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or(AppError::NotFound)?;
+
+    Ok(Json(member))
+}
+
+pub async fn clear_project_member_role(
+    State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
+    Path((project_id, target_uid)): Path<(String, String)>,
+) -> Result<Json<serde_json::Value>> {
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Admin).await?;
+
+    sqlx::query("DELETE FROM project_members WHERE project_id = ? AND user_id = ?")
+        .bind(&project_id)
+        .bind(&target_uid)
+        .execute(&pool)
+        .await?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
 }

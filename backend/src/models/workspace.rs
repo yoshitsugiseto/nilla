@@ -20,6 +20,20 @@ pub struct WorkspaceMember {
     pub joined_at: String,
 }
 
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct ProjectMember {
+    pub workspace_id: String,
+    pub project_id: String,
+    pub user_id: String,
+    pub name: String,
+    pub email: Option<String>,
+    pub avatar_url: Option<String>,
+    pub role: String,
+    pub workspace_role: String,
+    pub inherited: bool,
+    pub joined_at: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateWorkspace {
     pub name: String,
@@ -38,6 +52,11 @@ pub struct UpdateWorkspace {
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateMemberRole {
+    pub role: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateProjectMemberRole {
     pub role: String,
 }
 

@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::middleware::UserId,
-    db::check_project_access,
+    db::{check_project_access, check_project_permission, ProjectPermission},
     error::{AppError, Result},
     models::issue::{
         BulkUpdateIssues, CreateIssue, CreateIssueLink, Issue, IssueFilters, IssueLink,
@@ -318,7 +318,7 @@ pub async fn create_issue(
     Path(project_id): Path<String>,
     Json(body): Json<CreateIssue>,
 ) -> Result<Json<Issue>> {
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
 
     if body.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".to_string()));
@@ -413,7 +413,7 @@ pub async fn get_issue(
     Path(id): Path<String>,
 ) -> Result<Json<Issue>> {
     let project_id = get_project_id_for_issue(&pool, &id).await?;
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
 
     let row = sqlx::query_as::<_, IssueRow>(&build_issue_select_sql("WHERE i.id = ?", ""))
         .bind(&id)
@@ -606,7 +606,7 @@ pub async fn delete_issue(
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>> {
     let project_id = get_project_id_for_issue(&pool, &id).await?;
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
 
     let mut tx = pool.begin().await?;
 
@@ -651,7 +651,7 @@ pub async fn update_issue_status(
     let status_str = body.status.as_str();
 
     let project_id = get_project_id_for_issue(&pool, &id).await?;
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
 
     let current = sqlx::query_as::<_, IssueRow>(&build_issue_select_sql("WHERE i.id = ?", ""))
         .bind(&id)
@@ -700,7 +700,7 @@ pub async fn update_issue_sprint(
     Json(body): Json<UpdateIssueSprint>,
 ) -> Result<Json<Issue>> {
     let project_id = get_project_id_for_issue(&pool, &id).await?;
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
     if let Some(ref sprint_id) = body.sprint_id {
         ensure_sprint_belongs_to_project(&pool, &project_id, sprint_id).await?;
     }
@@ -758,7 +758,7 @@ pub async fn reorder_issues(
     Path(project_id): Path<String>,
     Json(body): Json<ReorderBody>,
 ) -> Result<Json<serde_json::Value>> {
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
 
     if body.ids.is_empty() {
         return Err(AppError::BadRequest("ids cannot be empty".to_string()));
@@ -848,7 +848,7 @@ pub async fn create_comment(
     Json(body): Json<CreateComment>,
 ) -> Result<Json<Comment>> {
     let project_id = get_project_id_for_issue(&pool, &id).await?;
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
 
     if body.body.trim().is_empty() {
         return Err(AppError::BadRequest("body is required".to_string()));
@@ -1031,7 +1031,7 @@ pub async fn create_link(
     validate_link_type(&body.link_type)?;
 
     let project_id = get_project_id_for_issue(&pool, &id).await?;
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
 
     // Target issue must exist and belong to the same project
     let target_project_id: Option<String> =
@@ -1087,7 +1087,7 @@ pub async fn delete_link(
     let source_issue_id = source_issue_id.ok_or(AppError::NotFound)?;
 
     let project_id = get_project_id_for_issue(&pool, &source_issue_id).await?;
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
 
     let result = sqlx::query("DELETE FROM issue_links WHERE id = ?")
         .bind(&link_id)
@@ -1110,7 +1110,7 @@ pub async fn bulk_update_issues(
     Path(project_id): Path<String>,
     Json(body): Json<BulkUpdateIssues>,
 ) -> Result<Json<Vec<Issue>>> {
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
 
     if body.issue_ids.is_empty() {
         return Err(AppError::BadRequest(

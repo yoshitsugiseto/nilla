@@ -7,11 +7,10 @@ use uuid::Uuid;
 
 use crate::{
     auth::middleware::UserId,
-    db::check_project_access,
+    db::{check_project_access, check_project_permission, ProjectPermission},
     error::{AppError, Result},
     models::label::{CreateLabel, ProjectLabel, UpdateLabel},
 };
-
 
 pub async fn list_labels(
     State(pool): State<SqlitePool>,
@@ -34,7 +33,7 @@ pub async fn create_label(
     Path(project_id): Path<String>,
     Json(body): Json<CreateLabel>,
 ) -> Result<Json<ProjectLabel>> {
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Admin).await?;
 
     if body.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".to_string()));
@@ -68,7 +67,7 @@ pub async fn update_label(
             .fetch_optional(&pool)
             .await?;
     let project_id = project_id.ok_or(AppError::NotFound)?;
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Admin).await?;
 
     if let Some(ref name) = body.name {
         if name.trim().is_empty() {
@@ -103,7 +102,7 @@ pub async fn delete_label(
             .fetch_optional(&pool)
             .await?;
     let project_id = project_id.ok_or(AppError::NotFound)?;
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Admin).await?;
 
     sqlx::query("DELETE FROM project_labels WHERE id = ?")
         .bind(&label_id)

@@ -1,5 +1,5 @@
 import client from './client'
-import type { Workspace, WorkspaceMember, User } from '../types'
+import type { ProjectMember, ProjectRole, Workspace, WorkspaceMember, User } from '../types'
 
 export const getWorkspaces = () => client.get<Workspace[]>('/workspaces').then(r => r.data)
 export const createWorkspace = (name: string) => client.post<Workspace>('/workspaces', { name }).then(r => r.data)
@@ -11,5 +11,9 @@ export const updateMemberRole = (workspaceId: string, userId: string, role: stri
   client.patch<WorkspaceMember>(`/workspaces/${workspaceId}/members/${userId}`, { role }).then(r => r.data)
 export const removeWorkspaceMember = (workspaceId: string, userId: string) =>
   client.delete(`/workspaces/${workspaceId}/members/${userId}`)
-export const getProjectMembers = (projectId: string) => client.get<WorkspaceMember[]>(`/projects/${projectId}/members`).then(r => r.data)
+export const getProjectMembers = (projectId: string) => client.get<ProjectMember[]>(`/projects/${projectId}/members`).then(r => r.data)
+export const updateProjectMemberRole = (projectId: string, userId: string, role: ProjectRole) =>
+  client.patch<ProjectMember>(`/projects/${projectId}/members/${userId}`, { role }).then(r => r.data)
+export const clearProjectMemberRole = (projectId: string, userId: string) =>
+  client.delete(`/projects/${projectId}/members/${userId}`).then(r => r.data)
 export const getUsers = () => client.get<User[]>('/users').then(r => r.data)

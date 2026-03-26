@@ -1,5 +1,6 @@
 import { Settings } from 'lucide-react'
 import { WorkspaceSettings } from '../components/Settings/WorkspaceSettings'
+import { ProjectSettings } from '../components/Settings/ProjectSettings'
 import { LabelSettings } from '../components/Settings/LabelSettings'
 import { TemplateSettings } from '../components/Settings/TemplateSettings'
 import { useAppStore } from '../store'
@@ -24,6 +25,10 @@ export function SettingsPage() {
       </div>
 
       <WorkspaceSettings workspaceId={activeWorkspaceId} />
+
+      {activeProjectId && (
+        <ProjectSettings projectId={activeProjectId} />
+      )}
 
       {activeProjectId && (
         <LabelSettings projectId={activeProjectId} />

@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::middleware::UserId,
-    db::check_project_access,
+    db::{check_project_access, check_project_permission, ProjectPermission},
     error::{AppError, Result},
     models::template::{CreateTemplate, IssueTemplate, IssueTemplateRow, UpdateTemplate},
 };
@@ -33,7 +33,7 @@ pub async fn create_template(
     Path(project_id): Path<String>,
     Json(body): Json<CreateTemplate>,
 ) -> Result<Json<IssueTemplate>> {
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Admin).await?;
 
     if body.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".to_string()));
@@ -74,7 +74,7 @@ pub async fn update_template(
             .fetch_optional(&pool)
             .await?;
     let project_id = project_id.ok_or(AppError::NotFound)?;
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Admin).await?;
 
     if let Some(ref name) = body.name {
         if name.trim().is_empty() {
@@ -82,7 +82,11 @@ pub async fn update_template(
         }
     }
 
-    let labels_json = body.labels.as_ref().map(|l| serde_json::to_string(l).ok()).flatten();
+    let labels_json = body
+        .labels
+        .as_ref()
+        .map(|l| serde_json::to_string(l).ok())
+        .flatten();
 
     let row = sqlx::query_as::<_, IssueTemplateRow>(
         "UPDATE issue_templates SET
@@ -122,7 +126,7 @@ pub async fn delete_template(
             .fetch_optional(&pool)
             .await?;
     let project_id = project_id.ok_or(AppError::NotFound)?;
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Admin).await?;
 
     sqlx::query("DELETE FROM issue_templates WHERE id = ?")
         .bind(&template_id)

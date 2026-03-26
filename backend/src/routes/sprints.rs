@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::middleware::UserId,
-    db::check_project_access,
+    db::{check_project_access, check_project_permission, ProjectPermission},
     error::{AppError, Result},
     models::sprint::{CreateSprint, Sprint, SprintRow, SprintStatus, UpdateSprint},
     realtime::RealtimeHub,
@@ -110,7 +110,7 @@ pub async fn create_sprint(
     Path(project_id): Path<String>,
     Json(body): Json<CreateSprint>,
 ) -> Result<Json<Sprint>> {
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
     if body.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".to_string()));
     }
@@ -170,7 +170,7 @@ pub async fn update_sprint(
     Json(body): Json<UpdateSprint>,
 ) -> Result<Json<Sprint>> {
     let project_id = get_project_id_for_sprint(&pool, &id).await?;
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
     if let Some(ref name) = body.name {
         if name.trim().is_empty() {
             return Err(AppError::BadRequest("name must not be empty".to_string()));
@@ -227,7 +227,7 @@ pub async fn start_sprint(
     Path(id): Path<String>,
 ) -> Result<Json<Sprint>> {
     let project_id = get_project_id_for_sprint(&pool, &id).await?;
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
     let row = sqlx::query_as::<_, SprintRow>(GET_SPRINT_SQL)
         .bind(&id)
         .fetch_optional(&pool)
@@ -269,7 +269,7 @@ pub async fn complete_sprint(
     body: Option<Json<CompleteSprintBody>>,
 ) -> Result<Json<Sprint>> {
     let project_id = get_project_id_for_sprint(&pool, &id).await?;
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
     let row = sqlx::query_as::<_, SprintRow>(GET_SPRINT_SQL)
         .bind(&id)
         .fetch_optional(&pool)
@@ -448,7 +448,7 @@ pub async fn delete_sprint(
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>> {
     let project_id = get_project_id_for_sprint(&pool, &id).await?;
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
     // Unassign issues from this sprint (move them to backlog) before deleting
     sqlx::query(
         "UPDATE issues SET sprint_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE sprint_id = ?",

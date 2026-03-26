@@ -1,7 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
-    Extension,
-    Json,
+    Extension, Json,
 };
 use serde::Deserialize;
 use sqlx::SqlitePool;
@@ -9,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::middleware::UserId,
-    db::check_project_access,
+    db::{check_project_access, check_project_permission, ProjectPermission},
     error::{AppError, Result},
     models::project::{CreateProject, Project, UpdateProject},
 };
@@ -68,11 +67,13 @@ pub async fn create_project(
         ));
     }
     if !body.key.chars().all(|c| c.is_ascii_alphanumeric()) {
-        return Err(AppError::BadRequest(
-            "key must be alphanumeric".to_string(),
-        ));
+        return Err(AppError::BadRequest("key must be alphanumeric".to_string()));
     }
-    if body.description.as_deref().map_or(false, |d| d.len() > 10000) {
+    if body
+        .description
+        .as_deref()
+        .map_or(false, |d| d.len() > 10000)
+    {
         return Err(AppError::BadRequest(
             "description must be 10000 characters or less".to_string(),
         ));
@@ -80,7 +81,7 @@ pub async fn create_project(
 
     // Verify user is a member of the workspace
     let is_member: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM workspace_members WHERE workspace_id = ? AND user_id = ?)"
+        "SELECT EXISTS(SELECT 1 FROM workspace_members WHERE workspace_id = ? AND user_id = ?)",
     )
     .bind(&body.workspace_id)
     .bind(&user_id.0)
@@ -128,7 +129,7 @@ pub async fn update_project(
     Path(id): Path<String>,
     Json(body): Json<UpdateProject>,
 ) -> Result<Json<Project>> {
-    check_project_access(&pool, &user_id.0, &id).await?;
+    check_project_permission(&pool, &user_id.0, &id, ProjectPermission::Admin).await?;
 
     if let Some(ref name) = body.name {
         if name.trim().is_empty() {
@@ -140,7 +141,11 @@ pub async fn update_project(
             ));
         }
     }
-    if body.description.as_deref().map_or(false, |d| d.len() > 10000) {
+    if body
+        .description
+        .as_deref()
+        .map_or(false, |d| d.len() > 10000)
+    {
         return Err(AppError::BadRequest(
             "description must be 10000 characters or less".to_string(),
         ));
@@ -172,14 +177,13 @@ pub async fn delete_project(
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>> {
-    check_project_access(&pool, &user_id.0, &id).await?;
+    check_project_permission(&pool, &user_id.0, &id, ProjectPermission::Admin).await?;
 
     // Verify the project exists before starting the transaction
-    let exists: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM projects WHERE id = ?)")
-            .bind(&id)
-            .fetch_one(&pool)
-            .await?;
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM projects WHERE id = ?)")
+        .bind(&id)
+        .fetch_one(&pool)
+        .await?;
     if !exists {
         return Err(AppError::NotFound);
     }

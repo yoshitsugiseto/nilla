@@ -24,6 +24,21 @@ export interface WorkspaceMember {
   joined_at: string
 }
 
+export type ProjectRole = 'admin' | 'editor' | 'viewer'
+
+export interface ProjectMember {
+  workspace_id: string
+  project_id: string
+  user_id: string
+  name: string
+  email: string | null
+  avatar_url: string | null
+  role: ProjectRole
+  workspace_role: string
+  inherited: boolean
+  joined_at: string
+}
+
 export interface Project {
   id: string
   name: string
