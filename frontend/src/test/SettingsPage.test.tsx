@@ -51,6 +51,8 @@ describe('SettingsPage', () => {
     expect(screen.getByText('ワークスペース設定に加えて、選択中プロジェクトの権限、ラベル、テンプレートを管理できます。')).toBeInTheDocument()
     expect(screen.getByText('現在のプロジェクト権限は「閲覧専用」です。')).toBeInTheDocument()
     expect(screen.getByText('このプロジェクトの設定は閲覧のみ可能です。変更が必要な場合はプロジェクト管理者に依頼してください。')).toBeInTheDocument()
+    expect(screen.getByLabelText('settings-columns')).toHaveClass('xl:grid-cols-[minmax(18rem,0.95fr)_minmax(0,1.35fr)]')
+    expect(screen.getByLabelText('settings-project-assets')).toHaveClass('xl:grid-cols-[minmax(18rem,0.95fr)_minmax(0,1.35fr)]')
     expect(screen.getByRole('heading', { name: 'Workspace' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Project' })).toBeInTheDocument()
   })

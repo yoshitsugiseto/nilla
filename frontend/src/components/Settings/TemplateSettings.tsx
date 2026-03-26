@@ -65,7 +65,7 @@ export function TemplateSettings({ projectId }: Props) {
   }
 
   return (
-    <section className="mt-8">
+    <section>
       <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
         <Layout size={13} /> イシューテンプレート
       </h2>

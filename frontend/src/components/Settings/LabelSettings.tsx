@@ -61,7 +61,7 @@ export function LabelSettings({ projectId }: Props) {
   })
 
   return (
-    <section className="mt-8">
+    <section>
       <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
         <Tag size={13} /> プロジェクトラベル
       </h2>
