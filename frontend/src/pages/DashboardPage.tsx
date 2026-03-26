@@ -7,6 +7,7 @@ import { DetailPanel } from '../components/common/DetailPanel'
 import { IssueDetail } from '../components/Issue/IssueDetail'
 import { useState } from 'react'
 import { CheckCircle2, AlertCircle, Clock, BarChart3 } from 'lucide-react'
+import { useCurrentTime } from '../hooks/useCurrentTime'
 import { deadlineLabel } from '../utils/date'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -26,6 +27,7 @@ const STATUS_LABELS: Record<string, string> = {
 export function DashboardPage() {
   const { activeProjectId } = useAppStore()
   const [detailId, setDetailId] = useState<string | null>(null)
+  const nowMs = useCurrentTime()
 
   const { data: sprints = [] } = useQuery({
     queryKey: ['sprints', activeProjectId],
@@ -104,8 +106,8 @@ export function DashboardPage() {
                 <span className="text-sm font-semibold text-gray-700 w-12 text-right">{pct}%</span>
               </div>
               <p className="text-xs text-gray-400">{donePts}/{totalPts}pt 完了 · {activeIssues.length}件</p>
-              {activeSprint.end_date && (() => {
-                const d = deadlineLabel(activeSprint.end_date!)
+              {activeSprint.end_date && nowMs && (() => {
+                const d = deadlineLabel(activeSprint.end_date!, nowMs)
                 return (
                   <p className="text-xs mt-1 flex items-center gap-2">
                     <span className="text-gray-400">期限: {activeSprint.end_date}</span>

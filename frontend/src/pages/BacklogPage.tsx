@@ -14,6 +14,7 @@ import { TypeIcon, PriorityBadge, StatusBadge } from '../components/common/Badge
 import { Avatar } from '../components/common/Avatar'
 import { ConfirmDialog } from '../components/common/ConfirmDialog'
 import { useToast } from '../components/common/useToast'
+import { useCurrentTime } from '../hooks/useCurrentTime'
 import { deadlineLabel, dueDateLabel } from '../utils/date'
 import type { Issue, IssueStatus } from '../types'
 
@@ -67,6 +68,7 @@ function IssueRow({
   const [editing, setEditing] = useState(false)
   const [subtasksOpen, setSubtasksOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const nowMs = useCurrentTime()
 
   const showToast = useToast()
   const deleteMutation = useMutation({
@@ -148,8 +150,8 @@ function IssueRow({
                   </div>
                 )
               })()}
-              {issue.due_date && (() => {
-                const due = dueDateLabel(issue.due_date, 'minimal')
+              {issue.due_date && nowMs && (() => {
+                const due = dueDateLabel(issue.due_date, nowMs, 'minimal')
                 return (
                   <span className={`text-xs ${due.className}`}>
                     {due.text}
@@ -245,6 +247,7 @@ function SprintGroup({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const [maxVisible, setMaxVisible] = useState(50)
+  const nowMs = useCurrentTime()
   const visibleIssues = issues.slice(0, maxVisible)
 
   return (
@@ -264,7 +267,7 @@ function SprintGroup({
             }`}>{status}</span>
           )}
           <span className="text-xs text-gray-400">{issues.length} issues</span>
-          {endDate && (() => { const d = deadlineLabel(endDate); return <span className={`text-xs ${d.className}`}>{d.text}</span> })()}
+          {endDate && nowMs && (() => { const d = deadlineLabel(endDate, nowMs); return <span className={`text-xs ${d.className}`}>{d.text}</span> })()}
         </div>
         <span className="text-xs font-mono text-gray-500">{totalPts}pt</span>
       </div>

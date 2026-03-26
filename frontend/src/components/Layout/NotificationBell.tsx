@@ -9,14 +9,15 @@ import { useAppStore } from '../../store'
 
 export function NotificationBell() {
   const [notifOpen, setNotifOpen] = useState(false)
-  const [pendingOpenIssueTitle, setPendingOpenIssueTitle] = useState<string | null>(null)
   const notifRef = useRef<HTMLDivElement>(null)
   const { user } = useAuthStore()
-  const { setActiveProject, setActiveWorkspace, setPendingOpenIssueId } = useAppStore()
+  const {
+    setActiveProject,
+    setActiveWorkspace,
+    setPendingOpenIssueId,
+    setPendingOpenIssueTitle,
+  } = useAppStore()
   const qc = useQueryClient()
-
-  // Suppress unused variable warning — pendingOpenIssueTitle is set for future use
-  void pendingOpenIssueTitle
 
   const { data: notifications = [] } = useQuery({
     queryKey: ['notifications'],

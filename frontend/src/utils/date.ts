@@ -4,9 +4,10 @@ type DueDateLabelVariant = 'default' | 'compact' | 'minimal'
 
 export function dueDateLabel(
   dueDate: string,
+  nowMs: number,
   variant: DueDateLabelVariant = 'default',
 ): { text: string; className: string; isUrgent: boolean } {
-  const days = Math.ceil((new Date(dueDate).getTime() - Date.now()) / MS_PER_DAY)
+  const days = Math.ceil((new Date(dueDate).getTime() - nowMs) / MS_PER_DAY)
 
   if (days < 0) {
     return { text: `${Math.abs(days)}日超過`, className: 'text-red-500 font-medium', isUrgent: true }
@@ -46,8 +47,8 @@ export function dueDateLabel(
  * Returns a Japanese text description and a Tailwind CSS className
  * based on how many days remain until the given end date.
  */
-export function deadlineLabel(endDate: string): { text: string; className: string } {
-  const days = Math.ceil((new Date(endDate).getTime() - Date.now()) / MS_PER_DAY)
+export function deadlineLabel(endDate: string, nowMs: number): { text: string; className: string } {
+  const days = Math.ceil((new Date(endDate).getTime() - nowMs) / MS_PER_DAY)
   if (days < 0)   return { text: `${Math.abs(days)}日超過`, className: 'text-red-600 font-semibold' }
   if (days === 0)  return { text: '今日が期限',              className: 'text-red-600 font-semibold' }
   if (days <= 2)   return { text: `残り${days}日`,           className: 'text-orange-500 font-semibold' }

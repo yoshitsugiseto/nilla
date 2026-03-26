@@ -1,0 +1,135 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { NotificationBell } from '../components/Layout/NotificationBell'
+import { useAuthStore } from '../store/auth'
+import { useAppStore } from '../store'
+
+const {
+  mockGetNotifications,
+  mockMarkNotificationRead,
+  mockMarkAllNotificationsRead,
+  mockDeleteNotification,
+  mockGetIssue,
+  mockGetProject,
+} = vi.hoisted(() => ({
+  mockGetNotifications: vi.fn(),
+  mockMarkNotificationRead: vi.fn(),
+  mockMarkAllNotificationsRead: vi.fn(),
+  mockDeleteNotification: vi.fn(),
+  mockGetIssue: vi.fn(),
+  mockGetProject: vi.fn(),
+}))
+
+vi.mock('../api/notifications', () => ({
+  getNotifications: mockGetNotifications,
+  markNotificationRead: mockMarkNotificationRead,
+  markAllNotificationsRead: mockMarkAllNotificationsRead,
+  deleteNotification: mockDeleteNotification,
+}))
+
+vi.mock('../api/issues', () => ({
+  getIssue: mockGetIssue,
+}))
+
+vi.mock('../api/projects', () => ({
+  getProject: mockGetProject,
+}))
+
+function createQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  })
+}
+
+describe('NotificationBell', () => {
+  beforeEach(() => {
+    mockGetNotifications.mockReset()
+    mockMarkNotificationRead.mockReset()
+    mockMarkAllNotificationsRead.mockReset()
+    mockDeleteNotification.mockReset()
+    mockGetIssue.mockReset()
+    mockGetProject.mockReset()
+
+    useAuthStore.setState({
+      accessToken: 'access-123',
+      user: {
+        id: 'user-1',
+        name: 'Alice',
+        email: 'alice@example.com',
+        avatar_url: null,
+        provider: 'github',
+      },
+      isLoading: false,
+    })
+    useAppStore.setState({
+      activeProjectId: null,
+      activeSprint: null,
+      activeWorkspaceId: null,
+      pendingOpenIssueId: null,
+      pendingOpenIssueTitle: null,
+      boardFilters: {},
+    })
+
+    mockGetNotifications.mockResolvedValue([
+      {
+        id: 'notif-1',
+        user_id: 'user-1',
+        issue_id: 'issue-1',
+        type: 'mention',
+        message: 'Issue updated',
+        read: false,
+        created_at: '2026-03-26T00:00:00Z',
+      },
+    ])
+    mockMarkNotificationRead.mockResolvedValue(undefined)
+    mockMarkAllNotificationsRead.mockResolvedValue(undefined)
+    mockDeleteNotification.mockResolvedValue(undefined)
+    mockGetIssue.mockResolvedValue({
+      id: 'issue-1',
+      project_id: 'project-1',
+      title: 'Issue from notification',
+    })
+    mockGetProject.mockResolvedValue({
+      id: 'project-1',
+      workspace_id: 'workspace-1',
+    })
+  })
+
+  afterEach(() => {
+    useAuthStore.setState({ accessToken: null, user: null, isLoading: false })
+    useAppStore.setState({
+      activeProjectId: null,
+      activeSprint: null,
+      activeWorkspaceId: null,
+      pendingOpenIssueId: null,
+      pendingOpenIssueTitle: null,
+      boardFilters: {},
+    })
+    vi.restoreAllMocks()
+  })
+
+  test('clicking a notification stores issue title in shared app state', async () => {
+    const user = userEvent.setup()
+    const queryClient = createQueryClient()
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NotificationBell />
+      </QueryClientProvider>
+    )
+
+    await user.click(screen.getByRole('button', { name: '通知' }))
+    await user.click(await screen.findByRole('button', { name: /Issue updated/ }))
+
+    await waitFor(() => expect(mockGetIssue).toHaveBeenCalledWith('issue-1'))
+    expect(useAppStore.getState().activeWorkspaceId).toBe('workspace-1')
+    expect(useAppStore.getState().activeProjectId).toBe('project-1')
+    expect(useAppStore.getState().pendingOpenIssueId).toBe('issue-1')
+    expect(useAppStore.getState().pendingOpenIssueTitle).toBe('Issue from notification')
+  })
+})

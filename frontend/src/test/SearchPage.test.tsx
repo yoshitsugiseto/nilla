@@ -82,6 +82,7 @@ function renderSearchPage(query: string) {
     activeSprint: null,
     activeWorkspaceId: 'workspace-1',
     pendingOpenIssueId: null,
+    pendingOpenIssueTitle: null,
     boardFilters: {},
   })
 
@@ -110,6 +111,7 @@ describe('SearchPage', () => {
       activeSprint: null,
       activeWorkspaceId: null,
       pendingOpenIssueId: null,
+      pendingOpenIssueTitle: null,
       boardFilters: {},
     })
     vi.restoreAllMocks()

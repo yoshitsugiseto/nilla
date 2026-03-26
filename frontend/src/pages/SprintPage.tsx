@@ -7,6 +7,7 @@ import { useAppStore } from '../store'
 import { Modal } from '../components/common/Modal'
 import { BurndownChart } from '../components/Board/BurndownChart'
 import { useToast } from '../components/common/useToast'
+import { useCurrentTime } from '../hooks/useCurrentTime'
 import { extractErrorMessage } from '../api/client'
 import { deadlineLabel } from '../utils/date'
 import type { Issue, Sprint, IssueType } from '../types'
@@ -270,6 +271,7 @@ function SprintCard({
 }) {
   const [showBurndown, setShowBurndown] = useState(false)
   const [editing, setEditing] = useState(false)
+  const nowMs = useCurrentTime()
   const pct = totalPts > 0 ? Math.round((donePts / totalPts) * 100) : 0
 
   return (
@@ -288,8 +290,8 @@ function SprintCard({
           {(sprint.start_date || sprint.end_date) && (
             <p className="text-xs text-gray-400 flex items-center gap-2">
               <span>{sprint.start_date} → {sprint.end_date}</span>
-              {sprint.end_date && sprint.status === 'active' && (() => {
-                const d = deadlineLabel(sprint.end_date!)
+              {sprint.end_date && sprint.status === 'active' && nowMs && (() => {
+                const d = deadlineLabel(sprint.end_date!, nowMs)
                 return <span className={d.className}>{d.text}</span>
               })()}
             </p>

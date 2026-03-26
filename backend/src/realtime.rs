@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use tokio::sync::{RwLock, broadcast};
+use tokio::sync::{broadcast, RwLock};
 
 const REALTIME_CHANNEL_CAPACITY: usize = 256;
 
@@ -15,10 +15,7 @@ impl RealtimeHub {
         Self::default()
     }
 
-    pub async fn subscribe_workspace(
-        &self,
-        workspace_id: &str,
-    ) -> broadcast::Receiver<String> {
+    pub async fn subscribe_workspace(&self, workspace_id: &str) -> broadcast::Receiver<String> {
         let sender = self
             .get_or_create_sender(&self.workspace_channels, workspace_id)
             .await;
@@ -26,20 +23,32 @@ impl RealtimeHub {
     }
 
     pub async fn subscribe_user(&self, user_id: &str) -> broadcast::Receiver<String> {
-        let sender = self.get_or_create_sender(&self.user_channels, user_id).await;
+        let sender = self
+            .get_or_create_sender(&self.user_channels, user_id)
+            .await;
         sender.subscribe()
     }
 
     pub async fn publish_workspace(&self, workspace_id: &str, message: String) {
-        let sender = self
-            .get_or_create_sender(&self.workspace_channels, workspace_id)
-            .await;
-        let _ = sender.send(message);
+        if let Some(sender) = self.get_sender(&self.workspace_channels, workspace_id).await {
+            let _ = sender.send(message);
+        }
     }
 
     pub async fn publish_user(&self, user_id: &str, message: String) {
-        let sender = self.get_or_create_sender(&self.user_channels, user_id).await;
-        let _ = sender.send(message);
+        if let Some(sender) = self.get_sender(&self.user_channels, user_id).await {
+            let _ = sender.send(message);
+        }
+    }
+
+    pub(crate) async fn cleanup_workspace_if_idle(&self, workspace_id: &str) {
+        self.cleanup_sender_if_idle(&self.workspace_channels, workspace_id)
+            .await;
+    }
+
+    pub(crate) async fn cleanup_user_if_idle(&self, user_id: &str) {
+        self.cleanup_sender_if_idle(&self.user_channels, user_id)
+            .await;
     }
 
     async fn get_or_create_sender(
@@ -57,6 +66,30 @@ impl RealtimeHub {
             .or_insert_with(|| broadcast::channel(REALTIME_CHANNEL_CAPACITY).0)
             .clone()
     }
+
+    async fn get_sender(
+        &self,
+        channels: &RwLock<HashMap<String, broadcast::Sender<String>>>,
+        key: &str,
+    ) -> Option<broadcast::Sender<String>> {
+        channels.read().await.get(key).cloned()
+    }
+
+    async fn cleanup_sender_if_idle(
+        &self,
+        channels: &RwLock<HashMap<String, broadcast::Sender<String>>>,
+        key: &str,
+    ) {
+        let mut channels = channels.write().await;
+        let should_remove = channels
+            .get(key)
+            .map(|sender| sender.receiver_count() == 0)
+            .unwrap_or(false);
+
+        if should_remove {
+            channels.remove(key);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -71,7 +104,8 @@ mod tests {
         let mut workspace_a = hub.subscribe_workspace("workspace-a").await;
         let mut workspace_b = hub.subscribe_workspace("workspace-b").await;
 
-        hub.publish_workspace("workspace-a", "event-a".to_string()).await;
+        hub.publish_workspace("workspace-a", "event-a".to_string())
+            .await;
 
         assert_eq!(workspace_a.recv().await.unwrap(), "event-a");
         assert!(matches!(workspace_b.try_recv(), Err(TryRecvError::Empty)));
@@ -83,7 +117,8 @@ mod tests {
         let mut user_a = hub.subscribe_user("user-a").await;
         let mut user_b = hub.subscribe_user("user-b").await;
 
-        hub.publish_user("user-a", "notification-a".to_string()).await;
+        hub.publish_user("user-a", "notification-a".to_string())
+            .await;
 
         assert_eq!(user_a.recv().await.unwrap(), "notification-a");
         assert!(matches!(user_b.try_recv(), Err(TryRecvError::Empty)));
@@ -95,12 +130,41 @@ mod tests {
         let mut workspace = hub.subscribe_workspace("workspace-a").await;
         let mut user = hub.subscribe_user("user-a").await;
 
-        hub.publish_workspace("workspace-a", "workspace-event".to_string()).await;
+        hub.publish_workspace("workspace-a", "workspace-event".to_string())
+            .await;
         hub.publish_user("user-a", "user-event".to_string()).await;
 
         assert_eq!(workspace.recv().await.unwrap(), "workspace-event");
         assert_eq!(user.recv().await.unwrap(), "user-event");
         assert!(matches!(workspace.try_recv(), Err(TryRecvError::Empty)));
         assert!(matches!(user.try_recv(), Err(TryRecvError::Empty)));
+    }
+
+    #[tokio::test]
+    async fn test_publish_without_subscribers_does_not_create_channel() {
+        let hub = RealtimeHub::new();
+
+        hub.publish_workspace("workspace-a", "workspace-event".to_string())
+            .await;
+        hub.publish_user("user-a", "user-event".to_string()).await;
+
+        assert!(hub.workspace_channels.read().await.is_empty());
+        assert!(hub.user_channels.read().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_idle_channels_are_cleaned_up() {
+        let hub = RealtimeHub::new();
+        let workspace = hub.subscribe_workspace("workspace-a").await;
+        let user = hub.subscribe_user("user-a").await;
+
+        drop(workspace);
+        drop(user);
+
+        hub.cleanup_workspace_if_idle("workspace-a").await;
+        hub.cleanup_user_if_idle("user-a").await;
+
+        assert!(hub.workspace_channels.read().await.is_empty());
+        assert!(hub.user_channels.read().await.is_empty());
     }
 }

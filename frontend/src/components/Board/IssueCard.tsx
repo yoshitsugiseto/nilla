@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Issue } from '../../types'
 import { getLabels } from '../../api/labels'
+import { useCurrentTime } from '../../hooks/useCurrentTime'
 import { dueDateLabel } from '../../utils/date'
 import { TypeIcon, PriorityBadge } from '../common/Badge'
 import { Avatar } from '../common/Avatar'
@@ -18,6 +19,7 @@ interface Props {
 export function IssueCard({ issue, index, projectId }: Props) {
   const [detailOpen, setDetailOpen] = useState(false)
   const qc = useQueryClient()
+  const nowMs = useCurrentTime()
 
   const { data: projectLabels = [] } = useQuery({
     queryKey: ['labels', projectId],
@@ -91,8 +93,8 @@ export function IssueCard({ issue, index, projectId }: Props) {
               </div>
             )}
 
-            {issue.due_date && (() => {
-              const due = dueDateLabel(issue.due_date)
+            {issue.due_date && nowMs && (() => {
+              const due = dueDateLabel(issue.due_date, nowMs)
               return (
                 <div className={`text-xs mt-1 ${due.className}`}>
                   {due.text}

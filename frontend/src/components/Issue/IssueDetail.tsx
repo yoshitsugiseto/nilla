@@ -11,6 +11,7 @@ import { IssueFiles } from './IssueFiles'
 import { IssueActivity } from './IssueActivity'
 import { Modal } from '../common/Modal'
 import { useToast } from '../common/useToast'
+import { useCurrentTime } from '../../hooks/useCurrentTime'
 import { dueDateLabel } from '../../utils/date'
 import type { IssueStatus, IssueLinkType } from '../../types'
 import { Pencil, MessageSquare, Clock, Plus, ListTodo, Paperclip, Link2, X } from 'lucide-react'
@@ -45,6 +46,7 @@ interface Props {
 export function IssueDetail({ issueId, projectId }: Props) {
   const qc = useQueryClient()
   const showToast = useToast()
+  const nowMs = useCurrentTime()
   const [tab, setTab] = useState<'comments' | 'files' | 'activity'>('comments')
   const [linkSearch, setLinkSearch] = useState('')
   const [linkTargetId, setLinkTargetId] = useState('')
@@ -466,11 +468,11 @@ export function IssueDetail({ issueId, projectId }: Props) {
           </div>
         )}
 
-        {issue.due_date && (
+        {issue.due_date && nowMs && (
           <div>
             <p className="text-xs text-gray-400 mb-1">期限日</p>
             {(() => {
-              const due = dueDateLabel(issue.due_date)
+              const due = dueDateLabel(issue.due_date, nowMs)
               return (
                 <span className={`text-sm font-medium ${due.isUrgent ? 'text-red-500' : 'text-gray-700'}`}>
                   {issue.due_date}

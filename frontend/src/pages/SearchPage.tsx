@@ -6,6 +6,7 @@ import { useAppStore } from '../store'
 import { TypeIcon, PriorityBadge, StatusBadge } from '../components/common/Badge'
 import { Modal } from '../components/common/Modal'
 import { IssueDetail } from '../components/Issue/IssueDetail'
+import { useCurrentTime } from '../hooks/useCurrentTime'
 import { dueDateLabel } from '../utils/date'
 import { Search, ChevronLeft, ChevronRight, SlidersHorizontal, X } from 'lucide-react'
 
@@ -30,6 +31,7 @@ export function SearchPage({ query }: Props) {
   const typeId = useId()
   const priorityId = useId()
   const assigneeId = useId()
+  const nowMs = useCurrentTime()
   const [detailId, setDetailId] = useState<string | null>(null)
   const [pageState, setPageState] = useState({ scope: '', page: 0 })
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
@@ -222,8 +224,8 @@ export function SearchPage({ query }: Props) {
               <span className="text-xs text-gray-400 font-mono w-14 shrink-0">#{issue.number}</span>
               <span className="flex-1 text-sm text-gray-900 font-medium truncate">{issue.title}</span>
               <div className="flex items-center gap-2 shrink-0">
-                {issue.due_date && (() => {
-                  const due = dueDateLabel(issue.due_date, 'compact')
+                {issue.due_date && nowMs && (() => {
+                  const due = dueDateLabel(issue.due_date, nowMs, 'compact')
                   return (
                     <span className={`text-xs ${due.className}`}>
                       {due.text}

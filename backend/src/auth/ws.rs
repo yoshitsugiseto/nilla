@@ -137,6 +137,7 @@ async fn handle_socket(
     user_id: String,
     workspace_id: Option<String>,
 ) {
+    let cleanup_workspace_id = workspace_id.clone();
     let mut user_rx = realtime.subscribe_user(&user_id).await;
     let mut workspace_rx = match workspace_id {
         Some(workspace_id) => Some(realtime.subscribe_workspace(&workspace_id).await),
@@ -192,6 +193,13 @@ async fn handle_socket(
                 }
             }
         }
+    }
+
+    drop(workspace_rx);
+    drop(user_rx);
+    realtime.cleanup_user_if_idle(&user_id).await;
+    if let Some(workspace_id) = cleanup_workspace_id {
+        realtime.cleanup_workspace_if_idle(&workspace_id).await;
     }
 }
 

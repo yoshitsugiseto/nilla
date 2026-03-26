@@ -34,9 +34,16 @@ export default function App() {
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [searching, setSearching] = useState(false)
-  const [pendingOpenIssueTitle, setPendingOpenIssueTitle] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const { activeProjectId, activeWorkspaceId, setActiveWorkspace, pendingOpenIssueId, setPendingOpenIssueId } = useAppStore()
+  const {
+    activeProjectId,
+    activeWorkspaceId,
+    setActiveWorkspace,
+    pendingOpenIssueId,
+    pendingOpenIssueTitle,
+    setPendingOpenIssueId,
+    setPendingOpenIssueTitle,
+  } = useAppStore()
   useWebSocket()
 
   return (
