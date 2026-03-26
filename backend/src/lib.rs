@@ -8,6 +8,7 @@ pub mod storage;
 use std::sync::Arc;
 
 use axum::{Router, middleware, routing::get};
+use axum::http::HeaderValue;
 use sqlx::SqlitePool;
 use tokio::sync::broadcast;
 use tower_http::services::{ServeDir, ServeFile};
@@ -57,6 +58,27 @@ async fn health() -> &'static str {
     "ok"
 }
 
+async fn add_security_headers(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let mut response = next.run(req).await;
+    let headers = response.headers_mut();
+    headers.insert("X-Content-Type-Options", HeaderValue::from_static("nosniff"));
+    headers.insert("X-Frame-Options", HeaderValue::from_static("DENY"));
+    headers.insert(
+        "Referrer-Policy",
+        HeaderValue::from_static("strict-origin-when-cross-origin"),
+    );
+    headers.insert(
+        "Content-Security-Policy",
+        HeaderValue::from_static(
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' wss:",
+        ),
+    );
+    response
+}
+
 pub fn create_app(state: AppState, static_dir: Option<String>) -> Router {
     let mut app = Router::new()
         .route("/api/health", get(health))
@@ -66,6 +88,7 @@ pub fn create_app(state: AppState, static_dir: Option<String>) -> Router {
             state.clone(),
             auth::middleware::auth_middleware,
         ))
+        .layer(middleware::from_fn(add_security_headers))
         .with_state(state);
 
     if let Some(dir) = static_dir {

@@ -566,7 +566,7 @@ pub async fn list_children(
     check_project_access(&pool, &user_id.0, &project_id).await?;
 
     let rows = sqlx::query_as::<_, IssueRow>(
-        "SELECT i.id, i.project_id, i.sprint_id, i.parent_id, i.number, i.title, i.description, i.type, i.status, i.priority, i.points, i.assignee_id, u.name as assignee_name, u.avatar_url as assignee_avatar_url, i.labels, i.position, i.created_at, i.updated_at FROM issues i LEFT JOIN users u ON i.assignee_id = u.id WHERE i.parent_id = ? ORDER BY i.position ASC, i.created_at ASC"
+        "SELECT i.id, i.project_id, i.sprint_id, i.parent_id, i.epic_id, e.title as epic_title, i.number, i.title, i.description, i.type, i.status, i.priority, i.points, i.assignee_id, u.name as assignee_name, u.avatar_url as assignee_avatar_url, i.labels, i.position, i.due_date, i.created_at, i.updated_at FROM issues i LEFT JOIN users u ON i.assignee_id = u.id LEFT JOIN issues e ON i.epic_id = e.id WHERE i.parent_id = ? ORDER BY i.position ASC, i.created_at ASC"
     )
     .bind(&id)
     .fetch_all(&pool)
@@ -590,6 +590,32 @@ pub async fn reorder_issues(
     Json(body): Json<ReorderBody>,
 ) -> Result<Json<serde_json::Value>> {
     check_project_access(&pool, &user_id.0, &project_id).await?;
+
+    if body.ids.is_empty() {
+        return Err(AppError::BadRequest("ids cannot be empty".to_string()));
+    }
+    if body.ids.len() > 500 {
+        return Err(AppError::BadRequest(
+            "Cannot reorder more than 500 issues at once".to_string(),
+        ));
+    }
+
+    // Verify all issue_ids belong to this project
+    let placeholders = body.ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+    let ownership_sql = format!(
+        "SELECT COUNT(*) FROM issues WHERE id IN ({placeholders}) AND project_id = ?"
+    );
+    let mut ownership_query = sqlx::query_scalar::<_, i64>(&ownership_sql);
+    for id in &body.ids {
+        ownership_query = ownership_query.bind(id);
+    }
+    ownership_query = ownership_query.bind(&project_id);
+    let count: i64 = ownership_query.fetch_one(&pool).await?;
+    if count != body.ids.len() as i64 {
+        return Err(AppError::BadRequest(
+            "Some issue IDs do not belong to this project".to_string(),
+        ));
+    }
 
     let mut tx = pool.begin().await?;
     for (i, id) in body.ids.iter().enumerate() {
@@ -888,7 +914,12 @@ pub async fn bulk_update_issues(
     check_project_access(&pool, &user_id.0, &project_id).await?;
 
     if body.issue_ids.is_empty() {
-        return Ok(Json(vec![]));
+        return Err(AppError::BadRequest("issue_ids cannot be empty".to_string()));
+    }
+    if body.issue_ids.len() > 100 {
+        return Err(AppError::BadRequest(
+            "Cannot update more than 100 issues at once".to_string(),
+        ));
     }
 
     let mut tx = pool.begin().await?;

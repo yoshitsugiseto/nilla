@@ -107,9 +107,17 @@ async fn verify_and_consume_state(pool: &sqlx::SqlitePool, state: &str) -> anyho
 
 fn build_redirect_response(frontend_callback: &str, access_token: &str, refresh_token: &str) -> Response<Body> {
     let location = format!("{}?token={}", frontend_callback, access_token);
+    let secure_flag = if std::env::var("APP_URL")
+        .unwrap_or_default()
+        .starts_with("https")
+    {
+        "; Secure"
+    } else {
+        ""
+    };
     let cookie = format!(
-        "refresh_token={}; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=2592000",
-        refresh_token
+        "refresh_token={}; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=2592000{}",
+        refresh_token, secure_flag
     );
     Response::builder()
         .status(StatusCode::FOUND)

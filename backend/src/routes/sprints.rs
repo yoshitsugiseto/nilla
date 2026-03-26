@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+
 use axum::{
     extract::{Path, State},
+    Extension,
     Json,
 };
 use chrono::NaiveDate;
@@ -8,9 +11,19 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::{
+    auth::middleware::UserId,
+    db::check_project_access,
     error::{AppError, Result},
     models::sprint::{CreateSprint, Sprint, UpdateSprint},
 };
+
+async fn get_project_id_for_sprint(pool: &SqlitePool, sprint_id: &str) -> Result<String> {
+    sqlx::query_scalar::<_, String>("SELECT project_id FROM sprints WHERE id = ?")
+        .bind(sprint_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or(AppError::NotFound)
+}
 
 const LIST_SPRINTS_SQL: &str =
     "SELECT id, project_id, name, goal, status, start_date, end_date, created_at, updated_at FROM sprints WHERE project_id = ? ORDER BY created_at DESC";
@@ -19,8 +32,10 @@ const GET_SPRINT_SQL: &str =
 
 pub async fn list_sprints(
     State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
     Path(project_id): Path<String>,
 ) -> Result<Json<Vec<Sprint>>> {
+    check_project_access(&pool, &user_id.0, &project_id).await?;
     let sprints = sqlx::query_as::<_, Sprint>(LIST_SPRINTS_SQL)
         .bind(&project_id)
         .fetch_all(&pool)
@@ -30,9 +45,11 @@ pub async fn list_sprints(
 
 pub async fn create_sprint(
     State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
     Path(project_id): Path<String>,
     Json(body): Json<CreateSprint>,
 ) -> Result<Json<Sprint>> {
+    check_project_access(&pool, &user_id.0, &project_id).await?;
     if body.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".to_string()));
     }
@@ -63,6 +80,7 @@ pub async fn create_sprint(
 
 pub async fn get_sprint(
     State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
 ) -> Result<Json<Sprint>> {
     let sprint = sqlx::query_as::<_, Sprint>(GET_SPRINT_SQL)
@@ -70,14 +88,18 @@ pub async fn get_sprint(
         .fetch_optional(&pool)
         .await?
         .ok_or(AppError::NotFound)?;
+    check_project_access(&pool, &user_id.0, &sprint.project_id).await?;
     Ok(Json(sprint))
 }
 
 pub async fn update_sprint(
     State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
     Json(body): Json<UpdateSprint>,
 ) -> Result<Json<Sprint>> {
+    let project_id = get_project_id_for_sprint(&pool, &id).await?;
+    check_project_access(&pool, &user_id.0, &project_id).await?;
     if let Some(ref name) = body.name {
         if name.trim().is_empty() {
             return Err(AppError::BadRequest("name must not be empty".to_string()));
@@ -120,8 +142,11 @@ pub async fn update_sprint(
 pub async fn start_sprint(
     State(pool): State<SqlitePool>,
     State(ws_tx): State<broadcast::Sender<String>>,
+    Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
 ) -> Result<Json<Sprint>> {
+    let project_id = get_project_id_for_sprint(&pool, &id).await?;
+    check_project_access(&pool, &user_id.0, &project_id).await?;
     let sprint = sqlx::query_as::<_, Sprint>(GET_SPRINT_SQL)
         .bind(&id)
         .fetch_optional(&pool)
@@ -155,9 +180,12 @@ pub struct CompleteSprintBody {
 pub async fn complete_sprint(
     State(pool): State<SqlitePool>,
     State(ws_tx): State<broadcast::Sender<String>>,
+    Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
     body: Option<Json<CompleteSprintBody>>,
 ) -> Result<Json<Sprint>> {
+    let project_id = get_project_id_for_sprint(&pool, &id).await?;
+    check_project_access(&pool, &user_id.0, &project_id).await?;
     let sprint = sqlx::query_as::<_, Sprint>(GET_SPRINT_SQL)
         .bind(&id)
         .fetch_optional(&pool)
@@ -207,6 +235,7 @@ pub struct BurndownPoint {
 
 pub async fn get_burndown(
     State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
 ) -> Result<Json<Vec<BurndownPoint>>> {
     let sprint = sqlx::query_as::<_, Sprint>(GET_SPRINT_SQL)
@@ -214,6 +243,7 @@ pub async fn get_burndown(
         .fetch_optional(&pool)
         .await?
         .ok_or(AppError::NotFound)?;
+    check_project_access(&pool, &user_id.0, &sprint.project_id).await?;
 
     let Some(start) = sprint.start_date else {
         return Ok(Json(vec![]));
@@ -233,31 +263,56 @@ pub async fn get_burndown(
     .await?;
 
     let days = (end - start).num_days() + 1;
+
+    // Single query: aggregate done-points by date instead of N+1 per-day queries
+    let start_str = start.format("%Y-%m-%d").to_string();
+    let end_next_str = (end + chrono::Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+
+    #[derive(sqlx::FromRow)]
+    struct DoneByDate {
+        change_date: String,
+        done_points: i64,
+    }
+
+    let rows = sqlx::query_as::<_, DoneByDate>(
+        r#"SELECT DATE(a.created_at) as change_date, COALESCE(SUM(i.points), 0) as done_points
+           FROM activity_logs a
+           JOIN issues i ON a.issue_id = i.id
+           WHERE i.sprint_id = ?
+             AND a.field = 'status'
+             AND a.new_value = 'done'
+             AND a.created_at >= ?
+             AND a.created_at < ?
+           GROUP BY DATE(a.created_at)
+           ORDER BY change_date ASC"#,
+    )
+    .bind(&id)
+    .bind(&start_str)
+    .bind(&end_next_str)
+    .fetch_all(&pool)
+    .await?;
+
+    let done_by_date: HashMap<String, i64> = rows
+        .into_iter()
+        .map(|r| (r.change_date, r.done_points))
+        .collect();
+
+    // Build burndown points with cumulative done-points
+    let mut cumulative_done: i64 = 0;
     let mut points = vec![];
 
     for i in 0..days {
         let date = start + chrono::Duration::days(i);
         let date_str = date.format("%Y-%m-%d").to_string();
-        let next_date_str = (date + chrono::Duration::days(1))
-            .format("%Y-%m-%d")
-            .to_string();
 
-        let done_points: i64 = sqlx::query_scalar(
-            r#"SELECT COALESCE(SUM(i.points), 0)
-               FROM issues i
-               JOIN activity_logs a ON a.issue_id = i.id
-               WHERE i.sprint_id = ?
-                 AND a.field = 'status'
-                 AND a.new_value = 'done'
-                 AND a.created_at < ?"#,
-        )
-        .bind(&id)
-        .bind(&next_date_str)
-        .fetch_one(&pool)
-        .await?;
+        if let Some(&day_done) = done_by_date.get(&date_str) {
+            cumulative_done += day_done;
+        }
 
         let ideal = total_points as f64 * (1.0 - i as f64 / (days - 1).max(1) as f64);
-        let actual = (total_points - done_points) as f64;
+        let actual = (total_points - cumulative_done) as f64;
 
         points.push(BurndownPoint {
             date: date_str,
@@ -277,15 +332,18 @@ pub struct VelocityPoint {
 
 pub async fn get_velocity(
     State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
     Path(project_id): Path<String>,
 ) -> Result<Json<Vec<VelocityPoint>>> {
+    check_project_access(&pool, &user_id.0, &project_id).await?;
     let points = sqlx::query_as::<_, VelocityPoint>(
         r#"SELECT s.name as sprint_name, COALESCE(SUM(i.points), 0) as completed_points
            FROM sprints s
            LEFT JOIN issues i ON i.sprint_id = s.id AND i.status = 'done'
            WHERE s.project_id = ? AND s.status = 'completed'
            GROUP BY s.id, s.name
-           ORDER BY s.created_at ASC"#,
+           ORDER BY s.created_at ASC
+           LIMIT 10"#,
     )
     .bind(&project_id)
     .fetch_all(&pool)
@@ -296,8 +354,11 @@ pub async fn get_velocity(
 
 pub async fn delete_sprint(
     State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>> {
+    let project_id = get_project_id_for_sprint(&pool, &id).await?;
+    check_project_access(&pool, &user_id.0, &project_id).await?;
     // Unassign issues from this sprint (move them to backlog) before deleting
     sqlx::query(
         "UPDATE issues SET sprint_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE sprint_id = ?",

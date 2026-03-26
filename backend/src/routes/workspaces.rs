@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::middleware::UserId,
+    db::check_project_access,
     error::{AppError, Result},
 };
 
@@ -223,6 +224,10 @@ pub async fn add_member(
     check_workspace_admin(&pool, &user_id.0, &workspace_id).await?;
 
     let role = body.role.unwrap_or_else(|| "member".to_string());
+    let valid_roles = ["owner", "admin", "member", "viewer"];
+    if !valid_roles.contains(&role.as_str()) {
+        return Err(AppError::BadRequest(format!("Invalid role: {}", role)));
+    }
     let now = Utc::now().to_rfc3339();
 
     sqlx::query(
@@ -259,6 +264,33 @@ pub async fn update_member_role(
         return Err(AppError::BadRequest(format!("invalid role: {}", body.role)));
     }
 
+    // Protect last owner: if target is currently an owner and new role is not owner,
+    // ensure there will still be at least one owner remaining
+    if body.role != "owner" {
+        let current_role: Option<String> = sqlx::query_scalar(
+            "SELECT role FROM workspace_members WHERE workspace_id = ? AND user_id = ?",
+        )
+        .bind(&workspace_id)
+        .bind(&target_uid)
+        .fetch_optional(&pool)
+        .await?;
+
+        if current_role.as_deref() == Some("owner") {
+            let owner_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM workspace_members WHERE workspace_id = ? AND role = 'owner'",
+            )
+            .bind(&workspace_id)
+            .fetch_one(&pool)
+            .await?;
+
+            if owner_count <= 1 {
+                return Err(AppError::BadRequest(
+                    "Cannot remove the last owner of a workspace".to_string(),
+                ));
+            }
+        }
+    }
+
     sqlx::query(
         "UPDATE workspace_members SET role = ? WHERE workspace_id = ? AND user_id = ?"
     )
@@ -286,6 +318,30 @@ pub async fn remove_member(
     Path((workspace_id, target_uid)): Path<(String, String)>,
 ) -> Result<Json<serde_json::Value>> {
     check_workspace_admin(&pool, &user_id.0, &workspace_id).await?;
+
+    // Protect last owner: prevent removing the last owner
+    let current_role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM workspace_members WHERE workspace_id = ? AND user_id = ?",
+    )
+    .bind(&workspace_id)
+    .bind(&target_uid)
+    .fetch_optional(&pool)
+    .await?;
+
+    if current_role.as_deref() == Some("owner") {
+        let owner_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM workspace_members WHERE workspace_id = ? AND role = 'owner'",
+        )
+        .bind(&workspace_id)
+        .fetch_one(&pool)
+        .await?;
+
+        if owner_count <= 1 {
+            return Err(AppError::BadRequest(
+                "Cannot remove the last owner of a workspace".to_string(),
+            ));
+        }
+    }
 
     let result = sqlx::query(
         "DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?"
@@ -325,30 +381,7 @@ pub async fn get_project_members(
     Extension(user_id): Extension<UserId>,
     Path(project_id): Path<String>,
 ) -> Result<Json<Vec<WorkspaceMember>>> {
-    // Check that user has access to the project
-    let has_access: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM projects p JOIN workspace_members wm ON p.workspace_id = wm.workspace_id WHERE p.id = ? AND wm.user_id = ?)"
-    )
-    .bind(&project_id)
-    .bind(&user_id.0)
-    .fetch_one(&pool)
-    .await?;
-
-    if !has_access {
-        // Also allow for legacy projects with no workspace
-        let is_legacy: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM projects WHERE id = ? AND workspace_id IS NULL)"
-        )
-        .bind(&project_id)
-        .fetch_one(&pool)
-        .await?;
-
-        if !is_legacy {
-            return Err(AppError::Forbidden);
-        }
-        // Legacy: return empty list
-        return Ok(Json(vec![]));
-    }
+    check_project_access(&pool, &user_id.0, &project_id).await?;
 
     let members = sqlx::query_as::<_, WorkspaceMember>(
         "SELECT wm.workspace_id, wm.user_id, u.name, u.email, u.avatar_url, wm.role, wm.joined_at FROM workspace_members wm JOIN users u ON wm.user_id = u.id JOIN projects p ON wm.workspace_id = p.workspace_id WHERE p.id = ? ORDER BY wm.joined_at ASC"
