@@ -4,9 +4,11 @@ use std::str::FromStr;
 
 use crate::error::{AppError, Result};
 
-/// プロジェクトへのアクセス権を確認する共通関数。
-/// workspace_members 経由でメンバーシップを検証し、
-/// workspace_id が NULL のレガシープロジェクトはフォールバックで許可する。
+/// Check project access via workspace membership.
+/// Only projects with a valid workspace_id and matching membership are allowed.
+/// The legacy fallback for workspace_id IS NULL has been removed (2026-03-26)
+/// because all projects are now created with a workspace_id. Any orphaned
+/// legacy rows must be migrated before they can be accessed.
 pub async fn check_project_access(pool: &SqlitePool, user_id: &str, project_id: &str) -> Result<()> {
     let has_access: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM projects p JOIN workspace_members wm ON p.workspace_id = wm.workspace_id WHERE p.id = ? AND wm.user_id = ?)"
@@ -17,15 +19,7 @@ pub async fn check_project_access(pool: &SqlitePool, user_id: &str, project_id: 
     .await?;
 
     if !has_access {
-        let is_legacy: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM projects WHERE id = ? AND workspace_id IS NULL)"
-        )
-        .bind(project_id)
-        .fetch_one(pool)
-        .await?;
-        if !is_legacy {
-            return Err(AppError::Forbidden);
-        }
+        return Err(AppError::Forbidden);
     }
     Ok(())
 }
@@ -44,13 +38,21 @@ pub async fn create_pool(database_url: &str) -> anyhow::Result<SqlitePool> {
 
     sqlx::migrate!("./migrations").run(&pool).await?;
 
-    // 起動時に期限切れのセッションと OAuth state を削除
+    // 起動時に期限切れのセッションと OAuth state / code / WS ticket を削除
     let now = chrono::Utc::now().to_rfc3339();
     let _ = sqlx::query("DELETE FROM sessions WHERE expires_at < ?")
         .bind(&now)
         .execute(&pool)
         .await;
     let _ = sqlx::query("DELETE FROM oauth_states WHERE expires_at < ?")
+        .bind(&now)
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("DELETE FROM oauth_codes WHERE expires_at < ?")
+        .bind(&now)
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("DELETE FROM ws_tickets WHERE expires_at < ?")
         .bind(&now)
         .execute(&pool)
         .await;

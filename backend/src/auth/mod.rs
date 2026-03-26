@@ -105,8 +105,10 @@ pub fn router() -> Router<AppState> {
     // レート制限なし: トークン認証済み or 無害なエンドポイント
     let util_router = Router::new()
         .route("/api/auth/me", get(oauth::get_me))
+        .route("/api/auth/token", get(oauth::exchange_token))
         .route("/api/auth/refresh", post(oauth::refresh_token))
         .route("/api/auth/logout", post(oauth::logout))
+        .route("/api/auth/ws-ticket", post(ws::create_ws_ticket))
         .route("/api/ws", get(ws::ws_handler));
 
     Router::new()

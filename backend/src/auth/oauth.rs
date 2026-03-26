@@ -105,24 +105,69 @@ async fn verify_and_consume_state(pool: &sqlx::SqlitePool, state: &str) -> anyho
     Ok(result.rows_affected() > 0)
 }
 
-fn build_redirect_response(frontend_callback: &str, access_token: &str, refresh_token: &str) -> Response<Body> {
-    let location = format!("{}?token={}", frontend_callback, access_token);
-    let secure_flag = if std::env::var("APP_URL")
-        .unwrap_or_default()
-        .starts_with("https")
-    {
-        "; Secure"
-    } else {
-        ""
-    };
-    let cookie = format!(
-        "refresh_token={}; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=2592000{}",
-        refresh_token, secure_flag
-    );
+async fn store_oauth_code(
+    pool: &sqlx::SqlitePool,
+    code: &str,
+    access_token: &str,
+    refresh_token: &str,
+) -> anyhow::Result<()> {
+    let expires_at = (Utc::now() + chrono::Duration::seconds(30)).to_rfc3339();
+    sqlx::query(
+        "INSERT INTO oauth_codes (code, access_token, refresh_token, expires_at) VALUES (?, ?, ?, ?)",
+    )
+    .bind(code)
+    .bind(access_token)
+    .bind(refresh_token)
+    .bind(&expires_at)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn exchange_oauth_code(
+    pool: &sqlx::SqlitePool,
+    code: &str,
+) -> anyhow::Result<Option<(String, String)>> {
+    let now = Utc::now().to_rfc3339();
+    let row: Option<(String, String)> = sqlx::query_as(
+        "SELECT access_token, refresh_token FROM oauth_codes WHERE code = ? AND expires_at > ?",
+    )
+    .bind(code)
+    .bind(&now)
+    .fetch_optional(pool)
+    .await?;
+
+    if row.is_some() {
+        // Delete the code after retrieval (single-use)
+        sqlx::query("DELETE FROM oauth_codes WHERE code = ?")
+            .bind(code)
+            .execute(pool)
+            .await?;
+    }
+
+    Ok(row)
+}
+
+async fn build_redirect_response(
+    pool: &sqlx::SqlitePool,
+    frontend_callback: &str,
+    access_token: &str,
+    refresh_token: &str,
+) -> Response<Body> {
+    // Generate a one-time code instead of passing the JWT directly in the URL
+    let code = generate_random_hex(32);
+    if let Err(e) = store_oauth_code(pool, &code, access_token, refresh_token).await {
+        tracing::error!("Failed to store OAuth code: {e}");
+        return Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(Body::empty())
+            .unwrap();
+    }
+
+    let location = format!("{}?code={}", frontend_callback, code);
     Response::builder()
         .status(StatusCode::FOUND)
         .header(header::LOCATION, location)
-        .header(header::SET_COOKIE, cookie)
         .body(Body::empty())
         .unwrap()
 }
@@ -338,7 +383,7 @@ pub async fn google_callback(
     };
 
     let callback_url = format!("{}/auth/callback", state.config.frontend_url);
-    build_redirect_response(&callback_url, &access_token, &refresh_token)
+    build_redirect_response(&state.pool, &callback_url, &access_token, &refresh_token).await
 }
 
 // ─── GitHub ───────────────────────────────────────────────────────────────────
@@ -486,7 +531,45 @@ pub async fn github_callback(
     };
 
     let callback_url = format!("{}/auth/callback", state.config.frontend_url);
-    build_redirect_response(&callback_url, &access_token, &refresh_token)
+    build_redirect_response(&state.pool, &callback_url, &access_token, &refresh_token).await
+}
+
+// ─── Token Exchange ──────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct TokenExchangeQuery {
+    code: String,
+}
+
+pub async fn exchange_token(
+    State(state): State<AppState>,
+    Query(params): Query<TokenExchangeQuery>,
+) -> Result<Response<Body>, AppError> {
+    let tokens = exchange_oauth_code(&state.pool, &params.code)
+        .await
+        .map_err(|e| AppError::Internal(e))?
+        .ok_or(AppError::Unauthorized)?;
+
+    let (access_token, refresh_token) = tokens;
+
+    let secure_flag = if state.config.app_url.starts_with("https") {
+        "; Secure"
+    } else {
+        ""
+    };
+    let cookie = format!(
+        "refresh_token={}; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=2592000{}",
+        refresh_token, secure_flag
+    );
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header(header::SET_COOKIE, cookie)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            serde_json::to_string(&serde_json::json!({ "access_token": access_token })).unwrap(),
+        ))
+        .unwrap())
 }
 
 // ─── Me / Refresh / Logout ────────────────────────────────────────────────────

@@ -2,7 +2,7 @@ use chrono::Utc;
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 
-const ACCESS_TOKEN_EXPIRY_SECS: i64 = 3600; // 1 hour
+const ACCESS_TOKEN_EXPIRY_SECS: i64 = 300; // 5 minutes
 const REFRESH_TOKEN_EXPIRY_DAYS: i64 = 30;
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -92,18 +92,6 @@ async fn check_issue_access(pool: &SqlitePool, user_id: &str, issue_id: &str) ->
     .await?;
 
     if has_access {
-        return Ok(());
-    }
-
-    // Legacy: project without workspace
-    let is_legacy: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM issues i JOIN projects p ON i.project_id = p.id WHERE i.id = ? AND p.workspace_id IS NULL)"
-    )
-    .bind(issue_id)
-    .fetch_one(pool)
-    .await?;
-
-    if is_legacy {
         Ok(())
     } else {
         Err(AppError::Forbidden)
@@ -206,9 +194,21 @@ pub async fn upload_attachment(
                 .fetch_optional(&pool)
                 .await?;
         if let Some(pid) = project_id {
+            let workspace_id: Option<String> =
+                sqlx::query_scalar("SELECT workspace_id FROM projects WHERE id = ?")
+                    .bind(&pid)
+                    .fetch_optional(&pool)
+                    .await
+                    .ok()
+                    .flatten();
             let _ = ws_tx.send(
-                serde_json::json!({ "type": "attachment.created", "issue_id": issue_id, "project_id": pid })
-                    .to_string(),
+                serde_json::json!({
+                    "type": "attachment.created",
+                    "issue_id": issue_id,
+                    "project_id": pid,
+                    "workspace_id": workspace_id,
+                })
+                .to_string(),
             );
         }
 

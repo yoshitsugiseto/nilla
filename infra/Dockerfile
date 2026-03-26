@@ -38,6 +38,9 @@ COPY --from=backend /app/target/release/nilla ./
 COPY --from=backend /app/migrations ./migrations
 COPY --from=frontend /app/dist ./dist
 
+RUN addgroup --system app && adduser --system --ingroup app app
+USER app
+
 EXPOSE 8080
 
 CMD ["./nilla"]

@@ -16,7 +16,7 @@ export function AuthCallbackPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const token = params.get('token')
+    const code = params.get('code')
     const errorCode = params.get('error')
 
     if (errorCode) {
@@ -24,19 +24,27 @@ export function AuthCallbackPage() {
       return
     }
 
-    if (!token) {
+    if (!code) {
       window.location.href = '/'
       return
     }
 
+    // Exchange the one-time code for an access token (code is not a JWT)
     axios
-      .get('/api/auth/me', {
-        headers: { Authorization: `Bearer ${token}` },
+      .get(`/api/auth/token?code=${encodeURIComponent(code)}`, {
         withCredentials: true,
       })
-      .then((res) => {
-        setAuth(token, res.data)
-        window.location.href = '/'
+      .then((tokenRes) => {
+        const accessToken = tokenRes.data.access_token as string
+        return axios
+          .get('/api/auth/me', {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            withCredentials: true,
+          })
+          .then((meRes) => {
+            setAuth(accessToken, meRes.data)
+            window.location.href = '/'
+          })
       })
       .catch(() => {
         setError('ログインに失敗しました。もう一度お試しください。')

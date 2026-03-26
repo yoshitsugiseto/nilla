@@ -18,14 +18,19 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| "sqlite:./nilla.db".to_string());
 
     let pool = nilla::db::create_pool(&database_url).await?;
-    tracing::info!("Database connected: {database_url}");
+    tracing::info!("Database connection established");
 
     let cors_origin = std::env::var("CORS_ORIGIN")
         .unwrap_or_else(|_| "http://localhost:3000".to_string());
 
+    let jwt_secret = std::env::var("JWT_SECRET")
+        .expect("JWT_SECRET must be set");
+    if jwt_secret.len() < 32 {
+        panic!("JWT_SECRET must be at least 32 characters long");
+    }
+
     let config = Config {
-        jwt_secret: std::env::var("JWT_SECRET")
-            .expect("JWT_SECRET must be set"),
+        jwt_secret,
         google_client_id: std::env::var("GOOGLE_CLIENT_ID")
             .unwrap_or_default(),
         google_client_secret: std::env::var("GOOGLE_CLIENT_SECRET")

@@ -6,12 +6,13 @@ use crate::{AppState, auth::jwt, error::AppError};
 #[derive(Clone)]
 pub struct UserId(pub String);
 
-/// 認証が不要なパス（WebSocket は handler 内でトークン検証するため除外）
+/// 認証が不要なパス（WebSocket は handler 内でチケット検証するため除外）
 const PUBLIC_PATHS: &[&str] = &[
     "/api/auth/google",
     "/api/auth/google/callback",
     "/api/auth/github",
     "/api/auth/github/callback",
+    "/api/auth/token",
     "/api/auth/refresh",
     "/api/auth/logout",
     "/api/ws",
