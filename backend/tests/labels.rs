@@ -74,8 +74,7 @@ async fn delete_label_success() {
     let pid = common::create_project(&app, "P", "PI").await;
     let lid = common::create_label(&app, &pid, "Bug").await;
 
-    let (status, json) =
-        common::send(&app, common::delete(&format!("/api/labels/{lid}"))).await;
+    let (status, json) = common::send(&app, common::delete(&format!("/api/labels/{lid}"))).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["ok"], true);
 }
@@ -134,7 +133,6 @@ async fn update_label_empty_name_returns_400() {
 async fn delete_label_not_found() {
     let app = common::setup_app().await;
 
-    let (status, _) =
-        common::send(&app, common::delete("/api/labels/nonexistent")).await;
+    let (status, _) = common::send(&app, common::delete("/api/labels/nonexistent")).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }

@@ -36,11 +36,8 @@ async fn normal_requests_within_limit_succeed() {
     // Send 20 sequential requests — all should succeed since the test app
     // does not include the GovernorLayer.
     for i in 0..20 {
-        let (status, json) = common::send(
-            &app,
-            common::get(&format!("/api/projects/{pid}/sprints")),
-        )
-        .await;
+        let (status, json) =
+            common::send(&app, common::get(&format!("/api/projects/{pid}/sprints"))).await;
         assert_eq!(
             status,
             StatusCode::OK,

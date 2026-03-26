@@ -67,11 +67,7 @@ async fn test_list_notifications_returns_only_own() {
 
     // User B lists notifications — should only see their own
     let token_b = common::token_for(common::TEST_USER_B_ID);
-    let (status, json) = common::send(
-        &app,
-        common::get_as("/api/notifications", &token_b),
-    )
-    .await;
+    let (status, json) = common::send(&app, common::get_as("/api/notifications", &token_b)).await;
     assert_eq!(status, StatusCode::OK);
     let notifications = json.as_array().unwrap();
     assert_eq!(notifications.len(), 1);
@@ -99,10 +95,7 @@ async fn test_mark_own_notification_as_read_returns_ok() {
     // Mark as read
     let (status, json) = common::send(
         &app,
-        common::patch(
-            &format!("/api/notifications/{notif_id}/read"),
-            json!({}),
-        ),
+        common::patch(&format!("/api/notifications/{notif_id}/read"), json!({})),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -160,37 +153,13 @@ async fn test_mark_all_read_only_affects_own_notifications() {
     common::insert_user_b(&pool).await;
 
     // Create notifications for both users
-    insert_notification(
-        &pool,
-        common::TEST_USER_ID,
-        None,
-        "info",
-        "A notif 1",
-    )
-    .await;
-    insert_notification(
-        &pool,
-        common::TEST_USER_ID,
-        None,
-        "info",
-        "A notif 2",
-    )
-    .await;
-    insert_notification(
-        &pool,
-        common::TEST_USER_B_ID,
-        None,
-        "info",
-        "B notif 1",
-    )
-    .await;
+    insert_notification(&pool, common::TEST_USER_ID, None, "info", "A notif 1").await;
+    insert_notification(&pool, common::TEST_USER_ID, None, "info", "A notif 2").await;
+    insert_notification(&pool, common::TEST_USER_B_ID, None, "info", "B notif 1").await;
 
     // User A marks all as read
-    let (status, json) = common::send(
-        &app,
-        common::post("/api/notifications/read-all", json!({})),
-    )
-    .await;
+    let (status, json) =
+        common::send(&app, common::post("/api/notifications/read-all", json!({}))).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["ok"], true);
 
@@ -202,11 +171,7 @@ async fn test_mark_all_read_only_affects_own_notifications() {
 
     // Verify user B's notification is still unread
     let token_b = common::token_for(common::TEST_USER_B_ID);
-    let (status, json) = common::send(
-        &app,
-        common::get_as("/api/notifications", &token_b),
-    )
-    .await;
+    let (status, json) = common::send(&app, common::get_as("/api/notifications", &token_b)).await;
     assert_eq!(status, StatusCode::OK);
     let notifications = json.as_array().unwrap();
     assert_eq!(notifications.len(), 1);
@@ -224,11 +189,7 @@ async fn test_empty_notification_list_for_new_user() {
 
     // User B (new user, no notifications) lists notifications
     let token_b = common::token_for(common::TEST_USER_B_ID);
-    let (status, json) = common::send(
-        &app,
-        common::get_as("/api/notifications", &token_b),
-    )
-    .await;
+    let (status, json) = common::send(&app, common::get_as("/api/notifications", &token_b)).await;
     assert_eq!(status, StatusCode::OK);
     let notifications = json.as_array().unwrap();
     assert!(notifications.is_empty());
@@ -242,14 +203,8 @@ async fn test_empty_notification_list_for_new_user() {
 async fn test_delete_own_notification_returns_ok() {
     let (app, pool) = common::setup_app_with_pool().await;
 
-    let notif_id = insert_notification(
-        &pool,
-        common::TEST_USER_ID,
-        None,
-        "info",
-        "Delete me",
-    )
-    .await;
+    let notif_id =
+        insert_notification(&pool, common::TEST_USER_ID, None, "info", "Delete me").await;
 
     let (status, json) = common::send(
         &app,

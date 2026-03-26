@@ -14,7 +14,12 @@ async fn health_returns_ok() {
     let app = common::setup_app().await;
 
     let response = app
-        .oneshot(Request::builder().uri("/api/health").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/api/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
@@ -31,7 +36,12 @@ async fn protected_route_requires_auth() {
 
     // Request with no Authorization header
     let response = app
-        .oneshot(Request::builder().uri("/api/projects").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/api/projects")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 

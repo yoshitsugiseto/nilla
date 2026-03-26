@@ -76,8 +76,7 @@ async fn delete_template_success() {
     let pid = common::create_project(&app, "P", "PI").await;
     let tid = common::create_template(&app, &pid, "My Template").await;
 
-    let (status, json) =
-        common::send(&app, common::delete(&format!("/api/templates/{tid}"))).await;
+    let (status, json) = common::send(&app, common::delete(&format!("/api/templates/{tid}"))).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["ok"], true);
 }
@@ -112,7 +111,10 @@ async fn update_template_partial() {
     // Only update priority, other fields should stay
     let (status, json) = common::send(
         &app,
-        common::put(&format!("/api/templates/{tid}"), json!({ "priority": "critical" })),
+        common::put(
+            &format!("/api/templates/{tid}"),
+            json!({ "priority": "critical" }),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -139,7 +141,6 @@ async fn update_template_empty_name_returns_400() {
 async fn delete_template_not_found() {
     let app = common::setup_app().await;
 
-    let (status, _) =
-        common::send(&app, common::delete("/api/templates/nonexistent")).await;
+    let (status, _) = common::send(&app, common::delete("/api/templates/nonexistent")).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }

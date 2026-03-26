@@ -24,10 +24,8 @@ fn multipart_upload(
     // File field
     body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
     body.extend_from_slice(
-        format!(
-            "Content-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\n"
-        )
-        .as_bytes(),
+        format!("Content-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\n")
+            .as_bytes(),
     );
     body.extend_from_slice(format!("Content-Type: {content_type}\r\n\r\n").as_bytes());
     body.extend_from_slice(data);
@@ -50,9 +48,7 @@ fn multipart_upload(
 // Helper: create a workspace + project + issue for attachment tests
 // ---------------------------------------------------------------
 
-async fn setup_project_and_issue(
-    app: &axum::Router,
-) -> (String, String) {
+async fn setup_project_and_issue(app: &axum::Router) -> (String, String) {
     let project_id = common::create_project(app, "AttachProj", "AP").await;
     let issue_id = common::create_issue(app, &project_id, "Attach Issue").await;
     (project_id, issue_id)
@@ -296,10 +292,7 @@ async fn test_cross_project_user_cannot_access_attachment() {
     // User B tries to list attachments on the issue
     let (status, _) = common::send(
         &app,
-        common::get_as(
-            &format!("/api/issues/{issue_id}/attachments"),
-            &token_b,
-        ),
+        common::get_as(&format!("/api/issues/{issue_id}/attachments"), &token_b),
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
