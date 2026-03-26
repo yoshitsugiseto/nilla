@@ -1,70 +1,132 @@
-import axios from 'axios'
+import axios, {
+  AxiosHeaders,
+  type AxiosInstance,
+  type InternalAxiosRequestConfig,
+} from 'axios'
 import { useAuthStore } from '../store/auth'
 
-const client = axios.create({
-  baseURL: '/api',
-  headers: { 'Content-Type': 'application/json' },
-  withCredentials: true, // refresh token cookie のため
-})
+type AuthStoreSnapshot = {
+  accessToken: string | null
+  setAccessToken: (token: string) => void
+  clearAuth: () => void
+}
 
-// リクエストにアクセストークンを付与
-client.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().accessToken
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
+type AuthStoreLike = {
+  getState: () => AuthStoreSnapshot
+}
 
-// 401 時にリフレッシュを試みる
-let isRefreshing = false
-let refreshSubscribers: ((token: string) => void)[] = []
+type RefreshSubscriber = {
+  resolve: (token: string) => void
+  reject: (error: unknown) => void
+}
 
-client.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config
+type RetriableRequestConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean
+}
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+type CreateApiClientOptions = {
+  authStore?: AuthStoreLike
+  client?: AxiosInstance
+  refreshAccessToken?: () => Promise<string>
+  onAuthFailure?: () => void
+}
+
+function setAuthorizationHeader(
+  config: { headers?: InternalAxiosRequestConfig['headers'] },
+  token: string
+): void {
+  const headers = AxiosHeaders.from(config.headers ?? {})
+  headers.set('Authorization', `Bearer ${token}`)
+  config.headers = headers
+}
+
+async function defaultRefreshAccessToken(): Promise<string> {
+  const { data } = await axios.post(
+    '/api/auth/refresh',
+    {},
+    { withCredentials: true }
+  )
+  return data.access_token as string
+}
+
+function defaultOnAuthFailure(): void {
+  window.location.href = '/'
+}
+
+export function createApiClient(options: CreateApiClientOptions = {}): AxiosInstance {
+  const authStore = options.authStore ?? useAuthStore
+  const client = options.client ?? axios.create({
+    baseURL: '/api',
+    headers: { 'Content-Type': 'application/json' },
+    withCredentials: true,
+  })
+  const refreshAccessToken = options.refreshAccessToken ?? defaultRefreshAccessToken
+  const onAuthFailure = options.onAuthFailure ?? defaultOnAuthFailure
+
+  let isRefreshing = false
+  let refreshSubscribers: RefreshSubscriber[] = []
+
+  client.interceptors.request.use((config) => {
+    const token = authStore.getState().accessToken
+    if (token) {
+      setAuthorizationHeader(config, token)
+    }
+    return config
+  })
+
+  client.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+      const originalRequest = error.config as RetriableRequestConfig | undefined
+
+      if (
+        error.response?.status !== 401 ||
+        !originalRequest ||
+        originalRequest._retry
+      ) {
+        return Promise.reject(error)
+      }
+
       originalRequest._retry = true
 
       if (!isRefreshing) {
         isRefreshing = true
         try {
-          const { data } = await axios.post(
-            '/api/auth/refresh',
-            {},
-            { withCredentials: true }
-          )
-          const newToken: string = data.access_token
-          useAuthStore.getState().setAccessToken(newToken)
-          refreshSubscribers.forEach((cb) => cb(newToken))
+          const newToken = await refreshAccessToken()
+          authStore.getState().setAccessToken(newToken)
+
+          refreshSubscribers.forEach((subscriber) => subscriber.resolve(newToken))
           refreshSubscribers = []
           isRefreshing = false
 
-          originalRequest.headers.Authorization = `Bearer ${newToken}`
+          setAuthorizationHeader(originalRequest, newToken)
           return client(originalRequest)
-        } catch {
+        } catch (refreshError) {
           isRefreshing = false
+          refreshSubscribers.forEach((subscriber) => subscriber.reject(refreshError))
           refreshSubscribers = []
-          useAuthStore.getState().clearAuth()
-          window.location.href = '/'
+          authStore.getState().clearAuth()
+          onAuthFailure()
           return Promise.reject(error)
         }
       }
 
-      // リフレッシュ中の他リクエストはキューに積む
-      return new Promise((resolve) => {
-        refreshSubscribers.push((token: string) => {
-          originalRequest.headers.Authorization = `Bearer ${token}`
-          resolve(client(originalRequest))
+      return new Promise((resolve, reject) => {
+        refreshSubscribers.push({
+          resolve: (token: string) => {
+            setAuthorizationHeader(originalRequest, token)
+            resolve(client(originalRequest))
+          },
+          reject,
         })
       })
     }
+  )
 
-    return Promise.reject(error)
-  }
-)
+  return client
+}
+
+const client = createApiClient()
 
 export default client
 
