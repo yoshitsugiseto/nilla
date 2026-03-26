@@ -3,14 +3,18 @@ pub mod middleware;
 pub mod oauth;
 pub mod ws;
 
-use std::sync::Arc;
-use axum::{Router, routing::{get, post}};
 use axum::body::Body;
 use axum::extract::Request;
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
+use axum::{
+    routing::{get, post},
+    Router,
+};
+use std::sync::Arc;
+use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
+
 use crate::AppState;
 
 /// 429 レスポンスをアプリのデザインに合わせた HTML/JSON に差し替えるミドルウェア
@@ -30,7 +34,8 @@ pub async fn rate_limit_response(req: Request<Body>, next: Next) -> Response {
         .to_string();
 
     // ブラウザが直接ナビゲートする OAuth エンドポイントは HTML を返す
-    let is_browser_path = path.starts_with("/api/auth/google") || path.starts_with("/api/auth/github");
+    let is_browser_path =
+        path.starts_with("/api/auth/google") || path.starts_with("/api/auth/github");
 
     if is_browser_path {
         let html = format!(
@@ -82,7 +87,7 @@ pub async fn rate_limit_response(req: Request<Body>, next: Next) -> Response {
     }
 }
 
-pub fn router() -> Router<AppState> {
+pub fn public_router() -> Router<AppState> {
     // OAuth ログイン開始エンドポイントのみにレート制限を適用
     // max ~20 req/min per IP (1 token / 3s, burst 10)
     let governor_conf = Arc::new(
@@ -90,7 +95,7 @@ pub fn router() -> Router<AppState> {
             .period(std::time::Duration::from_secs(3))
             .burst_size(10)
             .finish()
-            .unwrap(),
+            .expect("building OAuth rate limiter should not fail"),
     );
 
     // レート制限あり: OAuth ログイン・コールバックのみ
@@ -102,16 +107,18 @@ pub fn router() -> Router<AppState> {
         .layer(GovernorLayer::new(governor_conf))
         .layer(axum::middleware::from_fn(rate_limit_response));
 
-    // レート制限なし: トークン認証済み or 無害なエンドポイント
-    let util_router = Router::new()
-        .route("/api/auth/me", get(oauth::get_me))
+    // レート制限なし: refresh cookie / one-time code / WS ticket validation
+    let public_util_router = Router::new()
         .route("/api/auth/token", get(oauth::exchange_token))
         .route("/api/auth/refresh", post(oauth::refresh_token))
         .route("/api/auth/logout", post(oauth::logout))
-        .route("/api/auth/ws-ticket", post(ws::create_ws_ticket))
         .route("/api/ws", get(ws::ws_handler));
 
+    Router::new().merge(oauth_router).merge(public_util_router)
+}
+
+pub fn protected_router() -> Router<AppState> {
     Router::new()
-        .merge(oauth_router)
-        .merge(util_router)
+        .route("/api/auth/me", get(oauth::get_me))
+        .route("/api/auth/ws-ticket", post(ws::create_ws_ticket))
 }

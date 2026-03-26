@@ -1,35 +1,17 @@
-use axum::{extract::Request, middleware::Next, response::Response};
 use axum::extract::State;
+use axum::{extract::Request, middleware::Next, response::Response};
+use chrono::Utc;
 
-use crate::{AppState, auth::jwt, error::AppError};
+use crate::{auth::jwt, error::AppError, AppState};
 
 #[derive(Clone)]
 pub struct UserId(pub String);
-
-/// 認証が不要なパス（WebSocket は handler 内でチケット検証するため除外）
-const PUBLIC_PATHS: &[&str] = &[
-    "/api/auth/google",
-    "/api/auth/google/callback",
-    "/api/auth/github",
-    "/api/auth/github/callback",
-    "/api/auth/token",
-    "/api/auth/refresh",
-    "/api/auth/logout",
-    "/api/ws",
-    "/api/health",
-];
 
 pub async fn auth_middleware(
     State(state): State<AppState>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
-    let path = request.uri().path();
-
-    if PUBLIC_PATHS.iter().any(|p| *p == path) {
-        return Ok(next.run(request).await);
-    }
-
     let token = request
         .headers()
         .get("Authorization")
@@ -39,6 +21,19 @@ pub async fn auth_middleware(
 
     let claims = jwt::decode_access_token(token, &state.config.jwt_secret)
         .map_err(|_| AppError::Unauthorized)?;
+
+    let now = Utc::now().to_rfc3339();
+    let session_is_valid: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ? AND user_id = ? AND expires_at > ?)",
+    )
+    .bind(&claims.sid)
+    .bind(&claims.sub)
+    .bind(&now)
+    .fetch_one(&state.pool)
+    .await?;
+    if !session_is_valid {
+        return Err(AppError::Unauthorized);
+    }
 
     request.extensions_mut().insert(UserId(claims.sub));
 

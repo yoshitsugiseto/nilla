@@ -13,11 +13,31 @@ use tower::ServiceExt;
 use nilla::auth::jwt;
 use nilla::realtime::RealtimeHub;
 use nilla::storage::Storage;
-use nilla::{AppState, Config, create_app};
+use nilla::{create_app, AppState, Config};
 
 pub const TEST_JWT_SECRET: &str = "test-secret";
 pub const TEST_USER_ID: &str = "test-user-001";
 pub const TEST_USER_B_ID: &str = "test-user-002";
+pub const TEST_SESSION_ID: &str = "test-session-001";
+pub const TEST_USER_B_SESSION_ID: &str = "test-session-002";
+
+async fn insert_session(pool: &SqlitePool, session_id: &str, user_id: &str) {
+    let expires_at = (chrono::Utc::now() + chrono::Duration::days(30)).to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339();
+
+    sqlx::query(
+        "INSERT INTO sessions (id, user_id, refresh_token_hash, expires_at, created_at)
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(session_id)
+    .bind(user_id)
+    .bind(format!("hash-{session_id}"))
+    .bind(&expires_at)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .unwrap();
+}
 
 pub async fn setup_pool() -> SqlitePool {
     let opts = SqliteConnectOptions::from_str("sqlite::memory:")
@@ -46,6 +66,8 @@ pub async fn setup_pool() -> SqlitePool {
     .await
     .unwrap();
 
+    insert_session(&pool, TEST_SESSION_ID, TEST_USER_ID).await;
+
     pool
 }
 
@@ -63,7 +85,7 @@ pub async fn setup_app_with_pool() -> (Router, SqlitePool) {
 }
 
 fn build_app(pool: SqlitePool) -> Router {
-    let ws_tx = RealtimeHub::new();
+    let realtime = RealtimeHub::new();
     let storage = Storage::local(
         &std::env::temp_dir()
             .join("nilla-test-uploads")
@@ -83,7 +105,7 @@ fn build_app(pool: SqlitePool) -> Router {
             frontend_url: "http://localhost:3000".to_string(),
             http_client: reqwest::Client::new(),
         }),
-        ws_tx,
+        realtime,
         storage,
     };
 
@@ -91,11 +113,16 @@ fn build_app(pool: SqlitePool) -> Router {
 }
 
 pub fn test_token() -> String {
-    jwt::encode_access_token(TEST_USER_ID, TEST_JWT_SECRET).unwrap()
+    jwt::encode_access_token(TEST_USER_ID, TEST_SESSION_ID, TEST_JWT_SECRET).unwrap()
 }
 
 pub fn token_for(user_id: &str) -> String {
-    jwt::encode_access_token(user_id, TEST_JWT_SECRET).unwrap()
+    let session_id = match user_id {
+        TEST_USER_ID => TEST_SESSION_ID,
+        TEST_USER_B_ID => TEST_USER_B_SESSION_ID,
+        _ => panic!("No test session defined for user_id={user_id}"),
+    };
+    jwt::encode_access_token(user_id, session_id, TEST_JWT_SECRET).unwrap()
 }
 
 /// Insert a second test user (user B) into the pool.
@@ -114,6 +141,8 @@ pub async fn insert_user_b(pool: &SqlitePool) {
     .execute(pool)
     .await
     .unwrap();
+
+    insert_session(pool, TEST_USER_B_SESSION_ID, TEST_USER_B_ID).await;
 }
 
 // ---------------------------------------------------------------
@@ -247,7 +276,10 @@ pub fn delete_as(uri: &str, token: &str) -> Request<Body> {
 pub async fn create_workspace(app: &Router) -> String {
     let (status, json) = send(
         app,
-        post("/api/workspaces", serde_json::json!({ "name": "Test Workspace" })),
+        post(
+            "/api/workspaces",
+            serde_json::json!({ "name": "Test Workspace" }),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "create_workspace failed: {json}");

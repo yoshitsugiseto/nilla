@@ -35,10 +35,9 @@ impl FromStr for IssueStatus {
             "in_progress" => Ok(IssueStatus::InProgress),
             "in_review" => Ok(IssueStatus::InReview),
             "done" => Ok(IssueStatus::Done),
-            _ => Err(format!(
-                "Invalid status '{}'. Must be one of: todo, in_progress, in_review, done",
-                s
-            )),
+            _ => Err(
+                "Invalid status. Must be one of: todo, in_progress, in_review, done".to_string(),
+            ),
         }
     }
 }
@@ -82,10 +81,9 @@ impl FromStr for IssueType {
             "bug" => Ok(IssueType::Bug),
             "spike" => Ok(IssueType::Spike),
             "epic" => Ok(IssueType::Epic),
-            _ => Err(format!(
-                "Invalid issue type '{}'. Must be one of: story, task, bug, spike, epic",
-                s
-            )),
+            _ => {
+                Err("Invalid issue type. Must be one of: story, task, bug, spike, epic".to_string())
+            }
         }
     }
 }
@@ -128,10 +126,7 @@ impl FromStr for IssuePriority {
             "high" => Ok(IssuePriority::High),
             "medium" => Ok(IssuePriority::Medium),
             "low" => Ok(IssuePriority::Low),
-            _ => Err(format!(
-                "Invalid priority '{}'. Must be one of: critical, high, medium, low",
-                s
-            )),
+            _ => Err("Invalid priority. Must be one of: critical, high, medium, low".to_string()),
         }
     }
 }
@@ -206,13 +201,21 @@ impl From<IssueRow> for Issue {
             .as_deref()
             .and_then(|s| {
                 serde_json::from_str(s)
-                    .map_err(|e| tracing::warn!(issue_id = %row.id, "Failed to parse labels JSON: {e}"))
+                    .map_err(
+                        |e| tracing::warn!(issue_id = %row.id, "Failed to parse labels JSON: {e}"),
+                    )
                     .ok()
             })
             .unwrap_or_default();
         let issue_type = row.r#type.parse::<IssueType>().unwrap_or(IssueType::Task);
-        let status = row.status.parse::<IssueStatus>().unwrap_or(IssueStatus::Todo);
-        let priority = row.priority.parse::<IssuePriority>().unwrap_or(IssuePriority::Medium);
+        let status = row
+            .status
+            .parse::<IssueStatus>()
+            .unwrap_or(IssueStatus::Todo);
+        let priority = row
+            .priority
+            .parse::<IssuePriority>()
+            .unwrap_or(IssuePriority::Medium);
         Self {
             id: row.id,
             project_id: row.project_id,
@@ -321,7 +324,7 @@ pub struct IssueFilters {
 pub struct BulkUpdateIssues {
     pub issue_ids: Vec<String>,
     pub status: Option<IssueStatus>,
-    pub sprint_id: Option<String>, // "backlog" = set NULL
+    pub sprint_id: Option<String>,   // "backlog" = set NULL
     pub assignee_id: Option<String>, // "" = clear
 }
 

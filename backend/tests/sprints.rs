@@ -104,6 +104,78 @@ async fn start_already_active_sprint_returns_400() {
 }
 
 #[tokio::test]
+async fn concurrent_sprint_updates_leave_one_complete_last_write() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "SP").await;
+    let sid = common::create_sprint(&app, &pid, "Sprint 1").await;
+
+    let app_a = app.clone();
+    let app_b = app.clone();
+    let req_a = common::put(&format!("/api/sprints/{sid}"), json!({ "goal": "Goal A" }));
+    let req_b = common::put(&format!("/api/sprints/{sid}"), json!({ "goal": "Goal B" }));
+
+    let ((status_a, _), (status_b, _)) =
+        tokio::join!(common::send(&app_a, req_a), common::send(&app_b, req_b));
+    assert_eq!(status_a, StatusCode::OK);
+    assert_eq!(status_b, StatusCode::OK);
+
+    let (status, json) = common::send(&app, common::get(&format!("/api/sprints/{sid}"))).await;
+    assert_eq!(status, StatusCode::OK);
+    let goal = json["goal"].as_str().unwrap();
+    assert!(goal == "Goal A" || goal == "Goal B");
+}
+
+#[tokio::test]
+async fn create_sprint_with_unicode_name_and_goal_succeeds() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "SP").await;
+
+    let (status, json) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/sprints"),
+            json!({
+                "name": "改善😀スプリント",
+                "goal": "多言語フロー 🌏 を完成させる",
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["name"], "改善😀スプリント");
+    assert_eq!(json["goal"], "多言語フロー 🌏 を完成させる");
+}
+
+#[tokio::test]
+async fn create_sprint_name_length_is_enforced_by_bytes_for_unicode() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "SP").await;
+    let max_name = "界".repeat(85);
+    let too_long_name = "界".repeat(86);
+
+    let (status, json) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/sprints"),
+            json!({ "name": max_name }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["name"].as_str().unwrap().len(), 255);
+
+    let (status, _) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/sprints"),
+            json!({ "name": too_long_name }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn complete_sprint_moves_incomplete_issues_to_backlog() {
     let app = common::setup_app().await;
     let pid = common::create_project(&app, "P", "SP").await;
@@ -382,11 +454,8 @@ async fn burndown_with_no_issues_returns_flat_zeros() {
     .await;
     let sid = sprint["id"].as_str().unwrap().to_string();
 
-    let (status, json) = common::send(
-        &app,
-        common::get(&format!("/api/sprints/{sid}/burndown")),
-    )
-    .await;
+    let (status, json) =
+        common::send(&app, common::get(&format!("/api/sprints/{sid}/burndown"))).await;
     assert_eq!(status, StatusCode::OK);
 
     let points = json.as_array().unwrap();
@@ -440,11 +509,8 @@ async fn burndown_with_completed_issues_reflects_done() {
     .await;
     assert_eq!(status, StatusCode::OK);
 
-    let (status, json) = common::send(
-        &app,
-        common::get(&format!("/api/sprints/{sid}/burndown")),
-    )
-    .await;
+    let (status, json) =
+        common::send(&app, common::get(&format!("/api/sprints/{sid}/burndown"))).await;
     assert_eq!(status, StatusCode::OK);
 
     let points = json.as_array().unwrap();
@@ -488,11 +554,8 @@ async fn burndown_ideal_line_starts_at_total_and_ends_at_zero() {
     )
     .await;
 
-    let (status, json) = common::send(
-        &app,
-        common::get(&format!("/api/sprints/{sid}/burndown")),
-    )
-    .await;
+    let (status, json) =
+        common::send(&app, common::get(&format!("/api/sprints/{sid}/burndown"))).await;
     assert_eq!(status, StatusCode::OK);
 
     let points = json.as_array().unwrap();
@@ -550,11 +613,8 @@ async fn velocity_with_no_completed_sprints_returns_empty() {
     // Create a sprint but don't complete it
     common::create_sprint(&app, &pid, "Sprint 1").await;
 
-    let (status, json) = common::send(
-        &app,
-        common::get(&format!("/api/projects/{pid}/velocity")),
-    )
-    .await;
+    let (status, json) =
+        common::send(&app, common::get(&format!("/api/projects/{pid}/velocity"))).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json.as_array().unwrap().len(), 0);
 }
@@ -596,11 +656,8 @@ async fn velocity_with_completed_sprint_returns_data() {
     )
     .await;
 
-    let (status, json) = common::send(
-        &app,
-        common::get(&format!("/api/projects/{pid}/velocity")),
-    )
-    .await;
+    let (status, json) =
+        common::send(&app, common::get(&format!("/api/projects/{pid}/velocity"))).await;
     assert_eq!(status, StatusCode::OK);
 
     let velocity = json.as_array().unwrap();
@@ -649,11 +706,8 @@ async fn velocity_limited_to_10() {
         .await;
     }
 
-    let (status, json) = common::send(
-        &app,
-        common::get(&format!("/api/projects/{pid}/velocity")),
-    )
-    .await;
+    let (status, json) =
+        common::send(&app, common::get(&format!("/api/projects/{pid}/velocity"))).await;
     assert_eq!(status, StatusCode::OK);
 
     let velocity = json.as_array().unwrap();

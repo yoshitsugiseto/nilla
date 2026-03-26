@@ -17,7 +17,10 @@ async fn create_project_success() {
     let ws_id = common::create_workspace(&app).await;
     let (status, json) = common::send(
         &app,
-        common::post("/api/projects", json!({ "name": "My Project", "key": "MP", "workspace_id": ws_id })),
+        common::post(
+            "/api/projects",
+            json!({ "name": "My Project", "key": "MP", "workspace_id": ws_id }),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -32,7 +35,10 @@ async fn create_project_empty_name_returns_400() {
     let ws_id = common::create_workspace(&app).await;
     let (status, _) = common::send(
         &app,
-        common::post("/api/projects", json!({ "name": "  ", "key": "MP", "workspace_id": ws_id })),
+        common::post(
+            "/api/projects",
+            json!({ "name": "  ", "key": "MP", "workspace_id": ws_id }),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -44,7 +50,10 @@ async fn create_project_non_alphanumeric_key_returns_400() {
     let ws_id = common::create_workspace(&app).await;
     let (status, _) = common::send(
         &app,
-        common::post("/api/projects", json!({ "name": "Project", "key": "MY-KEY", "workspace_id": ws_id })),
+        common::post(
+            "/api/projects",
+            json!({ "name": "Project", "key": "MY-KEY", "workspace_id": ws_id }),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -57,7 +66,10 @@ async fn create_project_duplicate_key_returns_conflict() {
     common::create_project_in(&app, "Project A", "PA", &ws_id).await;
     let (status, _) = common::send(
         &app,
-        common::post("/api/projects", json!({ "name": "Project B", "key": "PA", "workspace_id": ws_id })),
+        common::post(
+            "/api/projects",
+            json!({ "name": "Project B", "key": "PA", "workspace_id": ws_id }),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT);
@@ -98,14 +110,65 @@ async fn update_project_name() {
 }
 
 #[tokio::test]
+async fn create_project_with_unicode_name_and_description_succeeds() {
+    let app = common::setup_app().await;
+    let ws_id = common::create_workspace(&app).await;
+
+    let (status, json) = common::send(
+        &app,
+        common::post(
+            "/api/projects",
+            json!({
+                "name": "国際化😀プロジェクト",
+                "key": "I18N",
+                "description": "多言語入力 🌏 を確認する",
+                "workspace_id": ws_id,
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["name"], "国際化😀プロジェクト");
+    assert_eq!(json["description"], "多言語入力 🌏 を確認する");
+}
+
+#[tokio::test]
+async fn create_project_name_length_is_enforced_by_bytes_for_unicode() {
+    let app = common::setup_app().await;
+    let ws_id = common::create_workspace(&app).await;
+    let max_name = "界".repeat(85);
+    let too_long_name = "界".repeat(86);
+
+    let (status, json) = common::send(
+        &app,
+        common::post(
+            "/api/projects",
+            json!({ "name": max_name, "key": "UNI", "workspace_id": ws_id }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["name"].as_str().unwrap().len(), 255);
+
+    let (status, _) = common::send(
+        &app,
+        common::post(
+            "/api/projects",
+            json!({ "name": too_long_name, "key": "BIG", "workspace_id": ws_id }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn delete_project_cascades_issues_and_sprints() {
     let app = common::setup_app().await;
     let pid = common::create_project(&app, "P", "PC").await;
     let sid = common::create_sprint(&app, &pid, "Sprint 1").await;
     let iid = common::create_issue(&app, &pid, "Issue 1").await;
 
-    let (status, json) =
-        common::send(&app, common::delete(&format!("/api/projects/{pid}"))).await;
+    let (status, json) = common::send(&app, common::delete(&format!("/api/projects/{pid}"))).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["ok"], true);
 

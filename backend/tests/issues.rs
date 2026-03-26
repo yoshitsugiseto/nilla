@@ -362,8 +362,7 @@ async fn update_issue_status_creates_activity_log() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["status"], "in_progress");
 
-    let (_, logs) =
-        common::send(&app, common::get(&format!("/api/issues/{iid}/activity"))).await;
+    let (_, logs) = common::send(&app, common::get(&format!("/api/issues/{iid}/activity"))).await;
     let logs = logs.as_array().unwrap();
     assert_eq!(logs.len(), 1);
     assert_eq!(logs[0]["field"], "status");
@@ -414,8 +413,7 @@ async fn delete_issue_cascades_subtasks() {
     .await;
     let child_id = child["id"].as_str().unwrap().to_string();
 
-    let (status, _) =
-        common::send(&app, common::delete(&format!("/api/issues/{story_id}"))).await;
+    let (status, _) = common::send(&app, common::delete(&format!("/api/issues/{story_id}"))).await;
     assert_eq!(status, StatusCode::OK);
 
     // child should be gone
@@ -466,7 +464,10 @@ async fn update_issue_can_clear_assignee() {
 
     let (status, json) = common::send(
         &app,
-        common::put(&format!("/api/issues/{iid}"), json!({ "assignee_id": null })),
+        common::put(
+            &format!("/api/issues/{iid}"),
+            json!({ "assignee_id": null }),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -521,12 +522,8 @@ async fn update_issue_epic_must_be_epic() {
             json!({ "title": "Story", "type": "story" }),
         ),
     )
-    .await
-    ;
-    let story_id = story["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    .await;
+    let story_id = story["id"].as_str().unwrap().to_string();
 
     let (status, _) = common::send(
         &app,
@@ -663,6 +660,28 @@ async fn create_and_list_issue_links() {
 }
 
 #[tokio::test]
+async fn create_issue_link_with_invalid_type_returns_generic_error() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let iid1 = common::create_issue(&app, &pid, "Issue A").await;
+    let iid2 = common::create_issue(&app, &pid, "Issue B").await;
+
+    let (status, json) = common::send(
+        &app,
+        common::post(
+            &format!("/api/issues/{iid1}/links"),
+            json!({ "target_issue_id": iid2, "link_type": "totally_custom" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        json["error"],
+        "link_type must be one of: blocks, is_blocked_by, relates_to, duplicates"
+    );
+}
+
+#[tokio::test]
 async fn delete_issue_link() {
     let app = common::setup_app().await;
     let pid = common::create_project(&app, "P", "PI").await;
@@ -684,8 +703,7 @@ async fn delete_issue_link() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["ok"], true);
 
-    let (_, links) =
-        common::send(&app, common::get(&format!("/api/issues/{iid1}/links"))).await;
+    let (_, links) = common::send(&app, common::get(&format!("/api/issues/{iid1}/links"))).await;
     assert_eq!(links.as_array().unwrap().len(), 0);
 }
 
@@ -718,6 +736,88 @@ async fn update_issue_sprint() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert!(json["sprint_id"].is_null());
+}
+
+#[tokio::test]
+async fn concurrent_issue_updates_leave_one_complete_last_write() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let iid = common::create_issue(&app, &pid, "Original").await;
+
+    let app_a = app.clone();
+    let app_b = app.clone();
+    let req_a = common::put(
+        &format!("/api/issues/{iid}"),
+        json!({ "title": "Updated by A" }),
+    );
+    let req_b = common::put(
+        &format!("/api/issues/{iid}"),
+        json!({ "title": "Updated by B" }),
+    );
+
+    let ((status_a, _), (status_b, _)) =
+        tokio::join!(common::send(&app_a, req_a), common::send(&app_b, req_b));
+    assert_eq!(status_a, StatusCode::OK);
+    assert_eq!(status_b, StatusCode::OK);
+
+    let (status, json) = common::send(&app, common::get(&format!("/api/issues/{iid}"))).await;
+    assert_eq!(status, StatusCode::OK);
+    let title = json["title"].as_str().unwrap();
+    assert!(title == "Updated by A" || title == "Updated by B");
+}
+
+#[tokio::test]
+async fn create_issue_with_emoji_content_round_trips() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+
+    let (status, json) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({
+                "title": "Fix 😀 regression",
+                "description": "Investigate emoji 🧪 handling in comments",
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["title"], "Fix 😀 regression");
+    assert_eq!(
+        json["description"],
+        "Investigate emoji 🧪 handling in comments"
+    );
+}
+
+#[tokio::test]
+async fn create_issue_title_length_is_enforced_by_bytes_for_unicode() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+
+    let max_title = "😀".repeat(125);
+    let too_long_title = "😀".repeat(126);
+
+    let (status, json) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": max_title }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["title"].as_str().unwrap().len(), 500);
+
+    let (status, _) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": too_long_title }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

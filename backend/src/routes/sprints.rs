@@ -2,8 +2,7 @@ use std::collections::HashMap;
 
 use axum::{
     extract::{Path, State},
-    Extension,
-    Json,
+    Extension, Json,
 };
 use chrono::NaiveDate;
 use sqlx::SqlitePool;
@@ -200,7 +199,7 @@ pub async fn update_sprint(
 
 pub async fn start_sprint(
     State(pool): State<SqlitePool>,
-    State(ws_tx): State<RealtimeHub>,
+    State(realtime): State<RealtimeHub>,
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
 ) -> Result<Json<Sprint>> {
@@ -212,7 +211,10 @@ pub async fn start_sprint(
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let current_status = row.status.parse::<SprintStatus>().unwrap_or(SprintStatus::Planning);
+    let current_status = row
+        .status
+        .parse::<SprintStatus>()
+        .unwrap_or(SprintStatus::Planning);
     if current_status != SprintStatus::Planning {
         return Err(AppError::BadRequest(
             "Only planning sprints can be started".to_string(),
@@ -228,7 +230,7 @@ pub async fn start_sprint(
 
     let updated = Sprint::from(updated_row);
     if let Some(workspace_id) = get_workspace_id_for_project(&pool, &updated.project_id).await {
-        ws_tx
+        realtime
             .publish_workspace(
                 &workspace_id,
                 serde_json::json!({
@@ -250,7 +252,7 @@ pub struct CompleteSprintBody {
 
 pub async fn complete_sprint(
     State(pool): State<SqlitePool>,
-    State(ws_tx): State<RealtimeHub>,
+    State(realtime): State<RealtimeHub>,
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
     body: Option<Json<CompleteSprintBody>>,
@@ -263,7 +265,10 @@ pub async fn complete_sprint(
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let current_status = row.status.parse::<SprintStatus>().unwrap_or(SprintStatus::Planning);
+    let current_status = row
+        .status
+        .parse::<SprintStatus>()
+        .unwrap_or(SprintStatus::Planning);
     if current_status != SprintStatus::Active {
         return Err(AppError::BadRequest(
             "Only active sprints can be completed".to_string(),
@@ -297,7 +302,7 @@ pub async fn complete_sprint(
 
     let updated = Sprint::from(updated_row);
     if let Some(workspace_id) = get_workspace_id_for_project(&pool, &updated.project_id).await {
-        ws_tx
+        realtime
             .publish_workspace(
                 &workspace_id,
                 serde_json::json!({
@@ -342,12 +347,11 @@ pub async fn get_burndown(
     // NOTE: total_points は現時点のスプリント内イシューの合計ポイントを使用している。
     // スプリント途中にイシューが追加・削除された場合、理想線と実績線の始点がずれる可能性がある。
     // 正確なバーンダウンを実現するには、スプリント開始時点のスナップショットを保存する必要がある。
-    let total_points: i64 = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(points), 0) FROM issues WHERE sprint_id = ?",
-    )
-    .bind(&id)
-    .fetch_one(&pool)
-    .await?;
+    let total_points: i64 =
+        sqlx::query_scalar("SELECT COALESCE(SUM(points), 0) FROM issues WHERE sprint_id = ?")
+            .bind(&id)
+            .fetch_one(&pool)
+            .await?;
 
     let days = (end - start).num_days() + 1;
 

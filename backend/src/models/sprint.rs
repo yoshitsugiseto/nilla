@@ -28,10 +28,9 @@ impl FromStr for SprintStatus {
             "planning" => Ok(SprintStatus::Planning),
             "active" => Ok(SprintStatus::Active),
             "completed" => Ok(SprintStatus::Completed),
-            _ => Err(format!(
-                "Invalid sprint status '{}'. Must be one of: planning, active, completed",
-                s
-            )),
+            _ => Err(
+                "Invalid sprint status. Must be one of: planning, active, completed".to_string(),
+            ),
         }
     }
 }
@@ -78,7 +77,10 @@ pub struct Sprint {
 
 impl From<SprintRow> for Sprint {
     fn from(row: SprintRow) -> Self {
-        let status = row.status.parse::<SprintStatus>().unwrap_or(SprintStatus::Planning);
+        let status = row
+            .status
+            .parse::<SprintStatus>()
+            .unwrap_or(SprintStatus::Planning);
         Self {
             id: row.id,
             project_id: row.project_id,

@@ -138,7 +138,11 @@ async fn test_cross_workspace_isolation_each_user_sees_own_workspaces() {
     let token_b = common::token_for(common::TEST_USER_B_ID);
     let (status, json_b) = common::send(
         &app,
-        common::post_as("/api/workspaces", json!({ "name": "B Workspace" }), &token_b),
+        common::post_as(
+            "/api/workspaces",
+            json!({ "name": "B Workspace" }),
+            &token_b,
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -151,11 +155,8 @@ async fn test_cross_workspace_isolation_each_user_sees_own_workspaces() {
     assert!(workspaces_a.iter().all(|w| w["name"] != "B Workspace"));
 
     // User B lists workspaces — should not see A's workspace
-    let (status, json_b_list) = common::send(
-        &app,
-        common::get_as("/api/workspaces", &token_b),
-    )
-    .await;
+    let (status, json_b_list) =
+        common::send(&app, common::get_as("/api/workspaces", &token_b)).await;
     assert_eq!(status, StatusCode::OK);
     let workspaces_b = json_b_list.as_array().unwrap();
     assert!(workspaces_b.iter().all(|w| w["name"] != "Test Workspace"));
@@ -273,10 +274,7 @@ async fn test_owner_can_change_member_role() {
     let (status, json) = common::send(
         &app,
         common::patch(
-            &format!(
-                "/api/workspaces/{ws_id}/members/{}",
-                common::TEST_USER_B_ID
-            ),
+            &format!("/api/workspaces/{ws_id}/members/{}", common::TEST_USER_B_ID),
             json!({ "role": "admin" }),
         ),
     )
@@ -467,10 +465,7 @@ async fn test_cannot_demote_last_owner() {
     let (status, json) = common::send(
         &app,
         common::patch(
-            &format!(
-                "/api/workspaces/{ws_id}/members/{}",
-                common::TEST_USER_ID
-            ),
+            &format!("/api/workspaces/{ws_id}/members/{}", common::TEST_USER_ID),
             json!({ "role": "member" }),
         ),
     )
@@ -526,10 +521,7 @@ async fn test_can_demote_owner_when_another_owner_exists() {
     let (status, json) = common::send(
         &app,
         common::patch(
-            &format!(
-                "/api/workspaces/{ws_id}/members/{}",
-                common::TEST_USER_ID
-            ),
+            &format!("/api/workspaces/{ws_id}/members/{}", common::TEST_USER_ID),
             json!({ "role": "member" }),
         ),
     )
@@ -598,7 +590,10 @@ async fn test_add_member_with_invalid_role_returns_400() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(json["error"].as_str().unwrap().contains("superadmin"));
+    assert_eq!(
+        json["error"],
+        "role must be one of: owner, admin, member, viewer"
+    );
 }
 
 #[tokio::test]
@@ -622,16 +617,16 @@ async fn test_update_member_role_with_invalid_role_returns_400() {
     let (status, json) = common::send(
         &app,
         common::patch(
-            &format!(
-                "/api/workspaces/{ws_id}/members/{}",
-                common::TEST_USER_B_ID
-            ),
+            &format!("/api/workspaces/{ws_id}/members/{}", common::TEST_USER_B_ID),
             json!({ "role": "superadmin" }),
         ),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(json["error"].as_str().unwrap().contains("superadmin"));
+    assert_eq!(
+        json["error"],
+        "role must be one of: owner, admin, member, viewer"
+    );
 }
 
 // ---------------------------------------------------------------
@@ -770,11 +765,7 @@ async fn test_get_workspace_returns_correct_data() {
     let app = common::setup_app().await;
     let ws_id = common::create_workspace(&app).await;
 
-    let (status, json) = common::send(
-        &app,
-        common::get(&format!("/api/workspaces/{ws_id}")),
-    )
-    .await;
+    let (status, json) = common::send(&app, common::get(&format!("/api/workspaces/{ws_id}"))).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["id"], ws_id);
     assert_eq!(json["name"], "Test Workspace");

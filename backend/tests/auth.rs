@@ -87,8 +87,12 @@ async fn test_access_with_malformed_jwt_returns_401() {
 async fn test_access_with_wrong_secret_jwt_returns_401() {
     let app = common::setup_app().await;
     // Create a token with a different secret
-    let bad_token =
-        jwt::encode_access_token(common::TEST_USER_ID, "wrong-secret").unwrap();
+    let bad_token = jwt::encode_access_token(
+        common::TEST_USER_ID,
+        common::TEST_SESSION_ID,
+        "wrong-secret",
+    )
+    .unwrap();
     let response = app
         .oneshot(
             Request::builder()
@@ -145,9 +149,10 @@ async fn test_access_with_expired_token_returns_401() {
     let app = common::setup_app().await;
 
     // Manually create an expired token
-    use jsonwebtoken::{EncodingKey, Header, encode};
+    use jsonwebtoken::{encode, EncodingKey, Header};
     let claims = serde_json::json!({
         "sub": common::TEST_USER_ID,
+        "sid": common::TEST_SESSION_ID,
         "exp": 1000000000 // Unix timestamp well in the past
     });
     let expired_token = encode(
@@ -193,8 +198,8 @@ async fn test_health_does_not_require_auth() {
 // Refresh token flow
 // ---------------------------------------------------------------
 
-/// Helper: create a session in the DB and return the raw refresh token.
-async fn create_test_session(pool: &sqlx::SqlitePool, user_id: &str) -> String {
+/// Helper: create a session in the DB and return the raw refresh token plus session_id.
+async fn create_test_session(pool: &sqlx::SqlitePool, user_id: &str) -> (String, String) {
     use sha2::{Digest, Sha256};
 
     let refresh_token = "test-refresh-token-abc123";
@@ -219,7 +224,7 @@ async fn create_test_session(pool: &sqlx::SqlitePool, user_id: &str) -> String {
     .await
     .unwrap();
 
-    refresh_token.to_string()
+    (refresh_token.to_string(), session_id)
 }
 
 /// Helper: create an expired session in the DB and return the raw refresh token.
@@ -255,7 +260,7 @@ async fn create_expired_session(pool: &sqlx::SqlitePool, user_id: &str) -> Strin
 #[tokio::test]
 async fn test_refresh_with_valid_cookie_returns_new_access_token() {
     let (app, pool) = common::setup_app_with_pool().await;
-    let refresh_token = create_test_session(&pool, common::TEST_USER_ID).await;
+    let (refresh_token, session_id) = create_test_session(&pool, common::TEST_USER_ID).await;
 
     let (status, json) = common::send(
         &app,
@@ -270,6 +275,13 @@ async fn test_refresh_with_valid_cookie_returns_new_access_token() {
     assert_eq!(status, StatusCode::OK);
     assert!(json["access_token"].is_string());
     assert!(!json["access_token"].as_str().unwrap().is_empty());
+    let claims = jwt::decode_access_token(
+        json["access_token"].as_str().unwrap(),
+        common::TEST_JWT_SECRET,
+    )
+    .unwrap();
+    assert_eq!(claims.sub, common::TEST_USER_ID);
+    assert_eq!(claims.sid, session_id);
 }
 
 #[tokio::test]
@@ -324,7 +336,7 @@ async fn test_refresh_with_expired_session_returns_401() {
 #[tokio::test]
 async fn test_refreshed_token_grants_access() {
     let (app, pool) = common::setup_app_with_pool().await;
-    let refresh_token = create_test_session(&pool, common::TEST_USER_ID).await;
+    let (refresh_token, _) = create_test_session(&pool, common::TEST_USER_ID).await;
 
     // Get new access token via refresh
     let (status, json) = common::send(
@@ -341,11 +353,8 @@ async fn test_refreshed_token_grants_access() {
     let new_access_token = json["access_token"].as_str().unwrap();
 
     // Use the new token to access a protected endpoint
-    let (status, json) = common::send(
-        &app,
-        common::get_as("/api/projects", new_access_token),
-    )
-    .await;
+    let (status, json) =
+        common::send(&app, common::get_as("/api/projects", new_access_token)).await;
     assert_eq!(status, StatusCode::OK);
     assert!(json.is_array());
 }
@@ -357,7 +366,7 @@ async fn test_refreshed_token_grants_access() {
 #[tokio::test]
 async fn test_logout_returns_204_and_clears_cookie() {
     let (app, pool) = common::setup_app_with_pool().await;
-    let refresh_token = create_test_session(&pool, common::TEST_USER_ID).await;
+    let (refresh_token, _) = create_test_session(&pool, common::TEST_USER_ID).await;
 
     let (status, headers, _) = common::send_with_headers(
         &app,
@@ -372,11 +381,7 @@ async fn test_logout_returns_204_and_clears_cookie() {
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     // Check that the Set-Cookie header clears the refresh token
-    let cookie = headers
-        .get("set-cookie")
-        .unwrap()
-        .to_str()
-        .unwrap();
+    let cookie = headers.get("set-cookie").unwrap().to_str().unwrap();
     assert!(cookie.contains("refresh_token="));
     assert!(cookie.contains("Max-Age=0"));
 }
@@ -384,7 +389,10 @@ async fn test_logout_returns_204_and_clears_cookie() {
 #[tokio::test]
 async fn test_after_logout_refresh_returns_401() {
     let (app, pool) = common::setup_app_with_pool().await;
-    let refresh_token = create_test_session(&pool, common::TEST_USER_ID).await;
+    let (refresh_token, session_id) = create_test_session(&pool, common::TEST_USER_ID).await;
+    let access_token =
+        jwt::encode_access_token(common::TEST_USER_ID, &session_id, common::TEST_JWT_SECRET)
+            .unwrap();
 
     // Logout
     common::send(
@@ -410,6 +418,9 @@ async fn test_after_logout_refresh_returns_401() {
     )
     .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    let (status, _) = common::send(&app, common::get_as("/api/projects", &access_token)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -430,19 +441,62 @@ async fn test_logout_without_cookie_still_returns_204() {
 }
 
 // ---------------------------------------------------------------
+// WebSocket ticket auth flow
+// ---------------------------------------------------------------
+
+#[tokio::test]
+async fn test_create_ws_ticket_with_valid_token_returns_ticket() {
+    let app = common::setup_app().await;
+
+    let (status, json) = common::send(
+        &app,
+        Request::builder()
+            .method("POST")
+            .uri("/api/auth/ws-ticket")
+            .header("Authorization", format!("Bearer {}", common::test_token()))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(json["ticket"].is_string());
+    assert!(!json["ticket"].as_str().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn test_create_ws_ticket_without_auth_returns_401() {
+    let app = common::setup_app().await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/ws-ticket")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+// ---------------------------------------------------------------
 // JWT unit-level tests
 // ---------------------------------------------------------------
 
 #[tokio::test]
 async fn test_jwt_encode_decode_roundtrip() {
-    let token = jwt::encode_access_token("user-123", "my-secret").unwrap();
+    let token = jwt::encode_access_token("user-123", "session-123", "my-secret").unwrap();
     let claims = jwt::decode_access_token(&token, "my-secret").unwrap();
     assert_eq!(claims.sub, "user-123");
+    assert_eq!(claims.sid, "session-123");
 }
 
 #[tokio::test]
 async fn test_jwt_decode_with_wrong_secret_fails() {
-    let token = jwt::encode_access_token("user-123", "secret-a").unwrap();
+    let token = jwt::encode_access_token("user-123", "session-123", "secret-a").unwrap();
     let result = jwt::decode_access_token(&token, "secret-b");
     assert!(result.is_err());
 }

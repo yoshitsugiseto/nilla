@@ -14,10 +14,13 @@ use axum::{
 
 use crate::AppState;
 
-pub fn router(state: AppState) -> Router<AppState> {
+pub fn router() -> Router<AppState> {
     Router::new()
         // Projects
-        .route("/api/projects", get(projects::list_projects).post(projects::create_project))
+        .route(
+            "/api/projects",
+            get(projects::list_projects).post(projects::create_project),
+        )
         .route(
             "/api/projects/{id}",
             get(projects::get_project)
@@ -25,7 +28,10 @@ pub fn router(state: AppState) -> Router<AppState> {
                 .delete(projects::delete_project),
         )
         // Project members (for assignee picker)
-        .route("/api/projects/{id}/members", get(workspaces::get_project_members))
+        .route(
+            "/api/projects/{id}/members",
+            get(workspaces::get_project_members),
+        )
         // Sprints
         .route(
             "/api/projects/{id}/sprints",
@@ -52,10 +58,19 @@ pub fn router(state: AppState) -> Router<AppState> {
                 .put(issues::update_issue)
                 .delete(issues::delete_issue),
         )
-        .route("/api/issues/{id}/status", patch(issues::update_issue_status))
-        .route("/api/issues/{id}/sprint", patch(issues::update_issue_sprint))
+        .route(
+            "/api/issues/{id}/status",
+            patch(issues::update_issue_status),
+        )
+        .route(
+            "/api/issues/{id}/sprint",
+            patch(issues::update_issue_sprint),
+        )
         .route("/api/issues/{id}/children", get(issues::list_children))
-        .route("/api/projects/{id}/issues/reorder", put(issues::reorder_issues))
+        .route(
+            "/api/projects/{id}/issues/reorder",
+            put(issues::reorder_issues),
+        )
         .route(
             "/api/issues/{id}/comments",
             get(issues::list_comments).post(issues::create_comment),
@@ -66,7 +81,10 @@ pub fn router(state: AppState) -> Router<AppState> {
             get(issues::list_links).post(issues::create_link),
         )
         .route("/api/issue-links/{id}", delete(issues::delete_link))
-        .route("/api/projects/{id}/issues/bulk", patch(issues::bulk_update_issues))
+        .route(
+            "/api/projects/{id}/issues/bulk",
+            patch(issues::bulk_update_issues),
+        )
         // Labels
         .route(
             "/api/projects/{id}/labels",
@@ -86,7 +104,10 @@ pub fn router(state: AppState) -> Router<AppState> {
             put(templates::update_template).delete(templates::delete_template),
         )
         // Workspaces
-        .route("/api/workspaces", get(workspaces::list_workspaces).post(workspaces::create_workspace))
+        .route(
+            "/api/workspaces",
+            get(workspaces::list_workspaces).post(workspaces::create_workspace),
+        )
         .route(
             "/api/workspaces/{id}",
             get(workspaces::get_workspace).put(workspaces::update_workspace),
@@ -128,5 +149,4 @@ pub fn router(state: AppState) -> Router<AppState> {
         )
         // Users
         .route("/api/users", get(workspaces::list_users))
-        .with_state(state)
 }

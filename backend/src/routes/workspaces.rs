@@ -1,72 +1,29 @@
 use axum::{
     extract::{Path, State},
-    Extension,
-    Json,
+    Extension, Json,
 };
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use uuid::Uuid;
 
 use crate::{
     auth::middleware::UserId,
     db::check_project_access,
     error::{AppError, Result},
+    models::workspace::{
+        AddMember, CreateWorkspace, UpdateMemberRole, UpdateWorkspace, UserInfo, Workspace,
+        WorkspaceMember,
+    },
 };
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct Workspace {
-    pub id: String,
-    pub name: String,
-    pub created_by: String,
-    pub created_at: String,
-    pub updated_at: String,
-}
+const INVALID_WORKSPACE_ROLE_ERROR: &str = "role must be one of: owner, admin, member, viewer";
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct WorkspaceMember {
-    pub workspace_id: String,
-    pub user_id: String,
-    pub name: String,
-    pub email: Option<String>,
-    pub avatar_url: Option<String>,
-    pub role: String,
-    pub joined_at: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CreateWorkspace {
-    pub name: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AddMember {
-    pub user_id: String,
-    pub role: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UpdateWorkspace {
-    pub name: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UpdateMemberRole {
-    pub role: String,
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct UserInfo {
-    pub id: String,
-    pub name: String,
-    pub email: Option<String>,
-    pub avatar_url: Option<String>,
-    pub provider: String,
-}
-
-async fn check_workspace_access(pool: &SqlitePool, user_id: &str, workspace_id: &str) -> Result<()> {
+async fn check_workspace_access(
+    pool: &SqlitePool,
+    user_id: &str,
+    workspace_id: &str,
+) -> Result<()> {
     let is_member: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM workspace_members WHERE workspace_id = ? AND user_id = ?)"
+        "SELECT EXISTS(SELECT 1 FROM workspace_members WHERE workspace_id = ? AND user_id = ?)",
     )
     .bind(workspace_id)
     .bind(user_id)
@@ -121,7 +78,7 @@ pub async fn create_workspace(
         ));
     }
 
-    let id = Uuid::new_v4().to_string();
+    let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
     sqlx::query(
@@ -145,7 +102,7 @@ pub async fn create_workspace(
     .await?;
 
     let workspace = sqlx::query_as::<_, Workspace>(
-        "SELECT id, name, created_by, created_at, updated_at FROM workspaces WHERE id = ?"
+        "SELECT id, name, created_by, created_at, updated_at FROM workspaces WHERE id = ?",
     )
     .bind(&id)
     .fetch_one(&pool)
@@ -162,7 +119,7 @@ pub async fn get_workspace(
     check_workspace_access(&pool, &user_id.0, &id).await?;
 
     let workspace = sqlx::query_as::<_, Workspace>(
-        "SELECT id, name, created_by, created_at, updated_at FROM workspaces WHERE id = ?"
+        "SELECT id, name, created_by, created_at, updated_at FROM workspaces WHERE id = ?",
     )
     .bind(&id)
     .fetch_optional(&pool)
@@ -192,7 +149,7 @@ pub async fn update_workspace(
     }
 
     let current = sqlx::query_as::<_, Workspace>(
-        "SELECT id, name, created_by, created_at, updated_at FROM workspaces WHERE id = ?"
+        "SELECT id, name, created_by, created_at, updated_at FROM workspaces WHERE id = ?",
     )
     .bind(&id)
     .fetch_optional(&pool)
@@ -242,7 +199,9 @@ pub async fn add_member(
     let role = body.role.unwrap_or_else(|| "member".to_string());
     let valid_roles = ["owner", "admin", "member", "viewer"];
     if !valid_roles.contains(&role.as_str()) {
-        return Err(AppError::BadRequest(format!("Invalid role: {}", role)));
+        return Err(AppError::BadRequest(
+            INVALID_WORKSPACE_ROLE_ERROR.to_string(),
+        ));
     }
     let now = Utc::now().to_rfc3339();
 
@@ -277,7 +236,9 @@ pub async fn update_member_role(
 
     let valid_roles = ["owner", "admin", "member", "viewer"];
     if !valid_roles.contains(&body.role.as_str()) {
-        return Err(AppError::BadRequest(format!("invalid role: {}", body.role)));
+        return Err(AppError::BadRequest(
+            INVALID_WORKSPACE_ROLE_ERROR.to_string(),
+        ));
     }
 
     // Protect last owner: if target is currently an owner and new role is not owner,
@@ -307,14 +268,12 @@ pub async fn update_member_role(
         }
     }
 
-    sqlx::query(
-        "UPDATE workspace_members SET role = ? WHERE workspace_id = ? AND user_id = ?"
-    )
-    .bind(&body.role)
-    .bind(&workspace_id)
-    .bind(&target_uid)
-    .execute(&pool)
-    .await?;
+    sqlx::query("UPDATE workspace_members SET role = ? WHERE workspace_id = ? AND user_id = ?")
+        .bind(&body.role)
+        .bind(&workspace_id)
+        .bind(&target_uid)
+        .execute(&pool)
+        .await?;
 
     let member = sqlx::query_as::<_, WorkspaceMember>(
         "SELECT wm.workspace_id, wm.user_id, u.name, u.email, u.avatar_url, wm.role, wm.joined_at FROM workspace_members wm JOIN users u ON wm.user_id = u.id WHERE wm.workspace_id = ? AND wm.user_id = ?"
@@ -359,13 +318,12 @@ pub async fn remove_member(
         }
     }
 
-    let result = sqlx::query(
-        "DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?"
-    )
-    .bind(&workspace_id)
-    .bind(&target_uid)
-    .execute(&pool)
-    .await?;
+    let result =
+        sqlx::query("DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?")
+            .bind(&workspace_id)
+            .bind(&target_uid)
+            .execute(&pool)
+            .await?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound);
@@ -384,7 +342,7 @@ pub async fn list_users(
          WHERE wm.workspace_id IN (
              SELECT workspace_id FROM workspace_members WHERE user_id = ?
          )
-         ORDER BY u.name ASC"
+         ORDER BY u.name ASC",
     )
     .bind(&user_id.0)
     .fetch_all(&pool)

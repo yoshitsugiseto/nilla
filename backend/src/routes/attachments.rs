@@ -101,7 +101,7 @@ async fn check_issue_access(pool: &SqlitePool, user_id: &str, issue_id: &str) ->
 pub async fn upload_attachment(
     State(pool): State<SqlitePool>,
     State(storage): State<Storage>,
-    State(ws_tx): State<RealtimeHub>,
+    State(realtime): State<RealtimeHub>,
     Extension(user_id): Extension<UserId>,
     Path(issue_id): Path<String>,
     mut multipart: Multipart,
@@ -194,14 +194,15 @@ pub async fn upload_attachment(
                 .fetch_optional(&pool)
                 .await?;
         if let Some(pid) = project_id {
-            if let Some(workspace_id) = sqlx::query_scalar::<_, String>("SELECT workspace_id FROM projects WHERE id = ?")
-                .bind(&pid)
-                .fetch_optional(&pool)
-                .await
-                .ok()
-                .flatten()
+            if let Some(workspace_id) =
+                sqlx::query_scalar::<_, String>("SELECT workspace_id FROM projects WHERE id = ?")
+                    .bind(&pid)
+                    .fetch_optional(&pool)
+                    .await
+                    .ok()
+                    .flatten()
             {
-                ws_tx
+                realtime
                     .publish_workspace(
                         &workspace_id,
                         serde_json::json!({
@@ -236,7 +237,9 @@ pub async fn list_attachments(
     .fetch_all(&pool)
     .await?;
 
-    Ok(Json(rows.into_iter().map(AttachmentResponse::from_row).collect()))
+    Ok(Json(
+        rows.into_iter().map(AttachmentResponse::from_row).collect(),
+    ))
 }
 
 pub async fn download_attachment(

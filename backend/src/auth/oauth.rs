@@ -1,15 +1,15 @@
 use axum::{
     body::Body,
     extract::{Query, State},
-    http::{StatusCode, header},
+    http::{header, StatusCode},
     response::{Json, Response},
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{AppState, auth::jwt, error::AppError};
 use crate::auth::middleware::UserId;
+use crate::{auth::jwt, error::AppError, AppState};
 
 // ─── Query params ────────────────────────────────────────────────────────────
 
@@ -161,7 +161,7 @@ async fn build_redirect_response(
         return Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .body(Body::empty())
-            .unwrap();
+            .expect("building OAuth error response should not fail");
     }
 
     let location = format!("{}?code={}", frontend_callback, code);
@@ -169,7 +169,7 @@ async fn build_redirect_response(
         .status(StatusCode::FOUND)
         .header(header::LOCATION, location)
         .body(Body::empty())
-        .unwrap()
+        .expect("building OAuth redirect response should not fail")
 }
 
 fn extract_refresh_token_cookie(headers: &axum::http::HeaderMap) -> Option<String> {
@@ -253,7 +253,7 @@ async fn upsert_user_and_create_session(
     .execute(pool)
     .await?;
 
-    let access_token = jwt::encode_access_token(&user_id, jwt_secret)?;
+    let access_token = jwt::encode_access_token(&user_id, &session_id, jwt_secret)?;
     Ok((access_token, refresh_token))
 }
 
@@ -266,7 +266,7 @@ pub async fn google_login(State(state): State<AppState>) -> Response<Body> {
         return Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .body(Body::empty())
-            .unwrap();
+            .expect("building Google OAuth error response should not fail");
     }
 
     let redirect_uri = format!("{}/api/auth/google/callback", state.config.app_url);
@@ -282,16 +282,20 @@ pub async fn google_login(State(state): State<AppState>) -> Response<Body> {
         .status(StatusCode::FOUND)
         .header(header::LOCATION, url)
         .body(Body::empty())
-        .unwrap()
+        .expect("building Google OAuth redirect response should not fail")
 }
 
 fn build_error_redirect(frontend_url: &str, reason: &str) -> Response<Body> {
-    let location = format!("{}/auth/callback?error={}", frontend_url, urlencoding::encode(reason));
+    let location = format!(
+        "{}/auth/callback?error={}",
+        frontend_url,
+        urlencoding::encode(reason)
+    );
     Response::builder()
         .status(StatusCode::FOUND)
         .header(header::LOCATION, location)
         .body(Body::empty())
-        .unwrap()
+        .expect("building OAuth callback redirect response should not fail")
 }
 
 pub async fn google_callback(
@@ -395,7 +399,7 @@ pub async fn github_login(State(state): State<AppState>) -> Response<Body> {
         return Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .body(Body::empty())
-            .unwrap();
+            .expect("building GitHub OAuth error response should not fail");
     }
 
     let redirect_uri = format!("{}/api/auth/github/callback", state.config.app_url);
@@ -410,7 +414,7 @@ pub async fn github_login(State(state): State<AppState>) -> Response<Body> {
         .status(StatusCode::FOUND)
         .header(header::LOCATION, url)
         .body(Body::empty())
-        .unwrap()
+        .expect("building GitHub OAuth redirect response should not fail")
 }
 
 pub async fn github_callback(
@@ -567,9 +571,10 @@ pub async fn exchange_token(
         .header(header::SET_COOKIE, cookie)
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(
-            serde_json::to_string(&serde_json::json!({ "access_token": access_token })).unwrap(),
+            serde_json::to_string(&serde_json::json!({ "access_token": access_token }))
+                .map_err(|e| AppError::Internal(e.into()))?,
         ))
-        .unwrap())
+        .expect("building token exchange response should not fail"))
 }
 
 // ─── Me / Refresh / Logout ────────────────────────────────────────────────────
@@ -603,16 +608,16 @@ pub async fn refresh_token(
     let hash = hash_token(&token);
     let now = Utc::now().to_rfc3339();
 
-    let session = sqlx::query!(
-        "SELECT user_id FROM sessions WHERE refresh_token_hash = ? AND expires_at > ?",
-        hash,
-        now
+    let session: (String, String) = sqlx::query_as(
+        "SELECT id, user_id FROM sessions WHERE refresh_token_hash = ? AND expires_at > ?",
     )
+    .bind(hash)
+    .bind(now)
     .fetch_optional(&state.pool)
     .await?
     .ok_or(AppError::Unauthorized)?;
 
-    let access_token = jwt::encode_access_token(&session.user_id, &state.config.jwt_secret)
+    let access_token = jwt::encode_access_token(&session.1, &session.0, &state.config.jwt_secret)
         .map_err(|e| AppError::Internal(e))?;
 
     Ok(Json(serde_json::json!({ "access_token": access_token })))
@@ -624,12 +629,9 @@ pub async fn logout(
 ) -> Response<Body> {
     if let Some(token) = extract_refresh_token_cookie(&headers) {
         let hash = hash_token(&token);
-        let _ = sqlx::query!(
-            "DELETE FROM sessions WHERE refresh_token_hash = ?",
-            hash
-        )
-        .execute(&state.pool)
-        .await;
+        let _ = sqlx::query!("DELETE FROM sessions WHERE refresh_token_hash = ?", hash)
+            .execute(&state.pool)
+            .await;
     }
 
     let clear_cookie = "refresh_token=; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=0";
@@ -637,5 +639,5 @@ pub async fn logout(
         .status(StatusCode::NO_CONTENT)
         .header(header::SET_COOKIE, clear_cookie)
         .body(Body::empty())
-        .unwrap()
+        .expect("building logout response should not fail")
 }

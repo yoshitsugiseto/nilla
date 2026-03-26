@@ -7,9 +7,9 @@ use axum::{
 };
 use chrono::Utc;
 use serde::Deserialize;
-use tokio::time::{Duration, interval};
+use tokio::time::{interval, Duration};
 
-use crate::{AppState, auth::middleware::UserId, error::AppError};
+use crate::{auth::middleware::UserId, error::AppError, AppState};
 
 // ─── One-time WebSocket ticket ───────────────────────────────────────────────
 
@@ -45,13 +45,12 @@ async fn validate_ws_ticket(
     ticket: &str,
 ) -> Result<Option<String>, sqlx::Error> {
     let now = Utc::now().to_rfc3339();
-    let row: Option<(String,)> = sqlx::query_as(
-        "SELECT user_id FROM ws_tickets WHERE ticket = ? AND expires_at > ?",
-    )
-    .bind(ticket)
-    .bind(&now)
-    .fetch_optional(pool)
-    .await?;
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT user_id FROM ws_tickets WHERE ticket = ? AND expires_at > ?")
+            .bind(ticket)
+            .bind(&now)
+            .fetch_optional(pool)
+            .await?;
 
     if row.is_some() {
         // Delete the ticket after retrieval (single-use)
@@ -128,7 +127,7 @@ pub async fn ws_handler(
         Err(error) => return error.into_response(),
     };
 
-    ws.on_upgrade(move |socket| handle_socket(socket, state.ws_tx, user_id, workspace_id))
+    ws.on_upgrade(move |socket| handle_socket(socket, state.realtime, user_id, workspace_id))
         .into_response()
 }
 

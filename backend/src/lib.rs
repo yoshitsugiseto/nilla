@@ -8,8 +8,8 @@ pub mod storage;
 
 use std::sync::Arc;
 
-use axum::{Router, middleware, routing::get};
 use axum::http::HeaderValue;
+use axum::{middleware, routing::get, Router};
 use sqlx::SqlitePool;
 use tower_http::services::{ServeDir, ServeFile};
 
@@ -32,7 +32,7 @@ pub struct Config {
 pub struct AppState {
     pub pool: SqlitePool,
     pub config: Arc<Config>,
-    pub ws_tx: RealtimeHub,
+    pub realtime: RealtimeHub,
     pub storage: Storage,
 }
 
@@ -45,7 +45,7 @@ impl axum::extract::FromRef<AppState> for SqlitePool {
 
 impl axum::extract::FromRef<AppState> for RealtimeHub {
     fn from_ref(state: &AppState) -> Self {
-        state.ws_tx.clone()
+        state.realtime.clone()
     }
 }
 
@@ -65,7 +65,10 @@ async fn add_security_headers(
 ) -> axum::response::Response {
     let mut response = next.run(req).await;
     let headers = response.headers_mut();
-    headers.insert("X-Content-Type-Options", HeaderValue::from_static("nosniff"));
+    headers.insert(
+        "X-Content-Type-Options",
+        HeaderValue::from_static("nosniff"),
+    );
     headers.insert("X-Frame-Options", HeaderValue::from_static("DENY"));
     headers.insert(
         "Referrer-Policy",
@@ -81,22 +84,27 @@ async fn add_security_headers(
 }
 
 pub fn create_app(state: AppState, static_dir: Option<String>) -> Router {
-    let mut app = Router::new()
+    let public_router = Router::new()
         .route("/api/health", get(health))
-        .merge(auth::router())
-        .merge(routes::router(state.clone()))
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            auth::middleware::auth_middleware,
-        ))
+        .merge(auth::public_router());
+
+    let private_router =
+        auth::protected_router()
+            .merge(routes::router())
+            .layer(middleware::from_fn_with_state(
+                state.clone(),
+                auth::middleware::auth_middleware,
+            ));
+
+    let mut app = Router::new()
+        .merge(public_router)
+        .merge(private_router)
         .layer(middleware::from_fn(add_security_headers))
         .with_state(state);
 
     if let Some(dir) = static_dir {
         let index = format!("{dir}/index.html");
-        app = app.fallback_service(
-            ServeDir::new(&dir).not_found_service(ServeFile::new(index)),
-        );
+        app = app.fallback_service(ServeDir::new(&dir).not_found_service(ServeFile::new(index)));
     }
 
     app

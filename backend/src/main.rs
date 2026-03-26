@@ -1,62 +1,56 @@
 use std::sync::Arc;
 
-use axum::http::{HeaderValue, Method, header};
+use axum::http::{header, HeaderValue, Method};
 use std::net::SocketAddr;
-use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
+use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 use tower_http::cors::CorsLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::trace::TraceLayer;
 
-use nilla::{AppState, Config};
 use nilla::realtime::RealtimeHub;
+use nilla::{AppState, Config};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt::init();
 
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "sqlite:./nilla.db".to_string());
+    let database_url =
+        std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:./nilla.db".to_string());
 
     let pool = nilla::db::create_pool(&database_url).await?;
     tracing::info!("Database connection established");
 
-    let cors_origin = std::env::var("CORS_ORIGIN")
-        .unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let cors_origin =
+        std::env::var("CORS_ORIGIN").unwrap_or_else(|_| "http://localhost:3000".to_string());
 
-    let jwt_secret = std::env::var("JWT_SECRET")
-        .expect("JWT_SECRET must be set");
+    let jwt_secret = std::env::var("JWT_SECRET").expect("JWT_SECRET must be set");
     if jwt_secret.len() < 32 {
         panic!("JWT_SECRET must be at least 32 characters long");
     }
 
     let config = Config {
         jwt_secret,
-        google_client_id: std::env::var("GOOGLE_CLIENT_ID")
-            .unwrap_or_default(),
-        google_client_secret: std::env::var("GOOGLE_CLIENT_SECRET")
-            .unwrap_or_default(),
-        github_client_id: std::env::var("GITHUB_CLIENT_ID")
-            .unwrap_or_default(),
-        github_client_secret: std::env::var("GITHUB_CLIENT_SECRET")
-            .unwrap_or_default(),
-        app_url: std::env::var("APP_URL")
-            .unwrap_or_else(|_| "http://localhost:8080".to_string()),
+        google_client_id: std::env::var("GOOGLE_CLIENT_ID").unwrap_or_default(),
+        google_client_secret: std::env::var("GOOGLE_CLIENT_SECRET").unwrap_or_default(),
+        github_client_id: std::env::var("GITHUB_CLIENT_ID").unwrap_or_default(),
+        github_client_secret: std::env::var("GITHUB_CLIENT_SECRET").unwrap_or_default(),
+        app_url: std::env::var("APP_URL").unwrap_or_else(|_| "http://localhost:8080".to_string()),
         frontend_url: std::env::var("FRONTEND_URL")
             .unwrap_or_else(|_| "http://localhost:3000".to_string()),
         http_client: reqwest::Client::new(),
     };
 
-    let ws_tx = RealtimeHub::new();
+    let realtime = RealtimeHub::new();
 
     let storage_path = std::env::var("STORAGE_PATH").unwrap_or_else(|_| "./uploads".to_string());
-    let storage = nilla::storage::Storage::local(&storage_path)
-        .expect("Failed to initialize local storage");
+    let storage =
+        nilla::storage::Storage::local(&storage_path).expect("Failed to initialize local storage");
 
     let state = AppState {
         pool,
         config: Arc::new(config),
-        ws_tx,
+        realtime,
         storage,
     };
 
@@ -81,8 +75,8 @@ async fn main() -> anyhow::Result<()> {
             None
         }
     });
-    if static_dir.is_some() {
-        tracing::info!("Serving static files from: {}", static_dir.as_deref().unwrap());
+    if let Some(static_dir) = static_dir.as_deref() {
+        tracing::info!("Serving static files from: {}", static_dir);
     }
 
     // API 全体のレート制限: 100ms に 1 トークン補充、バースト 200
@@ -92,7 +86,7 @@ async fn main() -> anyhow::Result<()> {
             .period(std::time::Duration::from_millis(100))
             .burst_size(200)
             .finish()
-            .unwrap(),
+            .expect("building API rate limiter should not fail"),
     );
 
     let app = nilla::create_app(state, static_dir)
@@ -106,6 +100,10 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("Listening on http://{addr}");
 
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }

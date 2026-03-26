@@ -1,5 +1,5 @@
 use chrono::Utc;
-use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 
 const ACCESS_TOKEN_EXPIRY_SECS: i64 = 300; // 5 minutes
@@ -8,12 +8,21 @@ const REFRESH_TOKEN_EXPIRY_DAYS: i64 = 30;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String, // user_id
+    pub sid: String, // session_id
     pub exp: usize,
 }
 
-pub fn encode_access_token(user_id: &str, secret: &str) -> anyhow::Result<String> {
+pub fn encode_access_token(
+    user_id: &str,
+    session_id: &str,
+    secret: &str,
+) -> anyhow::Result<String> {
     let exp = (Utc::now().timestamp() + ACCESS_TOKEN_EXPIRY_SECS) as usize;
-    let claims = Claims { sub: user_id.to_string(), exp };
+    let claims = Claims {
+        sub: user_id.to_string(),
+        sid: session_id.to_string(),
+        exp,
+    };
     Ok(encode(
         &Header::default(),
         &claims,
