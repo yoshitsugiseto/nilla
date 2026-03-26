@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createIssue, updateIssue, getIssues } from '../../api/issues'
 import { getProjectMembers } from '../../api/workspaces'
@@ -20,6 +20,15 @@ interface Props {
 export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue, onClose }: Props) {
   const qc = useQueryClient()
   const showToast = useToast()
+  const templateSelectId = useId()
+  const epicSelectId = useId()
+  const parentSelectId = useId()
+  const titleInputId = useId()
+  const descriptionInputId = useId()
+  const typeSelectId = useId()
+  const prioritySelectId = useId()
+  const assigneeSelectId = useId()
+  const dueDateInputId = useId()
   const [form, setForm] = useState({
     title: issue?.title ?? '',
     description: issue?.description ?? '',
@@ -140,8 +149,9 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
     <form onSubmit={handleSubmit} className="space-y-4">
       {!issue && templates.length > 0 && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">テンプレートから作成</label>
+          <label htmlFor={templateSelectId} className="block text-sm font-medium text-gray-700 mb-1">テンプレートから作成</label>
           <select
+            id={templateSelectId}
             onChange={e => {
               const t = templates.find(t => t.id === e.target.value)
               if (!t) return
@@ -169,8 +179,9 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
       {/* コンテキスト選択（Epic → 親Story）を先頭に */}
       {epics.length > 0 && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">エピック</label>
+          <label htmlFor={epicSelectId} className="block text-sm font-medium text-gray-700 mb-1">エピック</label>
           <select
+            id={epicSelectId}
             value={form.epic_id}
             onChange={e => {
               const epic_id = e.target.value
@@ -193,8 +204,9 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
 
       {stories.length > 0 && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">親ストーリー</label>
+          <label htmlFor={parentSelectId} className="block text-sm font-medium text-gray-700 mb-1">親ストーリー</label>
           <select
+            id={parentSelectId}
             value={form.parent_id}
             onChange={e => {
               const parent_id = e.target.value
@@ -216,8 +228,9 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
       )}
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">タイトル *</label>
+        <label htmlFor={titleInputId} className="block text-sm font-medium text-gray-700 mb-1">タイトル *</label>
         <input
+          id={titleInputId}
           required
           value={form.title}
           onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
@@ -227,8 +240,9 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">説明</label>
+        <label htmlFor={descriptionInputId} className="block text-sm font-medium text-gray-700 mb-1">説明</label>
         <textarea
+          id={descriptionInputId}
           value={form.description}
           onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
           rows={4}
@@ -239,8 +253,9 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">タイプ</label>
+          <label htmlFor={typeSelectId} className="block text-sm font-medium text-gray-700 mb-1">タイプ</label>
           <select
+            id={typeSelectId}
             value={effectiveType}
             onChange={e => setForm(f => ({ ...f, type: e.target.value as IssueType }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
@@ -252,8 +267,9 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">優先度</label>
+          <label htmlFor={prioritySelectId} className="block text-sm font-medium text-gray-700 mb-1">優先度</label>
           <select
+            id={prioritySelectId}
             value={form.priority}
             onChange={e => setForm(f => ({ ...f, priority: e.target.value as IssuePriority }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
@@ -280,8 +296,9 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">担当者</label>
+          <label htmlFor={assigneeSelectId} className="block text-sm font-medium text-gray-700 mb-1">担当者</label>
           <select
+            id={assigneeSelectId}
             value={form.assignee_id}
             onChange={e => setForm(f => ({ ...f, assignee_id: e.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
@@ -295,8 +312,9 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">期限日</label>
+        <label htmlFor={dueDateInputId} className="block text-sm font-medium text-gray-700 mb-1">期限日</label>
         <input
+          id={dueDateInputId}
           type="date"
           value={form.due_date}
           onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
