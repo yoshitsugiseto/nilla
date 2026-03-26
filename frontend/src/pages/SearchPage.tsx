@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getIssuesPaged } from '../api/issues'
 import { getProjectMembers } from '../api/workspaces'
@@ -25,6 +25,10 @@ const EMPTY_FILTERS: Filters = { status: '', type: '', priority: '', assignee_id
 
 export function SearchPage({ query }: Props) {
   const { activeProjectId } = useAppStore()
+  const statusId = useId()
+  const typeId = useId()
+  const priorityId = useId()
+  const assigneeId = useId()
   const [detailId, setDetailId] = useState<string | null>(null)
   const [pageState, setPageState] = useState({ scope: '', page: 0 })
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
@@ -109,8 +113,9 @@ export function SearchPage({ query }: Props) {
           <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-xl">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">ステータス</label>
+                <label htmlFor={statusId} className="block text-xs text-gray-500 mb-1">ステータス</label>
                 <select
+                  id={statusId}
                   value={filters.status}
                   onChange={e => setFilter('status', e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
@@ -123,8 +128,9 @@ export function SearchPage({ query }: Props) {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">タイプ</label>
+                <label htmlFor={typeId} className="block text-xs text-gray-500 mb-1">タイプ</label>
                 <select
+                  id={typeId}
                   value={filters.type}
                   onChange={e => setFilter('type', e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
@@ -137,8 +143,9 @@ export function SearchPage({ query }: Props) {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">優先度</label>
+                <label htmlFor={priorityId} className="block text-xs text-gray-500 mb-1">優先度</label>
                 <select
+                  id={priorityId}
                   value={filters.priority}
                   onChange={e => setFilter('priority', e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
@@ -151,8 +158,9 @@ export function SearchPage({ query }: Props) {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">担当者</label>
+                <label htmlFor={assigneeId} className="block text-xs text-gray-500 mb-1">担当者</label>
                 <select
+                  id={assigneeId}
                   value={filters.assignee_id}
                   onChange={e => setFilter('assignee_id', e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"

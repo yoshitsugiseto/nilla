@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Play, CheckCircle, BarChart2, AlertCircle, History, Pencil, Trophy, TrendingUp } from 'lucide-react'
 import { getSprints, createSprint, updateSprint, startSprint, completeSprint } from '../api/sprints'
@@ -123,6 +123,10 @@ function SprintForm({
 }) {
   const qc = useQueryClient()
   const showToast = useToast()
+  const nameId = useId()
+  const goalId = useId()
+  const startDateId = useId()
+  const endDateId = useId()
   const [form, setForm] = useState({
     name: sprint?.name ?? '',
     goal: sprint?.goal ?? '',
@@ -154,25 +158,25 @@ function SprintForm({
   return (
     <form onSubmit={e => { e.preventDefault(); mutation.mutate() }} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">スプリント名 *</label>
-        <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+        <label htmlFor={nameId} className="block text-sm font-medium text-gray-700 mb-1">スプリント名 *</label>
+        <input id={nameId} required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="Sprint 1" />
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">ゴール</label>
-        <textarea value={form.goal} onChange={e => setForm(f => ({ ...f, goal: e.target.value }))}
+        <label htmlFor={goalId} className="block text-sm font-medium text-gray-700 mb-1">ゴール</label>
+        <textarea id={goalId} value={form.goal} onChange={e => setForm(f => ({ ...f, goal: e.target.value }))}
           rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">開始日 *</label>
-          <input required type="date" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))}
+          <label htmlFor={startDateId} className="block text-sm font-medium text-gray-700 mb-1">開始日 *</label>
+          <input id={startDateId} required type="date" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">終了日 *</label>
-          <input required type="date" value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}
+          <label htmlFor={endDateId} className="block text-sm font-medium text-gray-700 mb-1">終了日 *</label>
+          <input id={endDateId} required type="date" value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
         </div>
       </div>
@@ -200,6 +204,7 @@ function CompleteSprintDialog({
   onConfirm: (nextSprintId: string | null) => void
   onClose: () => void
 }) {
+  const nextSprintIdField = useId()
   const [nextSprintId, setNextSprintId] = useState<string>('')
 
   return (
@@ -213,8 +218,9 @@ function CompleteSprintDialog({
             </p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">未完了イシューの移動先</label>
+            <label htmlFor={nextSprintIdField} className="block text-sm font-medium text-gray-700 mb-1">未完了イシューの移動先</label>
             <select
+              id={nextSprintIdField}
               value={nextSprintId}
               onChange={e => setNextSprintId(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
