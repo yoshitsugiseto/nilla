@@ -38,6 +38,19 @@ export const TEST_USER = {
   provider: 'demo',
 }
 
+export const PROJECT_MEMBER = {
+  workspace_id: 'ws-1',
+  project_id: 'proj-1',
+  user_id: 'user-1',
+  name: 'Test User',
+  email: 'test@example.com',
+  avatar_url: null,
+  role: 'admin',
+  workspace_role: 'owner',
+  inherited: true,
+  joined_at: '2026-01-01T00:00:00',
+}
+
 export const SEARCH_ISSUE = {
   id: 'issue-1',
   project_id: 'proj-1',
@@ -96,6 +109,7 @@ export async function mockProjectApi(page: Page) {
   await mockAuth(page)
   await page.route('**/api/workspaces', route => route.fulfill({ json: [WORKSPACE] }))
   await page.route(/\/api\/projects(\?.*)?$/, route => route.fulfill({ json: [PROJECT] }))
+  await page.route('**/api/projects/proj-1/members', route => route.fulfill({ json: [PROJECT_MEMBER] }))
   await page.route('**/api/projects/proj-1/sprints', route => route.fulfill({ json: [SPRINT] }))
   await page.route('**/api/projects/proj-1/issues**', route =>
     route.fulfill({ json: [], headers: { 'x-total-count': '0' } })
@@ -141,6 +155,9 @@ export async function mockSprintCompletionApi(page: Page) {
 
   await page.route('**/api/projects/proj-1/sprints', route =>
     route.fulfill({ json: [activeSprint, nextSprint] })
+  )
+  await page.route('**/api/projects/proj-1/members', route =>
+    route.fulfill({ json: [PROJECT_MEMBER] })
   )
   await page.route('**/api/projects/proj-1/issues**', route =>
     route.fulfill({ json: issues, headers: { 'x-total-count': String(issues.length) } })
