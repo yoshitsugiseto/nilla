@@ -14,7 +14,7 @@ import { TypeIcon, PriorityBadge, StatusBadge } from '../components/common/Badge
 import { Avatar } from '../components/common/Avatar'
 import { ConfirmDialog } from '../components/common/ConfirmDialog'
 import { useToast } from '../components/common/useToast'
-import { deadlineLabel } from '../utils/date'
+import { deadlineLabel, dueDateLabel } from '../utils/date'
 import type { Issue, IssueStatus } from '../types'
 
 function SubtaskRow({ issue, selectedId, onDetail }: { issue: Issue; selectedId?: string | null; onDetail: (id: string) => void }) {
@@ -149,11 +149,10 @@ function IssueRow({
                 )
               })()}
               {issue.due_date && (() => {
-                const days = Math.ceil((new Date(issue.due_date).getTime() - Date.now()) / 86400000)
-                const cls = days < 0 ? 'text-red-500 font-medium' : days <= 2 ? 'text-orange-500 font-medium' : 'text-gray-400'
+                const due = dueDateLabel(issue.due_date, 'minimal')
                 return (
-                  <span className={`text-xs ${cls}`}>
-                    {days < 0 ? `${Math.abs(days)}日超過` : days === 0 ? '今日' : `${days}日`}
+                  <span className={`text-xs ${due.className}`}>
+                    {due.text}
                   </span>
                 )
               })()}

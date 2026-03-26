@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getIssue, updateIssue, getIssueChildren, getIssueLinks, createIssueLink, deleteIssueLink, getIssues } from '../../api/issues'
+import { getAttachments } from '../../api/attachments'
 import { getLabels } from '../../api/labels'
 import { TypeIcon, PriorityBadge } from '../common/Badge'
 import { Avatar } from '../common/Avatar'
@@ -10,6 +11,7 @@ import { IssueFiles } from './IssueFiles'
 import { IssueActivity } from './IssueActivity'
 import { Modal } from '../common/Modal'
 import { useToast } from '../common/useToast'
+import { dueDateLabel } from '../../utils/date'
 import type { IssueStatus, IssueLinkType } from '../../types'
 import { Pencil, MessageSquare, Clock, Plus, ListTodo, Paperclip, Link2, X } from 'lucide-react'
 
@@ -65,10 +67,7 @@ export function IssueDetail({ issueId, projectId }: Props) {
 
   const { data: attachments = [] } = useQuery({
     queryKey: ['attachments', issueId],
-    queryFn: async () => {
-      const { getAttachments } = await import('../../api/attachments')
-      return getAttachments(issueId)
-    },
+    queryFn: () => getAttachments(issueId),
     enabled: tab === 'files',
     refetchOnWindowFocus: false,
   })
@@ -471,14 +470,12 @@ export function IssueDetail({ issueId, projectId }: Props) {
           <div>
             <p className="text-xs text-gray-400 mb-1">期限日</p>
             {(() => {
-              const days = Math.ceil((new Date(issue.due_date).getTime() - Date.now()) / 86400000)
-              const overdue = days < 0
-              const today = days === 0
+              const due = dueDateLabel(issue.due_date)
               return (
-                <span className={`text-sm font-medium ${overdue || today ? 'text-red-500' : 'text-gray-700'}`}>
+                <span className={`text-sm font-medium ${due.isUrgent ? 'text-red-500' : 'text-gray-700'}`}>
                   {issue.due_date}
-                  {(overdue || today) && (
-                    <span className="ml-1 text-xs">({overdue ? `${Math.abs(days)}日超過` : '今日'})</span>
+                  {due.isUrgent && (
+                    <span className="ml-1 text-xs">({due.text === '今日が期限' ? '今日' : due.text})</span>
                   )}
                 </span>
               )

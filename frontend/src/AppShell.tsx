@@ -1,8 +1,9 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import axios from 'axios'
 import { useAuthStore } from './store/auth'
-import App from './App'
 import { LoginPage } from './pages/LoginPage'
+
+const App = lazy(() => import('./App'))
 
 export function AppShell() {
   const { accessToken, isLoading, setAuth, clearAuth } = useAuthStore()
@@ -48,5 +49,15 @@ export function AppShell() {
     return <LoginPage />
   }
 
-  return <App />
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <p className="text-gray-400 text-sm">読み込み中...</p>
+        </div>
+      }
+    >
+      <App />
+    </Suspense>
+  )
 }

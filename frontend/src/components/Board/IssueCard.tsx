@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Issue } from '../../types'
 import { getLabels } from '../../api/labels'
+import { dueDateLabel } from '../../utils/date'
 import { TypeIcon, PriorityBadge } from '../common/Badge'
 import { Avatar } from '../common/Avatar'
 import { Modal } from '../common/Modal'
@@ -91,12 +92,10 @@ export function IssueCard({ issue, index, projectId }: Props) {
             )}
 
             {issue.due_date && (() => {
-              const days = Math.ceil((new Date(issue.due_date).getTime() - Date.now()) / 86400000)
-              const overdue = days < 0
-              const today = days === 0
+              const due = dueDateLabel(issue.due_date)
               return (
-                <div className={`text-xs mt-1 ${overdue || today ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
-                  {overdue ? `${Math.abs(days)}日超過` : today ? '今日が期限' : `残り${days}日`}
+                <div className={`text-xs mt-1 ${due.className}`}>
+                  {due.text}
                 </div>
               )
             })()}

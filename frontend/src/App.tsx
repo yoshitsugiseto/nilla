@@ -1,18 +1,29 @@
-import { useState, useRef } from 'react'
+import { lazy, Suspense, useRef, useState } from 'react'
 import { Modal } from './components/common/Modal'
-import { IssueDetail } from './components/Issue/IssueDetail'
-import { IssueForm } from './components/Issue/IssueForm'
-import { BoardPage } from './pages/BoardPage'
-import { BacklogPage } from './pages/BacklogPage'
-import { SprintPage } from './pages/SprintPage'
-import { SprintHistoryPage } from './pages/SprintHistoryPage'
-import { DashboardPage } from './pages/DashboardPage'
-import { SearchPage } from './pages/SearchPage'
-import { SettingsPage } from './pages/SettingsPage'
-import { Sidebar, NewWorkspaceForm, NewProjectForm } from './components/Layout'
+import { Sidebar } from './components/Layout'
 import type { Page } from './components/Layout'
 import { useAppStore } from './store'
 import { useWebSocket } from './hooks/useWebSocket'
+
+const BoardPage = lazy(() => import('./pages/BoardPage').then((m) => ({ default: m.BoardPage })))
+const BacklogPage = lazy(() => import('./pages/BacklogPage').then((m) => ({ default: m.BacklogPage })))
+const SprintPage = lazy(() => import('./pages/SprintPage').then((m) => ({ default: m.SprintPage })))
+const SprintHistoryPage = lazy(() => import('./pages/SprintHistoryPage').then((m) => ({ default: m.SprintHistoryPage })))
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
+const SearchPage = lazy(() => import('./pages/SearchPage').then((m) => ({ default: m.SearchPage })))
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })))
+const NewWorkspaceForm = lazy(() => import('./components/Layout/NewWorkspaceForm').then((m) => ({ default: m.NewWorkspaceForm })))
+const NewProjectForm = lazy(() => import('./components/Layout/NewProjectForm').then((m) => ({ default: m.NewProjectForm })))
+const IssueForm = lazy(() => import('./components/Issue/IssueForm').then((m) => ({ default: m.IssueForm })))
+const IssueDetail = lazy(() => import('./components/Issue/IssueDetail').then((m) => ({ default: m.IssueDetail })))
+
+function ContentFallback() {
+  return (
+    <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+      読み込み中...
+    </div>
+  )
+}
 
 export default function App() {
   const [page, setPage] = useState<Page>('dashboard')
@@ -48,34 +59,42 @@ export default function App() {
 
       {/* Main content */}
       <main className="flex-1 flex overflow-hidden">
-        {searching
-          ? <SearchPage query={searchQuery} />
-          : <>
-              {page === 'dashboard' && <DashboardPage />}
-              {page === 'board' && <BoardPage />}
-              {page === 'backlog' && <BacklogPage />}
-              {page === 'sprints' && <SprintPage onNavigate={p => setPage(p as Page)} />}
-              {page === 'sprint-history' && <SprintHistoryPage onNavigate={p => setPage(p as Page)} />}
-              {page === 'settings' && <SettingsPage />}
-            </>
-        }
+        <Suspense fallback={<ContentFallback />}>
+          {searching
+            ? <SearchPage query={searchQuery} />
+            : <>
+                {page === 'dashboard' && <DashboardPage />}
+                {page === 'board' && <BoardPage />}
+                {page === 'backlog' && <BacklogPage />}
+                {page === 'sprints' && <SprintPage onNavigate={p => setPage(p as Page)} />}
+                {page === 'sprint-history' && <SprintHistoryPage onNavigate={p => setPage(p as Page)} />}
+                {page === 'settings' && <SettingsPage />}
+              </>
+          }
+        </Suspense>
       </main>
 
       {creatingProject && activeWorkspaceId && (
         <Modal title="New Project" onClose={() => setCreatingProject(false)}>
-          <NewProjectForm onClose={() => setCreatingProject(false)} workspaceId={activeWorkspaceId} />
+          <Suspense fallback={<ContentFallback />}>
+            <NewProjectForm onClose={() => setCreatingProject(false)} workspaceId={activeWorkspaceId} />
+          </Suspense>
         </Modal>
       )}
 
       {creatingWorkspace && (
         <Modal title="New Workspace" onClose={() => setCreatingWorkspace(false)}>
-          <NewWorkspaceForm onClose={() => setCreatingWorkspace(false)} onCreated={id => { setActiveWorkspace(id); setCreatingWorkspace(false) }} />
+          <Suspense fallback={<ContentFallback />}>
+            <NewWorkspaceForm onClose={() => setCreatingWorkspace(false)} onCreated={id => { setActiveWorkspace(id); setCreatingWorkspace(false) }} />
+          </Suspense>
         </Modal>
       )}
 
       {creatingIssue && activeProjectId && (
         <Modal title="New Issue" onClose={() => setCreatingIssue(false)}>
-          <IssueForm projectId={activeProjectId} onClose={() => setCreatingIssue(false)} />
+          <Suspense fallback={<ContentFallback />}>
+            <IssueForm projectId={activeProjectId} onClose={() => setCreatingIssue(false)} />
+          </Suspense>
         </Modal>
       )}
 
@@ -104,11 +123,13 @@ export default function App() {
 
       {pendingOpenIssueId && activeProjectId && (
         <Modal title={pendingOpenIssueTitle ?? 'Issue Detail'} onClose={() => { setPendingOpenIssueId(null); setPendingOpenIssueTitle(null) }} size="lg">
-          <IssueDetail
-            issueId={pendingOpenIssueId}
-            projectId={activeProjectId}
-            onClose={() => { setPendingOpenIssueId(null); setPendingOpenIssueTitle(null) }}
-          />
+          <Suspense fallback={<ContentFallback />}>
+            <IssueDetail
+              issueId={pendingOpenIssueId}
+              projectId={activeProjectId}
+              onClose={() => { setPendingOpenIssueId(null); setPendingOpenIssueTitle(null) }}
+            />
+          </Suspense>
         </Modal>
       )}
     </div>

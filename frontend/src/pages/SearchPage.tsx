@@ -6,6 +6,7 @@ import { useAppStore } from '../store'
 import { TypeIcon, PriorityBadge, StatusBadge } from '../components/common/Badge'
 import { Modal } from '../components/common/Modal'
 import { IssueDetail } from '../components/Issue/IssueDetail'
+import { dueDateLabel } from '../utils/date'
 import { Search, ChevronLeft, ChevronRight, SlidersHorizontal, X } from 'lucide-react'
 
 const PAGE_SIZE = 20
@@ -222,10 +223,10 @@ export function SearchPage({ query }: Props) {
               <span className="flex-1 text-sm text-gray-900 font-medium truncate">{issue.title}</span>
               <div className="flex items-center gap-2 shrink-0">
                 {issue.due_date && (() => {
-                  const days = Math.ceil((new Date(issue.due_date).getTime() - Date.now()) / 86400000)
+                  const due = dueDateLabel(issue.due_date, 'compact')
                   return (
-                    <span className={`text-xs ${days < 0 ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
-                      {days < 0 ? `${Math.abs(days)}日超過` : days === 0 ? '今日' : `残${days}日`}
+                    <span className={`text-xs ${due.className}`}>
+                      {due.text}
                     </span>
                   )
                 })()}
