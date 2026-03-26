@@ -38,6 +38,37 @@ const TEST_USER = {
   provider: 'demo',
 }
 
+const SEARCH_ISSUE = {
+  id: 'issue-1',
+  project_id: 'proj-1',
+  sprint_id: 'sprint-1',
+  parent_id: null,
+  epic_id: null,
+  epic_title: null,
+  number: 42,
+  title: 'Login form validation',
+  description: 'Search result issue description',
+  type: 'bug',
+  status: 'todo',
+  priority: 'high',
+  points: 3,
+  assignee_id: 'user-1',
+  assignee_name: 'Test User',
+  assignee_avatar_url: null,
+  labels: ['Frontend'],
+  position: 0,
+  due_date: null,
+  created_at: '2026-01-01T00:00:00',
+  updated_at: '2026-01-01T00:00:00',
+}
+
+const NEXT_SPRINT = {
+  ...SPRINT,
+  id: 'sprint-2',
+  name: 'Sprint 2',
+  status: 'planning',
+}
+
 async function clearStorage(page: Page) {
   await page.addInitScript(() => {
     localStorage.removeItem('nilla-app-state')
@@ -70,6 +101,51 @@ async function mockProjectApi(page: Page) {
   )
   await page.route('**/api/sprints/sprint-1/burndown', route => route.fulfill({ json: [] }))
   await page.route('**/api/notifications', route => route.fulfill({ json: [] }))
+}
+
+async function mockIssueDetailApi(page: Page, issue = SEARCH_ISSUE) {
+  await page.route(`**/api/issues/${issue.id}`, route => route.fulfill({ json: issue }))
+  await page.route(`**/api/issues/${issue.id}/children`, route => route.fulfill({ json: [] }))
+  await page.route(`**/api/issues/${issue.id}/links`, route => route.fulfill({ json: [] }))
+  await page.route('**/api/projects/proj-1/labels', route => route.fulfill({ json: [] }))
+  await page.route(/\/api\/projects\/proj-1\/issues(\?.*)?$/, route =>
+    route.fulfill({ json: [issue], headers: { 'x-total-count': '1' } })
+  )
+}
+
+async function mockSprintCompletionApi(page: Page) {
+  const activeSprint = { ...SPRINT, status: 'active', name: 'Sprint Active' }
+  const nextSprint = { ...NEXT_SPRINT }
+  const issues = [
+    {
+      ...SEARCH_ISSUE,
+      id: 'issue-1',
+      title: 'Carry over issue',
+      sprint_id: 'sprint-1',
+      status: 'todo',
+      points: 3,
+      number: 11,
+    },
+    {
+      ...SEARCH_ISSUE,
+      id: 'issue-2',
+      title: 'Done issue',
+      sprint_id: 'sprint-1',
+      status: 'done',
+      points: 5,
+      number: 12,
+    },
+  ]
+
+  await page.route('**/api/projects/proj-1/sprints', route =>
+    route.fulfill({ json: [activeSprint, nextSprint] })
+  )
+  await page.route('**/api/projects/proj-1/issues**', route =>
+    route.fulfill({ json: issues, headers: { 'x-total-count': String(issues.length) } })
+  )
+  await page.route('**/api/sprints/sprint-1/complete', route =>
+    route.fulfill({ json: { ...activeSprint, status: 'completed' } })
+  )
 }
 
 function withProject(page: Page) {
@@ -182,6 +258,46 @@ test('pressing Escape clears search', async ({ page }) => {
   await searchInput.press('Escape')
   await expect(searchInput).toHaveValue('')
   await expect(page.getByText(/"login" の検索結果/)).not.toBeVisible()
+})
+
+test('search result can open issue detail modal', async ({ page }) => {
+  await clearStorage(page)
+  await mockProjectApi(page)
+  await withProject(page)
+  await mockIssueDetailApi(page)
+  await page.goto('/')
+
+  const searchInput = page.getByPlaceholder('イシューを検索...')
+  await searchInput.fill('login')
+
+  await expect(page.getByText(/"login" の検索結果/)).toBeVisible({ timeout: 1000 })
+  await page.getByText('Login form validation').click()
+
+  await expect(page.getByText('#42 Login form validation')).toBeVisible()
+  await expect(page.getByText('Search result issue description')).toBeVisible()
+})
+
+// ---------------------------------------------------------------
+// Sprint flows
+// ---------------------------------------------------------------
+
+test('completing a sprint shows the report modal', async ({ page }) => {
+  await clearStorage(page)
+  await mockProjectApi(page)
+  await mockSprintCompletionApi(page)
+  await withProject(page)
+  await page.goto('/')
+
+  await page.getByRole('button', { name: 'Sprints', exact: true }).click()
+  await expect(page.getByText('Sprint Active')).toBeVisible()
+
+  await page.getByRole('button', { name: '完了' }).click()
+  await page.selectOption('select', 'sprint-2')
+  await page.getByRole('button', { name: 'スプリントを完了' }).click()
+
+  await expect(page.getByText('スプリント完了！')).toBeVisible()
+  await expect(page.getByText('1 / 2 件')).toBeVisible()
+  await expect(page.getByText('5 / 8 pt')).toBeVisible()
 })
 
 // ---------------------------------------------------------------
