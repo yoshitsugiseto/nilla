@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import { Plus, GripVertical, Pencil, Trash2, ChevronDown, ChevronRight, Search, X, CheckSquare, Square } from 'lucide-react'
 import { getIssues, updateIssueSprint, deleteIssue, reorderIssues, bulkUpdateIssues } from '../api/issues'
+import { getLabels } from '../api/labels'
 import { getSprints } from '../api/sprints'
 import { getProjectMembers } from '../api/workspaces'
 import { useAppStore } from '../store'
@@ -16,7 +17,7 @@ import { ConfirmDialog } from '../components/common/ConfirmDialog'
 import { useToast } from '../components/common/useToast'
 import { useCurrentTime } from '../hooks/useCurrentTime'
 import { deadlineLabel, dueDateLabel } from '../utils/date'
-import type { Issue, IssueStatus } from '../types'
+import type { Issue, IssuePriority, IssueStatus } from '../types'
 
 function SubtaskRow({ issue, selectedId, onDetail }: { issue: Issue; selectedId?: string | null; onDetail: (id: string) => void }) {
   return (
@@ -328,6 +329,7 @@ export function BacklogPage() {
   const [filterQuery, setFilterQuery] = useState('')
   const [bulkMode, setBulkMode] = useState(false)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
+  const [bulkLabelInput, setBulkLabelInput] = useState('')
 
   const { data: sprints = [] } = useQuery({
     queryKey: ['sprints', activeProjectId],
@@ -341,13 +343,26 @@ export function BacklogPage() {
     enabled: !!activeProjectId && bulkMode,
   })
 
+  const { data: projectLabels = [] } = useQuery({
+    queryKey: ['labels', activeProjectId],
+    queryFn: () => getLabels(activeProjectId!),
+    enabled: !!activeProjectId && bulkMode,
+  })
+
   const bulkMutation = useMutation({
-    mutationFn: (payload: { status?: IssueStatus; sprint_id?: string; assignee_id?: string }) =>
+    mutationFn: (payload: {
+      status?: IssueStatus
+      sprint_id?: string
+      assignee_id?: string
+      priority?: IssuePriority
+      labels?: string[]
+    }) =>
       bulkUpdateIssues(activeProjectId!, { issue_ids: [...bulkSelected], ...payload }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['issues', activeProjectId] })
       setBulkSelected(new Set())
       setBulkMode(false)
+      setBulkLabelInput('')
       showToast('一括更新しました', 'success')
     },
     onError: () => showToast('一括更新に失敗しました', 'error'),
@@ -360,6 +375,14 @@ export function BacklogPage() {
       else next.add(id)
       return next
     })
+  }
+
+  const applyBulkLabels = () => {
+    const labels = bulkLabelInput
+      .split(',')
+      .map(label => label.trim())
+      .filter(Boolean)
+    bulkMutation.mutate({ labels })
   }
 
   const { data: issues = [], isLoading } = useQuery({
@@ -517,6 +540,36 @@ export function BacklogPage() {
               <option key={m.user_id} value={m.user_id}>{m.name}</option>
             ))}
           </select>
+          <select
+            defaultValue=""
+            onChange={e => { if (e.target.value) bulkMutation.mutate({ priority: e.target.value as IssuePriority }); e.target.value = '' }}
+            className="border border-gray-200 rounded px-2 py-1 text-sm"
+          >
+            <option value="">優先度変更...</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <input
+            value={bulkLabelInput}
+            onChange={e => setBulkLabelInput(e.target.value)}
+            list="bulk-label-suggestions"
+            placeholder="labels,comma,separated"
+            className="border border-gray-200 rounded px-2 py-1 text-sm min-w-44"
+          />
+          <datalist id="bulk-label-suggestions">
+            {projectLabels.map(label => (
+              <option key={label.id} value={label.name} />
+            ))}
+          </datalist>
+          <button
+            onClick={applyBulkLabels}
+            disabled={bulkMutation.isPending}
+            className="px-2 py-1 text-xs rounded border border-gray-200 text-gray-600 hover:bg-white disabled:opacity-40"
+          >
+            ラベル反映
+          </button>
           <button onClick={() => setBulkSelected(new Set())} className="ml-auto text-gray-400 hover:text-gray-600">
             <X size={14} />
           </button>

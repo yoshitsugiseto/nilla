@@ -1,6 +1,13 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Sprint } from '../types'
+import type { SearchPreset, Sprint } from '../types'
+
+interface SearchPresetFilters {
+  status: string
+  type: string
+  priority: string
+  assignee_id: string
+}
 
 interface AppState {
   activeProjectId: string | null
@@ -8,6 +15,7 @@ interface AppState {
   activeWorkspaceId: string | null
   pendingOpenIssueId: string | null
   pendingOpenIssueTitle: string | null
+  searchPresets: SearchPreset[]
   boardFilters: {
     assignee_id?: string
     priority?: string
@@ -18,6 +26,9 @@ interface AppState {
   setActiveWorkspace: (id: string | null) => void
   setPendingOpenIssueId: (id: string | null) => void
   setPendingOpenIssueTitle: (title: string | null) => void
+  saveSearchPreset: (projectId: string, name: string, query: string, filters: SearchPresetFilters) => void
+  renameSearchPreset: (id: string, name: string) => void
+  deleteSearchPreset: (id: string) => void
   setBoardFilter: (key: string, value: string | undefined) => void
   clearBoardFilters: () => void
 }
@@ -30,12 +41,60 @@ export const useAppStore = create<AppState>()(
       activeWorkspaceId: null,
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
+      searchPresets: [],
       boardFilters: {},
       setActiveProject: (id) => set({ activeProjectId: id, activeSprint: null }),
       setActiveSprint: (sprint) => set({ activeSprint: sprint }),
       setActiveWorkspace: (id) => set({ activeWorkspaceId: id, activeProjectId: null, activeSprint: null }),
       setPendingOpenIssueId: (id) => set({ pendingOpenIssueId: id }),
       setPendingOpenIssueTitle: (title) => set({ pendingOpenIssueTitle: title }),
+      saveSearchPreset: (projectId, name, query, filters) =>
+        set((state) => {
+          const now = new Date().toISOString()
+          const existing = state.searchPresets.find(
+            (preset) =>
+              preset.project_id === projectId &&
+              preset.query === query &&
+              JSON.stringify(preset.filters) === JSON.stringify(filters)
+          )
+
+          if (existing) {
+            return {
+              searchPresets: state.searchPresets.map((preset) =>
+                preset.id === existing.id
+                  ? { ...preset, name, updated_at: now }
+                  : preset
+              ),
+            }
+          }
+
+          return {
+            searchPresets: [
+              {
+                id: crypto.randomUUID(),
+                project_id: projectId,
+                name,
+                query,
+                filters,
+                created_at: now,
+                updated_at: now,
+              },
+              ...state.searchPresets,
+            ].slice(0, 20),
+          }
+        }),
+      renameSearchPreset: (id, name) =>
+        set((state) => ({
+          searchPresets: state.searchPresets.map((preset) =>
+            preset.id === id
+              ? { ...preset, name, updated_at: new Date().toISOString() }
+              : preset
+          ),
+        })),
+      deleteSearchPreset: (id) =>
+        set((state) => ({
+          searchPresets: state.searchPresets.filter((preset) => preset.id !== id),
+        })),
       setBoardFilter: (key, value) =>
         set((s) => ({ boardFilters: { ...s.boardFilters, [key]: value } })),
       clearBoardFilters: () => set({ boardFilters: {} }),
@@ -46,6 +105,7 @@ export const useAppStore = create<AppState>()(
         activeProjectId: state.activeProjectId,
         activeSprint: state.activeSprint,
         activeWorkspaceId: state.activeWorkspaceId,
+        searchPresets: state.searchPresets,
         boardFilters: state.boardFilters,
       }),
     }

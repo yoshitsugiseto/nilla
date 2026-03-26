@@ -739,6 +739,34 @@ async fn update_issue_sprint() {
 }
 
 #[tokio::test]
+async fn bulk_update_can_change_priority_and_labels() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let iid = common::create_issue(&app, &pid, "Issue").await;
+
+    let (status, json) = common::send(
+        &app,
+        common::patch(
+            &format!("/api/projects/{pid}/issues/bulk"),
+            json!({
+                "issue_ids": [iid],
+                "priority": "high",
+                "labels": ["Frontend", "Backend"]
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let items = json.as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["priority"], "high");
+    let labels = items[0]["labels"].as_array().unwrap();
+    assert_eq!(labels.len(), 2);
+    assert!(labels.iter().any(|label| label == "Frontend"));
+    assert!(labels.iter().any(|label| label == "Backend"));
+}
+
+#[tokio::test]
 async fn concurrent_issue_updates_leave_one_complete_last_write() {
     let app = common::setup_app().await;
     let pid = common::create_project(&app, "P", "PI").await;

@@ -33,6 +33,29 @@ async fn get_project_id_for_sprint(pool: &SqlitePool, sprint_id: &str) -> Result
         .ok_or(AppError::NotFound)
 }
 
+async fn broadcast_sprint_event(
+    pool: &SqlitePool,
+    realtime: &RealtimeHub,
+    event_type: &str,
+    sprint: &Sprint,
+) {
+    if let Some(workspace_id) = get_workspace_id_for_project(pool, &sprint.project_id).await {
+        realtime
+            .publish_workspace(
+                &workspace_id,
+                serde_json::json!({
+                    "type": event_type,
+                    "project_id": sprint.project_id,
+                    "workspace_id": workspace_id,
+                    "sprint_id": sprint.id,
+                    "sprint": sprint,
+                })
+                .to_string(),
+            )
+            .await;
+    }
+}
+
 async fn validate_next_sprint_target(
     pool: &SqlitePool,
     current_sprint_id: &str,
@@ -229,19 +252,7 @@ pub async fn start_sprint(
     .await?;
 
     let updated = Sprint::from(updated_row);
-    if let Some(workspace_id) = get_workspace_id_for_project(&pool, &updated.project_id).await {
-        realtime
-            .publish_workspace(
-                &workspace_id,
-                serde_json::json!({
-                    "type": "sprint.updated",
-                    "project_id": updated.project_id,
-                    "workspace_id": workspace_id,
-                })
-                .to_string(),
-            )
-            .await;
-    }
+    broadcast_sprint_event(&pool, &realtime, "sprint.updated", &updated).await;
     Ok(Json(updated))
 }
 
@@ -301,19 +312,7 @@ pub async fn complete_sprint(
     tx.commit().await?;
 
     let updated = Sprint::from(updated_row);
-    if let Some(workspace_id) = get_workspace_id_for_project(&pool, &updated.project_id).await {
-        realtime
-            .publish_workspace(
-                &workspace_id,
-                serde_json::json!({
-                    "type": "sprint.updated",
-                    "project_id": updated.project_id,
-                    "workspace_id": workspace_id,
-                })
-                .to_string(),
-            )
-            .await;
-    }
+    broadcast_sprint_event(&pool, &realtime, "sprint.updated", &updated).await;
     Ok(Json(updated))
 }
 

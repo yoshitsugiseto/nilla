@@ -18,7 +18,16 @@ interface SprintReportData {
   doneIssues: number
   totalPts: number
   donePts: number
+  carryOverIssues: number
+  carryOverPts: number
   byType: Record<string, { total: number; done: number }>
+  previousSprint?: {
+    name: string
+    totalIssues: number
+    doneIssues: number
+    totalPts: number
+    donePts: number
+  }
 }
 
 const TYPE_LABELS: Record<IssueType, string> = {
@@ -36,6 +45,10 @@ function SprintReportModal({
 }) {
   const pct = report.totalPts > 0 ? Math.round((report.donePts / report.totalPts) * 100) : 0
   const issuePct = report.totalIssues > 0 ? Math.round((report.doneIssues / report.totalIssues) * 100) : 0
+  const carryOverPct = report.totalIssues > 0 ? Math.round((report.carryOverIssues / report.totalIssues) * 100) : 0
+  const previousPct = report.previousSprint && report.previousSprint.totalPts > 0
+    ? Math.round((report.previousSprint.donePts / report.previousSprint.totalPts) * 100)
+    : null
 
   return (
     <div className="space-y-5">
@@ -72,6 +85,30 @@ function SprintReportModal({
           <div className="mt-2 bg-gray-100 rounded-full h-1.5">
             <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
           </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <p className="text-xs text-amber-700 mb-1">Carry over</p>
+          <p className="text-2xl font-bold text-amber-900">{carryOverPct}%</p>
+          <p className="text-sm text-amber-800 mt-1">{report.carryOverIssues} 件 / {report.carryOverPts} pt</p>
+        </div>
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+          <p className="text-xs text-slate-500 mb-1">前回スプリント比較</p>
+          {report.previousSprint && previousPct != null ? (
+            <>
+              <p className="text-sm font-semibold text-slate-900">{report.previousSprint.name}</p>
+              <p className="text-sm text-slate-600 mt-1">
+                {previousPct}% → {pct}% ({pct - previousPct >= 0 ? '+' : ''}{pct - previousPct}%差)
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                {report.previousSprint.doneIssues}/{report.previousSprint.totalIssues} 件, {report.previousSprint.donePts}/{report.previousSprint.totalPts} pt
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-slate-500">比較できる完了済み sprint はまだありません</p>
+          )}
         </div>
       </div>
 
@@ -392,6 +429,10 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
       const sprintIssues = issues.filter(i => i.sprint_id === id && !i.parent_id)
       const totalPts = sprintIssues.reduce((s, i) => s + (i.points ?? 0), 0)
       const donePts = sprintIssues.filter(i => i.status === 'done').reduce((s, i) => s + (i.points ?? 0), 0)
+      const carryOverIssues = sprintIssues.filter(i => i.status !== 'done')
+      const previousSprint = sprints
+        .filter(s => s.status === 'completed' && s.id !== id)
+        .sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0]
       const byType: Record<string, { total: number; done: number }> = {}
       for (const issue of sprintIssues) {
         if (!byType[issue.type]) byType[issue.type] = { total: 0, done: 0 }
@@ -408,7 +449,23 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
           doneIssues: sprintIssues.filter(i => i.status === 'done').length,
           totalPts,
           donePts,
+          carryOverIssues: carryOverIssues.length,
+          carryOverPts: carryOverIssues.reduce((sum, issue) => sum + (issue.points ?? 0), 0),
           byType,
+          previousSprint: previousSprint
+            ? (() => {
+                const previousIssues = issues.filter(i => i.sprint_id === previousSprint.id && !i.parent_id)
+                return {
+                  name: previousSprint.name,
+                  totalIssues: previousIssues.length,
+                  doneIssues: previousIssues.filter(i => i.status === 'done').length,
+                  totalPts: previousIssues.reduce((sum, issue) => sum + (issue.points ?? 0), 0),
+                  donePts: previousIssues
+                    .filter(i => i.status === 'done')
+                    .reduce((sum, issue) => sum + (issue.points ?? 0), 0),
+                }
+              })()
+            : undefined,
         })
       } else {
         showToast('スプリントを完了しました', 'success')

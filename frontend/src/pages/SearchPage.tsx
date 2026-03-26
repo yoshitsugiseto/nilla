@@ -14,6 +14,7 @@ const PAGE_SIZE = 20
 
 interface Props {
   query: string
+  onApplyPreset?: (query: string) => void
 }
 
 interface Filters {
@@ -25,8 +26,14 @@ interface Filters {
 
 const EMPTY_FILTERS: Filters = { status: '', type: '', priority: '', assignee_id: '' }
 
-export function SearchPage({ query }: Props) {
-  const { activeProjectId } = useAppStore()
+export function SearchPage({ query, onApplyPreset }: Props) {
+  const {
+    activeProjectId,
+    searchPresets,
+    saveSearchPreset,
+    renameSearchPreset,
+    deleteSearchPreset,
+  } = useAppStore()
   const statusId = useId()
   const typeId = useId()
   const priorityId = useId()
@@ -41,6 +48,8 @@ export function SearchPage({ query }: Props) {
     query.length >= 2 && pageState.scope === searchScope ? pageState.page : 0
 
   const hasFilters = Object.values(filters).some(Boolean)
+  const projectPresets = searchPresets.filter((preset) => preset.project_id === activeProjectId)
+  const canSavePreset = query.trim().length >= 2 || hasFilters
 
   const { data: members = [] } = useQuery({
     queryKey: ['project-members', activeProjectId],
@@ -74,6 +83,21 @@ export function SearchPage({ query }: Props) {
     setFilters(f => ({ ...f, [key]: value }))
 
   const clearFilters = () => setFilters(EMPTY_FILTERS)
+  const saveCurrentPreset = () => {
+    if (!activeProjectId || !canSavePreset) return
+    const defaultName = query.trim().length >= 2 ? query.trim() : 'フィルタ'
+    const name = window.prompt('プリセット名', defaultName)
+    if (!name?.trim()) return
+    saveSearchPreset(activeProjectId, name.trim(), query, filters)
+  }
+
+  const applyPreset = (presetId: string) => {
+    const preset = projectPresets.find((item) => item.id === presetId)
+    if (!preset) return
+    onApplyPreset?.(preset.query)
+    setFilters(preset.filters)
+    setPageState({ scope: JSON.stringify({ query: preset.query, filters: preset.filters }), page: 0 })
+  }
 
   if (!activeProjectId) {
     return <div className="flex-1 flex items-center justify-center text-gray-400">← プロジェクトを選択してください</div>
@@ -93,23 +117,65 @@ export function SearchPage({ query }: Props) {
               <span className="text-sm text-gray-400 ml-1">{total}件</span>
             )}
           </div>
-          <button
-            onClick={() => setShowFilters(v => !v)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors shrink-0 ${
-              showFilters || hasFilters
-                ? 'bg-blue-50 text-blue-700 border-blue-300'
-                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            <SlidersHorizontal size={14} />
-            フィルター
-            {hasFilters && (
-              <span className="bg-blue-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                {Object.values(filters).filter(Boolean).length}
-              </span>
-            )}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={saveCurrentPreset}
+              disabled={!canSavePreset}
+              className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              条件を保存
+            </button>
+            <button
+              onClick={() => setShowFilters(v => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                showFilters || hasFilters
+                  ? 'bg-blue-50 text-blue-700 border-blue-300'
+                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <SlidersHorizontal size={14} />
+              フィルター
+              {hasFilters && (
+                <span className="bg-blue-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                  {Object.values(filters).filter(Boolean).length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
+
+        {projectPresets.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            {projectPresets.map(preset => (
+              <div key={preset.id} className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2 py-1">
+                <button
+                  onClick={() => applyPreset(preset.id)}
+                  className="text-xs text-gray-700 hover:text-blue-600"
+                >
+                  {preset.name}
+                </button>
+                <button
+                  onClick={() => {
+                    const name = window.prompt('プリセット名を変更', preset.name)
+                    if (!name?.trim()) return
+                    renameSearchPreset(preset.id, name.trim())
+                  }}
+                  className="text-[10px] text-gray-400 hover:text-gray-600"
+                  aria-label={`${preset.name} をリネーム`}
+                >
+                  編集
+                </button>
+                <button
+                  onClick={() => deleteSearchPreset(preset.id)}
+                  className="text-[10px] text-gray-400 hover:text-red-500"
+                  aria-label={`${preset.name} を削除`}
+                >
+                  削除
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Filter panel */}
         {showFilters && (

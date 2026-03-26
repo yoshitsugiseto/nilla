@@ -212,4 +212,21 @@ export interface BulkUpdatePayload {
   status?: IssueStatus
   sprint_id?: string
   assignee_id?: string
+  priority?: IssuePriority
+  labels?: string[]
+}
+
+export interface SearchPreset {
+  id: string
+  project_id: string
+  name: string
+  query: string
+  filters: {
+    status: string
+    type: string
+    priority: string
+    assignee_id: string
+  }
+  created_at: string
+  updated_at: string
 }

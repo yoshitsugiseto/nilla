@@ -83,12 +83,13 @@ function renderSearchPage(query: string) {
     activeWorkspaceId: 'workspace-1',
     pendingOpenIssueId: null,
     pendingOpenIssueTitle: null,
+    searchPresets: [],
     boardFilters: {},
   })
 
   render(
     <QueryClientProvider client={queryClient}>
-      <SearchPage query={query} />
+      <SearchPage query={query} onApplyPreset={() => undefined} />
     </QueryClientProvider>
   )
 }
@@ -112,6 +113,7 @@ describe('SearchPage', () => {
       activeWorkspaceId: null,
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
+      searchPresets: [],
       boardFilters: {},
     })
     vi.restoreAllMocks()
@@ -180,5 +182,24 @@ describe('SearchPage', () => {
         assignee_id: undefined,
       })
     )
+  })
+
+  test('saves a search preset into shared app state', async () => {
+    const user = userEvent.setup()
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('My bugs')
+
+    renderSearchPage('bug')
+
+    await waitFor(() => expect(mockGetIssuesPaged).toHaveBeenCalled())
+    await user.click(screen.getByRole('button', { name: '条件を保存' }))
+
+    expect(promptSpy).toHaveBeenCalledWith('プリセット名', 'bug')
+    expect(useAppStore.getState().searchPresets).toEqual([
+      expect.objectContaining({
+        name: 'My bugs',
+        query: 'bug',
+        project_id: 'project-1',
+      }),
+    ])
   })
 })

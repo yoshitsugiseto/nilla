@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { BacklogPage } from '../pages/BacklogPage'
 import { useAppStore } from '../store'
-import type { Issue, Sprint, WorkspaceMember } from '../types'
+import type { Issue, ProjectLabel, Sprint, WorkspaceMember } from '../types'
 
 const {
   mockGetIssues,
@@ -15,6 +15,7 @@ const {
   mockBulkUpdateIssues,
   mockGetSprints,
   mockGetProjectMembers,
+  mockGetLabels,
   mockShowToast,
 } = vi.hoisted(() => ({
   mockGetIssues: vi.fn(),
@@ -24,6 +25,7 @@ const {
   mockBulkUpdateIssues: vi.fn(),
   mockGetSprints: vi.fn(),
   mockGetProjectMembers: vi.fn(),
+  mockGetLabels: vi.fn(),
   mockShowToast: vi.fn(),
 }))
 
@@ -41,6 +43,10 @@ vi.mock('../api/sprints', () => ({
 
 vi.mock('../api/workspaces', () => ({
   getProjectMembers: mockGetProjectMembers,
+}))
+
+vi.mock('../api/labels', () => ({
+  getLabels: mockGetLabels,
 }))
 
 vi.mock('../components/common/useToast', () => ({
@@ -130,6 +136,17 @@ function makeMember(overrides: Partial<WorkspaceMember> = {}): WorkspaceMember {
   }
 }
 
+function makeLabel(overrides: Partial<ProjectLabel> = {}): ProjectLabel {
+  return {
+    id: 'label-1',
+    project_id: 'project-1',
+    name: 'Frontend',
+    color: '#3b82f6',
+    created_at: '2026-03-01T00:00:00Z',
+    ...overrides,
+  }
+}
+
 function renderBacklogPage() {
   const queryClient = createQueryClient()
   useAppStore.setState({
@@ -138,6 +155,7 @@ function renderBacklogPage() {
     activeWorkspaceId: 'workspace-1',
     pendingOpenIssueId: null,
     pendingOpenIssueTitle: null,
+    searchPresets: [],
     boardFilters: {},
   })
 
@@ -158,6 +176,7 @@ describe('BacklogPage', () => {
     mockBulkUpdateIssues.mockReset()
     mockGetSprints.mockReset()
     mockGetProjectMembers.mockReset()
+    mockGetLabels.mockReset()
     mockShowToast.mockReset()
 
     mockGetIssues.mockResolvedValue([makeIssue(), makeIssue({ id: 'issue-2', number: 2, title: 'Second task' })])
@@ -167,6 +186,7 @@ describe('BacklogPage', () => {
     mockBulkUpdateIssues.mockResolvedValue([])
     mockGetSprints.mockResolvedValue([makeSprint()])
     mockGetProjectMembers.mockResolvedValue([makeMember()])
+    mockGetLabels.mockResolvedValue([makeLabel(), makeLabel({ id: 'label-2', name: 'Backend', color: '#10b981' })])
   })
 
   afterEach(() => {
@@ -176,6 +196,7 @@ describe('BacklogPage', () => {
       activeWorkspaceId: null,
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
+      searchPresets: [],
       boardFilters: {},
     })
     vi.restoreAllMocks()
@@ -238,5 +259,55 @@ describe('BacklogPage', () => {
     await user.click(screen.getByRole('button', { name: '削除' }))
 
     await waitFor(() => expect(mockDeleteIssue).toHaveBeenCalledWith('issue-1'))
+  })
+
+  test('bulk priority update submits normalized payload', async () => {
+    const user = userEvent.setup()
+
+    renderBacklogPage()
+
+    await waitFor(() => expect(mockGetIssues).toHaveBeenCalled())
+    await user.click(screen.getByRole('button', { name: '一括操作' }))
+    await waitFor(() => expect(mockGetLabels).toHaveBeenCalledWith('project-1'))
+    await user.click(screen.getByText('Backlog task'))
+
+    const bulkBar = screen.getByText('1件選択中').closest('div')
+    if (!bulkBar) {
+      throw new Error('bulk action bar not found')
+    }
+
+    await user.selectOptions(within(bulkBar).getAllByRole('combobox')[3], 'high')
+    await waitFor(() =>
+      expect(mockBulkUpdateIssues).toHaveBeenLastCalledWith('project-1', {
+        issue_ids: ['issue-1'],
+        priority: 'high',
+      })
+    )
+  })
+
+  test('bulk labels update submits normalized payload', async () => {
+    const user = userEvent.setup()
+
+    renderBacklogPage()
+
+    await waitFor(() => expect(mockGetIssues).toHaveBeenCalled())
+    await user.click(screen.getByRole('button', { name: '一括操作' }))
+    await waitFor(() => expect(mockGetLabels).toHaveBeenCalledWith('project-1'))
+    await user.click(screen.getByText('Backlog task'))
+
+    const bulkBar = screen.getByText('1件選択中').closest('div')
+    if (!bulkBar) {
+      throw new Error('bulk action bar not found')
+    }
+
+    await user.type(within(bulkBar).getByPlaceholderText('labels,comma,separated'), 'Frontend, Backend')
+    await user.click(within(bulkBar).getByRole('button', { name: 'ラベル反映' }))
+
+    await waitFor(() =>
+      expect(mockBulkUpdateIssues).toHaveBeenLastCalledWith('project-1', {
+        issue_ids: ['issue-1'],
+        labels: ['Frontend', 'Backend'],
+      })
+    )
   })
 })

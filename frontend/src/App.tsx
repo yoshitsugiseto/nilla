@@ -46,6 +46,12 @@ export default function App() {
   } = useAppStore()
   useWebSocket()
 
+  const applySearchPreset = (query: string) => {
+    setSearchInput(query)
+    setSearchQuery(query)
+    setSearching(query.length > 0)
+  }
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
@@ -68,7 +74,7 @@ export default function App() {
       <main className="flex-1 flex overflow-hidden">
         <Suspense fallback={<ContentFallback />}>
           {searching
-            ? <SearchPage query={searchQuery} />
+            ? <SearchPage query={searchQuery} onApplyPreset={applySearchPreset} />
             : <>
                 {page === 'dashboard' && <DashboardPage />}
                 {page === 'board' && <BoardPage />}

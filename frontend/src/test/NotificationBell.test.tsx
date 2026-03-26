@@ -72,6 +72,7 @@ describe('NotificationBell', () => {
       activeWorkspaceId: null,
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
+      searchPresets: [],
       boardFilters: {},
     })
 
@@ -84,6 +85,15 @@ describe('NotificationBell', () => {
         message: 'Issue updated',
         read: false,
         created_at: '2026-03-26T00:00:00Z',
+      },
+      {
+        id: 'notif-2',
+        user_id: 'user-1',
+        issue_id: null,
+        type: 'comment',
+        message: 'Comment added',
+        read: true,
+        created_at: '2026-03-26T01:00:00Z',
       },
     ])
     mockMarkNotificationRead.mockResolvedValue(undefined)
@@ -108,6 +118,7 @@ describe('NotificationBell', () => {
       activeWorkspaceId: null,
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
+      searchPresets: [],
       boardFilters: {},
     })
     vi.restoreAllMocks()
@@ -131,5 +142,25 @@ describe('NotificationBell', () => {
     expect(useAppStore.getState().activeProjectId).toBe('project-1')
     expect(useAppStore.getState().pendingOpenIssueId).toBe('issue-1')
     expect(useAppStore.getState().pendingOpenIssueTitle).toBe('Issue from notification')
+  })
+
+  test('filters notifications by type', async () => {
+    const user = userEvent.setup()
+    const queryClient = createQueryClient()
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NotificationBell />
+      </QueryClientProvider>
+    )
+
+    await user.click(screen.getByRole('button', { name: '通知' }))
+    expect(await screen.findByText('Issue updated')).toBeInTheDocument()
+    expect(screen.getByText('Comment added')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'メンション' }))
+
+    expect(screen.getByText('Issue updated')).toBeInTheDocument()
+    expect(screen.queryByText('Comment added')).not.toBeInTheDocument()
   })
 })

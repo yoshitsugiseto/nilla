@@ -106,11 +106,12 @@ function renderSprintPage() {
   useAppStore.setState({
     activeProjectId: 'project-1',
     activeSprint: null,
-    activeWorkspaceId: 'workspace-1',
-    pendingOpenIssueId: null,
-    pendingOpenIssueTitle: null,
-    boardFilters: {},
-  })
+      activeWorkspaceId: 'workspace-1',
+      pendingOpenIssueId: null,
+      pendingOpenIssueTitle: null,
+      searchPresets: [],
+      boardFilters: {},
+    })
 
   const onNavigate = vi.fn()
 
@@ -151,6 +152,7 @@ describe('SprintPage', () => {
       activeWorkspaceId: null,
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
+      searchPresets: [],
       boardFilters: {},
     })
     vi.restoreAllMocks()
@@ -199,11 +201,13 @@ describe('SprintPage', () => {
 
     mockGetSprints.mockResolvedValue([
       makeSprint({ id: 'sprint-active', name: 'Sprint Active', status: 'active' }),
+      makeSprint({ id: 'sprint-prev', name: 'Sprint Prev', status: 'completed', updated_at: '2026-03-10T00:00:00Z' }),
       makeSprint({ id: 'sprint-next', name: 'Sprint Next', status: 'planning' }),
     ])
     mockGetIssues.mockResolvedValue([
       makeIssue({ id: 'issue-1', sprint_id: 'sprint-active', title: 'Carry over issue', status: 'todo', points: 3 }),
       makeIssue({ id: 'issue-2', sprint_id: 'sprint-active', title: 'Done issue', status: 'done', points: 5 }),
+      makeIssue({ id: 'issue-3', sprint_id: 'sprint-prev', title: 'Previous done', status: 'done', points: 8 }),
     ])
 
     renderSprintPage()
@@ -221,5 +225,7 @@ describe('SprintPage', () => {
     expect(await screen.findByText('スプリント完了！')).toBeInTheDocument()
     expect(screen.getByText('1 / 2 件')).toBeInTheDocument()
     expect(screen.getByText('5 / 8 pt')).toBeInTheDocument()
+    expect(screen.getByText('Carry over')).toBeInTheDocument()
+    expect(screen.getByText('Sprint Prev')).toBeInTheDocument()
   })
 })

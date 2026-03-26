@@ -326,6 +326,8 @@ pub struct BulkUpdateIssues {
     pub status: Option<IssueStatus>,
     pub sprint_id: Option<String>,   // "backlog" = set NULL
     pub assignee_id: Option<String>, // "" = clear
+    pub priority: Option<IssuePriority>,
+    pub labels: Option<Vec<String>>,
 }
 
 fn deserialize_nullable_field<'de, D, T>(

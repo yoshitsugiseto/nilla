@@ -56,11 +56,11 @@ async fn get_workspace_id_for_project(pool: &SqlitePool, project_id: &str) -> Op
 }
 
 /// Broadcast a WS event scoped to a workspace, so clients can filter by workspace.
-async fn broadcast_event_scoped(
+async fn broadcast_project_event_scoped(
     pool: &SqlitePool,
     realtime: &RealtimeHub,
-    event_type: &str,
     project_id: &str,
+    payload: serde_json::Value,
 ) {
     let Some(workspace_id) = get_workspace_id_for_project(pool, project_id).await else {
         return;
@@ -69,13 +69,45 @@ async fn broadcast_event_scoped(
         .publish_workspace(
             &workspace_id,
             serde_json::json!({
-                "type": event_type,
                 "project_id": project_id,
                 "workspace_id": workspace_id,
             })
-            .to_string(),
+            .as_object()
+            .map(|base| {
+                let mut merged = base.clone();
+                if let Some(payload_object) = payload.as_object() {
+                    merged.extend(payload_object.clone());
+                }
+                serde_json::Value::Object(merged).to_string()
+            })
+            .unwrap_or_else(|| {
+                serde_json::json!({
+                    "project_id": project_id,
+                    "workspace_id": workspace_id,
+                })
+                .to_string()
+            }),
         )
         .await;
+}
+
+async fn broadcast_issue_event_scoped(
+    pool: &SqlitePool,
+    realtime: &RealtimeHub,
+    event_type: &str,
+    issue: &Issue,
+) {
+    broadcast_project_event_scoped(
+        pool,
+        realtime,
+        &issue.project_id,
+        serde_json::json!({
+            "type": event_type,
+            "issue_id": issue.id,
+            "issue": issue,
+        }),
+    )
+    .await;
 }
 
 async fn create_notification(
@@ -370,8 +402,9 @@ pub async fn create_issue(
 
     tx.commit().await?;
 
-    broadcast_event_scoped(&pool, &realtime, "issue.created", &project_id).await;
-    Ok(Json(Issue::from(row)))
+    let issue = Issue::from(row);
+    broadcast_issue_event_scoped(&pool, &realtime, "issue.created", &issue).await;
+    Ok(Json(issue))
 }
 
 pub async fn get_issue(
@@ -538,7 +571,8 @@ pub async fn update_issue(
 
     tx.commit().await?;
 
-    broadcast_event_scoped(&pool, &realtime, "issue.updated", &project_id).await;
+    let issue = Issue::from(row);
+    broadcast_issue_event_scoped(&pool, &realtime, "issue.updated", &issue).await;
 
     // Notify new assignee (if changed and not self-assign)
     let assignee_changed = new_assignee_id_from_body.is_some()
@@ -562,7 +596,7 @@ pub async fn update_issue(
         }
     }
 
-    Ok(Json(Issue::from(row)))
+    Ok(Json(issue))
 }
 
 pub async fn delete_issue(
@@ -593,7 +627,16 @@ pub async fn delete_issue(
     }
 
     tx.commit().await?;
-    broadcast_event_scoped(&pool, &realtime, "issue.deleted", &project_id).await;
+    broadcast_project_event_scoped(
+        &pool,
+        &realtime,
+        &project_id,
+        serde_json::json!({
+            "type": "issue.deleted",
+            "issue_id": id,
+        }),
+    )
+    .await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -644,12 +687,14 @@ pub async fn update_issue_status(
 
     tx.commit().await?;
 
-    broadcast_event_scoped(&pool, &realtime, "issue.updated", &project_id).await;
-    Ok(Json(Issue::from(row)))
+    let issue = Issue::from(row);
+    broadcast_issue_event_scoped(&pool, &realtime, "issue.updated", &issue).await;
+    Ok(Json(issue))
 }
 
 pub async fn update_issue_sprint(
     State(pool): State<SqlitePool>,
+    State(realtime): State<RealtimeHub>,
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
     Json(body): Json<UpdateIssueSprint>,
@@ -675,8 +720,9 @@ pub async fn update_issue_sprint(
         .bind(&id)
         .fetch_one(&pool)
         .await?;
-
-    Ok(Json(Issue::from(row)))
+    let issue = Issue::from(row);
+    broadcast_issue_event_scoped(&pool, &realtime, "issue.updated", &issue).await;
+    Ok(Json(issue))
 }
 
 pub async fn list_children(
@@ -748,7 +794,13 @@ pub async fn reorder_issues(
             .await?;
     }
     tx.commit().await?;
-    broadcast_event_scoped(&pool, &realtime, "issue.reordered", &project_id).await;
+    broadcast_project_event_scoped(
+        &pool,
+        &realtime,
+        &project_id,
+        serde_json::json!({ "type": "issue.reordered" }),
+    )
+    .await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -1070,6 +1122,15 @@ pub async fn bulk_update_issues(
             "Cannot update more than 100 issues at once".to_string(),
         ));
     }
+    if body
+        .labels
+        .as_ref()
+        .map_or(false, |labels| labels.len() > 20)
+    {
+        return Err(AppError::BadRequest(
+            "labels must be 20 or fewer".to_string(),
+        ));
+    }
     if let Some(ref sprint_id) = body.sprint_id {
         if sprint_id != "backlog" {
             ensure_sprint_belongs_to_project(&pool, &project_id, sprint_id).await?;
@@ -1114,11 +1175,39 @@ pub async fn bulk_update_issues(
                 .execute(&mut *tx)
                 .await?;
         }
+        if let Some(priority) = body.priority {
+            sqlx::query(
+                "UPDATE issues SET priority=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=?",
+            )
+            .bind(priority.as_str())
+            .bind(issue_id)
+            .bind(&project_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+        if let Some(ref labels) = body.labels {
+            let labels_json =
+                serde_json::to_string(labels).map_err(|e| AppError::Internal(e.into()))?;
+            sqlx::query(
+                "UPDATE issues SET labels=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=?",
+            )
+            .bind(labels_json)
+            .bind(issue_id)
+            .bind(&project_id)
+            .execute(&mut *tx)
+            .await?;
+        }
     }
 
     tx.commit().await?;
 
-    broadcast_event_scoped(&pool, &realtime, "issue.updated", &project_id).await;
+    broadcast_project_event_scoped(
+        &pool,
+        &realtime,
+        &project_id,
+        serde_json::json!({ "type": "issue.updated" }),
+    )
+    .await;
 
     let placeholders = body
         .issue_ids

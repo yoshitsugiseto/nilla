@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useAuthStore } from '../store/auth'
 import { useAppStore } from '../store'
+import type { Issue, Sprint } from '../types'
 
 type WsEvent = {
   type: string
@@ -10,6 +11,40 @@ type WsEvent = {
   issue_id?: string
   user_id?: string
   workspace_id?: string
+  sprint_id?: string
+  issue?: Issue
+  sprint?: Sprint
+}
+
+type IssueCache = Issue[] | { items: Issue[]; total: number } | undefined
+type SprintCache = Sprint[] | undefined
+
+function replaceIssueInCache(cache: IssueCache, issue: Issue): IssueCache {
+  if (!cache) return cache
+  if (Array.isArray(cache)) {
+    return cache.map((item) => (item.id === issue.id ? issue : item))
+  }
+  return {
+    ...cache,
+    items: cache.items.map((item) => (item.id === issue.id ? issue : item)),
+  }
+}
+
+function removeIssueFromCache(cache: IssueCache, issueId: string): IssueCache {
+  if (!cache) return cache
+  if (Array.isArray(cache)) {
+    return cache.filter((item) => item.id !== issueId)
+  }
+  return {
+    ...cache,
+    items: cache.items.filter((item) => item.id !== issueId),
+    total: Math.max(0, cache.total - (cache.items.some((item) => item.id === issueId) ? 1 : 0)),
+  }
+}
+
+function replaceSprintInCache(cache: SprintCache, sprint: Sprint): SprintCache {
+  if (!cache) return cache
+  return cache.map((item) => (item.id === sprint.id ? sprint : item))
 }
 
 function handleEvent(
@@ -18,7 +53,7 @@ function handleEvent(
   currentUserId?: string,
   activeWorkspaceId?: string | null,
 ) {
-  const { type, project_id, issue_id, user_id, workspace_id } = event
+  const { type, project_id, issue_id, user_id, workspace_id, issue, sprint } = event
 
   // Filter events by workspace scope: ignore events from other workspaces.
   // Notifications and events without workspace_id are always processed.
@@ -28,8 +63,36 @@ function handleEvent(
 
   switch (type) {
     case 'issue.created':
+      if (project_id) {
+        qc.invalidateQueries({ queryKey: ['issues', project_id] })
+      }
+      if (issue) {
+        qc.setQueryData(['issue', issue.id], issue)
+      }
+      break
+
     case 'issue.updated':
+      if (issue && project_id) {
+        qc.setQueryData(['issue', issue.id], issue)
+        qc.setQueriesData({ queryKey: ['issues', project_id] }, (current: IssueCache) =>
+          replaceIssueInCache(current, issue)
+        )
+      } else if (project_id) {
+        qc.invalidateQueries({ queryKey: ['issues', project_id] })
+      }
+      break
+
     case 'issue.deleted':
+      if (project_id && issue_id) {
+        qc.setQueriesData({ queryKey: ['issues', project_id] }, (current: IssueCache) =>
+          removeIssueFromCache(current, issue_id)
+        )
+        qc.removeQueries({ queryKey: ['issue', issue_id] })
+      } else if (project_id) {
+        qc.invalidateQueries({ queryKey: ['issues', project_id] })
+      }
+      break
+
     case 'issue.reordered':
       if (project_id) {
         qc.invalidateQueries({ queryKey: ['issues', project_id] })
@@ -44,10 +107,14 @@ function handleEvent(
       break
 
     case 'sprint.updated':
-      if (project_id) {
+      if (project_id && sprint) {
+        qc.setQueriesData({ queryKey: ['sprints', project_id] }, (current: SprintCache) =>
+          replaceSprintInCache(current, sprint)
+        )
+      } else if (project_id) {
         qc.invalidateQueries({ queryKey: ['sprints', project_id] })
-        qc.invalidateQueries({ queryKey: ['issues', project_id] })
       }
+      if (project_id) qc.invalidateQueries({ queryKey: ['issues', project_id] })
       break
 
     case 'notification.new':

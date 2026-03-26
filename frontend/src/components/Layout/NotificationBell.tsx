@@ -1,14 +1,54 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bell, X } from 'lucide-react'
+import { Bell, X, AtSign, MessageSquare, UserRoundPlus, Filter } from 'lucide-react'
 import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification } from '../../api/notifications'
 import { getIssue } from '../../api/issues'
 import { getProject } from '../../api/projects'
 import { useAuthStore } from '../../store/auth'
 import { useAppStore } from '../../store'
 
+type NotificationFilter = 'all' | 'unread' | 'mention' | 'comment' | 'assigned'
+
+const FILTERS: { value: NotificationFilter; label: string }[] = [
+  { value: 'all', label: 'すべて' },
+  { value: 'unread', label: '未読' },
+  { value: 'mention', label: 'メンション' },
+  { value: 'comment', label: 'コメント' },
+  { value: 'assigned', label: 'アサイン' },
+]
+
+function notificationMeta(type: string) {
+  switch (type) {
+    case 'mention':
+      return {
+        label: 'Mention',
+        icon: <AtSign size={12} className="text-fuchsia-600" />,
+        badgeClassName: 'bg-fuchsia-100 text-fuchsia-700',
+      }
+    case 'comment':
+      return {
+        label: 'Comment',
+        icon: <MessageSquare size={12} className="text-blue-600" />,
+        badgeClassName: 'bg-blue-100 text-blue-700',
+      }
+    case 'assigned':
+      return {
+        label: 'Assigned',
+        icon: <UserRoundPlus size={12} className="text-emerald-600" />,
+        badgeClassName: 'bg-emerald-100 text-emerald-700',
+      }
+    default:
+      return {
+        label: type,
+        icon: <Bell size={12} className="text-gray-500" />,
+        badgeClassName: 'bg-gray-100 text-gray-600',
+      }
+  }
+}
+
 export function NotificationBell() {
   const [notifOpen, setNotifOpen] = useState(false)
+  const [activeFilter, setActiveFilter] = useState<NotificationFilter>('all')
   const notifRef = useRef<HTMLDivElement>(null)
   const { user } = useAuthStore()
   const {
@@ -27,6 +67,11 @@ export function NotificationBell() {
   })
 
   const unreadCount = notifications.filter(n => !n.read).length
+  const visibleNotifications = notifications.filter((notification) => {
+    if (activeFilter === 'all') return true
+    if (activeFilter === 'unread') return !notification.read
+    return notification.type === activeFilter
+  })
 
   const markReadMutation = useMutation({
     mutationFn: markNotificationRead,
@@ -102,11 +147,31 @@ export function NotificationBell() {
               </button>
             )}
           </div>
+          <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-1 overflow-x-auto">
+            <span className="text-[10px] text-gray-400 shrink-0 flex items-center gap-1">
+              <Filter size={11} /> 絞り込み
+            </span>
+            {FILTERS.map(filter => (
+              <button
+                key={filter.value}
+                onClick={() => setActiveFilter(filter.value)}
+                className={`px-2 py-1 rounded-full text-[11px] whitespace-nowrap transition-colors ${
+                  activeFilter === filter.value
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
           <div className="overflow-y-auto flex-1">
-            {notifications.length === 0 ? (
+            {visibleNotifications.length === 0 ? (
               <p className="text-xs text-gray-400 text-center py-4">通知なし</p>
             ) : (
-              notifications.map(n => (
+              visibleNotifications.map(n => {
+                const meta = notificationMeta(n.type)
+                return (
                 <div
                   key={n.id}
                   className={`flex items-start gap-1 px-3 py-2 border-b border-gray-50 hover:bg-gray-50 transition-colors ${n.read ? 'opacity-60' : ''}`}
@@ -115,11 +180,17 @@ export function NotificationBell() {
                     onClick={() => handleNotifClick(n)}
                     className="flex-1 text-left min-w-0"
                   >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${meta.badgeClassName}`}>
+                        {meta.icon}
+                        {meta.label}
+                      </span>
+                      {!n.read && <span className="inline-block w-1.5 h-1.5 bg-blue-500 rounded-full" />}
+                    </div>
                     <p className="text-xs text-gray-700 leading-relaxed">{n.message}</p>
                     <p className="text-[10px] text-gray-400 mt-0.5">
                       {new Date(n.created_at).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </p>
-                    {!n.read && <span className="inline-block w-1.5 h-1.5 bg-blue-500 rounded-full mt-1" />}
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); deleteNotifMutation.mutate(n.id) }}
@@ -129,7 +200,8 @@ export function NotificationBell() {
                     <X size={12} />
                   </button>
                 </div>
-              ))
+                )
+              })
             )}
           </div>
         </div>
