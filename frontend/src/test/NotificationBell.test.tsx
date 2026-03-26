@@ -163,4 +163,23 @@ describe('NotificationBell', () => {
     expect(screen.getByText('Issue updated')).toBeInTheDocument()
     expect(screen.queryByText('Comment added')).not.toBeInTheDocument()
   })
+
+  test('uses wrapped filter chips instead of horizontal scrolling', async () => {
+    const user = userEvent.setup()
+    const queryClient = createQueryClient()
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NotificationBell />
+      </QueryClientProvider>
+    )
+
+    await user.click(screen.getByRole('button', { name: '通知' }))
+
+    await screen.findByText('絞り込み')
+    const filterChips = screen.getByLabelText('通知フィルター')
+
+    expect(filterChips).toHaveClass('flex-wrap')
+    expect(filterChips).not.toHaveClass('overflow-x-auto')
+  })
 })

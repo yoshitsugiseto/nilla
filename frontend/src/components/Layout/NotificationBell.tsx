@@ -135,7 +135,7 @@ export function NotificationBell() {
         <span className="text-xs">通知</span>
       </button>
       {notifOpen && (
-        <div className="absolute bottom-full left-0 right-0 mb-1 mx-3 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-80 flex flex-col">
+        <div className="absolute bottom-full left-0 mb-1 ml-3 w-[min(24rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-80 flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
             <span className="text-xs font-medium text-gray-700">通知</span>
             {unreadCount > 0 && (
@@ -147,23 +147,25 @@ export function NotificationBell() {
               </button>
             )}
           </div>
-          <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-1 overflow-x-auto">
-            <span className="text-[10px] text-gray-400 shrink-0 flex items-center gap-1">
+          <div className="px-3 py-2 border-b border-gray-100">
+            <div className="mb-1.5 text-[10px] text-gray-400 flex items-center gap-1">
               <Filter size={11} /> 絞り込み
-            </span>
-            {FILTERS.map(filter => (
-              <button
-                key={filter.value}
-                onClick={() => setActiveFilter(filter.value)}
-                className={`px-2 py-1 rounded-full text-[11px] whitespace-nowrap transition-colors ${
-                  activeFilter === filter.value
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                }`}
-              >
-                {filter.label}
-              </button>
-            ))}
+            </div>
+            <div aria-label="通知フィルター" className="flex flex-wrap gap-1.5">
+              {FILTERS.map(filter => (
+                <button
+                  key={filter.value}
+                  onClick={() => setActiveFilter(filter.value)}
+                  className={`px-2 py-1 rounded-full text-[11px] whitespace-nowrap transition-colors ${
+                    activeFilter === filter.value
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="overflow-y-auto flex-1">
             {visibleNotifications.length === 0 ? (
