@@ -7,7 +7,9 @@ import { TypeIcon, PriorityBadge, StatusBadge } from '../components/common/Badge
 import { Modal } from '../components/common/Modal'
 import { IssueDetail } from '../components/Issue/IssueDetail'
 import { useCurrentTime } from '../hooks/useCurrentTime'
+import { useProjectPermissions } from '../hooks/useProjectPermissions'
 import { dueDateLabel } from '../utils/date'
+import { ProjectRoleBadge } from '../components/common/ProjectRoleBadge'
 import { Search, ChevronLeft, ChevronRight, SlidersHorizontal, X } from 'lucide-react'
 
 const PAGE_SIZE = 20
@@ -39,6 +41,7 @@ export function SearchPage({ query, onApplyPreset }: Props) {
   const priorityId = useId()
   const assigneeId = useId()
   const nowMs = useCurrentTime()
+  const { role } = useProjectPermissions(activeProjectId)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [pageState, setPageState] = useState({ scope: '', page: 0 })
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
@@ -113,6 +116,7 @@ export function SearchPage({ query, onApplyPreset }: Props) {
             <h1 className="text-xl font-bold text-gray-900">
               {query.length < 2 ? '検索' : `"${query}" の検索結果`}
             </h1>
+            <ProjectRoleBadge role={role} />
             {query.length >= 2 && !isLoading && total > 0 && (
               <span className="text-sm text-gray-400 ml-1">{total}件</span>
             )}

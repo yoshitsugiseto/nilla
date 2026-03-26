@@ -6,8 +6,10 @@ import { TypeIcon, PriorityBadge } from '../components/common/Badge'
 import { DetailPanel } from '../components/common/DetailPanel'
 import { IssueDetail } from '../components/Issue/IssueDetail'
 import { useState } from 'react'
+import { ProjectRoleBadge } from '../components/common/ProjectRoleBadge'
 import { CheckCircle2, AlertCircle, Clock, BarChart3 } from 'lucide-react'
 import { useCurrentTime } from '../hooks/useCurrentTime'
+import { useProjectPermissions } from '../hooks/useProjectPermissions'
 import { deadlineLabel } from '../utils/date'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -26,6 +28,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function DashboardPage() {
   const { activeProjectId } = useAppStore()
+  const { role } = useProjectPermissions(activeProjectId)
   const [detailId, setDetailId] = useState<string | null>(null)
   const nowMs = useCurrentTime()
 
@@ -68,6 +71,7 @@ export function DashboardPage() {
       <div className="p-6 max-w-6xl space-y-6">
       <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
         <BarChart3 size={20} /> Dashboard
+        <ProjectRoleBadge role={role} />
       </h1>
 
       {/* Stats row */}
