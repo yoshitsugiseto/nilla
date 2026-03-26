@@ -9,6 +9,7 @@ import { BoardFilters, type Filters } from '../components/Board/BoardFilters'
 import { BurndownChart } from '../components/Board/BurndownChart'
 import { Modal } from '../components/common/Modal'
 import { IssueForm } from '../components/Issue/IssueForm'
+import { ProjectRoleBadge } from '../components/common/ProjectRoleBadge'
 import { useProjectPermissions } from '../hooks/useProjectPermissions'
 import type { Issue, Sprint } from '../types'
 
@@ -24,7 +25,7 @@ const statusLabel: Record<string, { text: string; className: string }> = {
 
 export function BoardPage() {
   const { activeProjectId, activeSprint, setActiveSprint } = useAppStore()
-  const { canEditProject } = useProjectPermissions(activeProjectId)
+  const { role, canEditProject } = useProjectPermissions(activeProjectId)
   const [creating, setCreating] = useState(false)
   const [filters, setFilters] = useState<Filters>({})
   const [showFilters, setShowFilters] = useState(true)
@@ -100,6 +101,7 @@ export function BoardPage() {
               <h2 className="text-lg font-bold text-gray-900">
                 {currentSprint?.name ?? 'No Sprint'}
               </h2>
+              <ProjectRoleBadge role={role} />
               {currentSprint && (
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sprintStatus.className}`}>
                   {sprintStatus.text}

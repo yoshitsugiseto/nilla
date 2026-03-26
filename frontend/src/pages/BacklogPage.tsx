@@ -14,6 +14,7 @@ import { IssueDetail } from '../components/Issue/IssueDetail'
 import { TypeIcon, PriorityBadge, StatusBadge } from '../components/common/Badge'
 import { Avatar } from '../components/common/Avatar'
 import { ConfirmDialog } from '../components/common/ConfirmDialog'
+import { ProjectRoleBadge } from '../components/common/ProjectRoleBadge'
 import { useToast } from '../components/common/useToast'
 import { useCurrentTime } from '../hooks/useCurrentTime'
 import { useProjectPermissions } from '../hooks/useProjectPermissions'
@@ -332,7 +333,7 @@ export function BacklogPage() {
   const { activeProjectId } = useAppStore()
   const qc = useQueryClient()
   const showToast = useToast()
-  const { canEditProject } = useProjectPermissions(activeProjectId)
+  const { role, canEditProject } = useProjectPermissions(activeProjectId)
   const [creating, setCreating] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [filterQuery, setFilterQuery] = useState('')
@@ -478,7 +479,10 @@ export function BacklogPage() {
     <div className="flex-1 overflow-auto">
       <div className="p-6 max-w-6xl">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold text-gray-900">Backlog</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold text-gray-900">Backlog</h1>
+          <ProjectRoleBadge role={role} />
+        </div>
         <div className="flex items-center gap-2">
           {canEditProject && (
             <button

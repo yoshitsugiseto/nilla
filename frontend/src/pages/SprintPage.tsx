@@ -6,6 +6,7 @@ import { getIssues } from '../api/issues'
 import { useAppStore } from '../store'
 import { Modal } from '../components/common/Modal'
 import { BurndownChart } from '../components/Board/BurndownChart'
+import { ProjectRoleBadge } from '../components/common/ProjectRoleBadge'
 import { useToast } from '../components/common/useToast'
 import { useCurrentTime } from '../hooks/useCurrentTime'
 import { useProjectPermissions } from '../hooks/useProjectPermissions'
@@ -405,7 +406,7 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
   const { activeProjectId } = useAppStore()
   const qc = useQueryClient()
   const showToast = useToast()
-  const { canEditProject } = useProjectPermissions(activeProjectId)
+  const { role, canEditProject } = useProjectPermissions(activeProjectId)
   const [creating, setCreating] = useState(false)
   const [completing, setCompleting] = useState<string | null>(null)
   const [report, setReport] = useState<SprintReportData | null>(null)
@@ -488,7 +489,10 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
     <div className="flex-1 overflow-auto">
     <div className="p-6 max-w-6xl">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold text-gray-900">Sprints</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold text-gray-900">Sprints</h1>
+          <ProjectRoleBadge role={role} />
+        </div>
         <div className="flex items-center gap-2">
           <button onClick={() => onNavigate('sprint-history')}
             className="flex items-center gap-2 px-4 py-2 text-gray-600 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">

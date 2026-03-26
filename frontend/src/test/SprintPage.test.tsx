@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { SprintPage } from '../pages/SprintPage'
 import { useAppStore } from '../store'
-import type { Issue, Sprint } from '../types'
+import { useAuthStore } from '../store/auth'
+import type { Issue, ProjectMember, Sprint } from '../types'
 
 const {
   mockGetSprints,
@@ -13,6 +14,7 @@ const {
   mockStartSprint,
   mockCompleteSprint,
   mockGetIssues,
+  mockGetProjectMembers,
   mockShowToast,
   mockExtractErrorMessage,
 } = vi.hoisted(() => ({
@@ -22,6 +24,7 @@ const {
   mockStartSprint: vi.fn(),
   mockCompleteSprint: vi.fn(),
   mockGetIssues: vi.fn(),
+  mockGetProjectMembers: vi.fn(),
   mockShowToast: vi.fn(),
   mockExtractErrorMessage: vi.fn(),
 }))
@@ -36,6 +39,10 @@ vi.mock('../api/sprints', () => ({
 
 vi.mock('../api/issues', () => ({
   getIssues: mockGetIssues,
+}))
+
+vi.mock('../api/workspaces', () => ({
+  getProjectMembers: mockGetProjectMembers,
 }))
 
 vi.mock('../components/common/useToast', () => ({
@@ -101,6 +108,22 @@ function makeIssue(overrides: Partial<Issue> = {}): Issue {
   }
 }
 
+function makeMember(overrides: Partial<ProjectMember> = {}): ProjectMember {
+  return {
+    workspace_id: 'workspace-1',
+    project_id: 'project-1',
+    user_id: 'member-1',
+    name: 'Alice',
+    email: 'alice@example.com',
+    avatar_url: null,
+    role: 'editor',
+    workspace_role: 'member',
+    inherited: true,
+    joined_at: '2026-03-01T00:00:00Z',
+    ...overrides,
+  }
+}
+
 function renderSprintPage() {
   const queryClient = createQueryClient()
   useAppStore.setState({
@@ -133,9 +156,21 @@ describe('SprintPage', () => {
     mockStartSprint.mockReset()
     mockCompleteSprint.mockReset()
     mockGetIssues.mockReset()
+    mockGetProjectMembers.mockReset()
     mockShowToast.mockReset()
     mockExtractErrorMessage.mockReset()
     mockExtractErrorMessage.mockReturnValue('抽出済みエラー')
+    useAuthStore.setState({
+      accessToken: 'access-123',
+      user: {
+        id: 'member-1',
+        name: 'Alice',
+        email: 'alice@example.com',
+        avatar_url: null,
+        provider: 'github',
+      },
+      isLoading: false,
+    })
 
     mockGetSprints.mockResolvedValue([makeSprint()])
     mockCreateSprint.mockResolvedValue(makeSprint({ id: 'created-sprint', name: 'Sprint Beta' }))
@@ -143,6 +178,7 @@ describe('SprintPage', () => {
     mockStartSprint.mockResolvedValue(makeSprint({ status: 'active' }))
     mockCompleteSprint.mockResolvedValue(makeSprint({ status: 'completed' }))
     mockGetIssues.mockResolvedValue([])
+    mockGetProjectMembers.mockResolvedValue([makeMember()])
   })
 
   afterEach(() => {
@@ -155,6 +191,7 @@ describe('SprintPage', () => {
       searchPresets: [],
       boardFilters: {},
     })
+    useAuthStore.setState({ accessToken: null, user: null, isLoading: false })
     vi.restoreAllMocks()
   })
 
@@ -164,6 +201,7 @@ describe('SprintPage', () => {
     renderSprintPage()
 
     await waitFor(() => expect(mockGetSprints).toHaveBeenCalledWith('project-1'))
+    expect(await screen.findByRole('button', { name: 'Sprintを作成' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Sprintを作成' }))
     await user.type(screen.getByLabelText('スプリント名 *'), 'Sprint Beta')
@@ -227,5 +265,22 @@ describe('SprintPage', () => {
     expect(screen.getByText('5 / 8 pt')).toBeInTheDocument()
     expect(screen.getByText('Carry over')).toBeInTheDocument()
     expect(screen.getByText('Sprint Prev')).toBeInTheDocument()
+  })
+
+  test('viewers do not see sprint mutation controls', async () => {
+    mockGetProjectMembers.mockResolvedValue([
+      makeMember({
+        role: 'viewer',
+        workspace_role: 'viewer',
+      }),
+    ])
+
+    renderSprintPage()
+
+    await waitFor(() => expect(mockGetSprints).toHaveBeenCalled())
+    expect(await screen.findByText('Sprint Alpha')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Sprintを作成' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '開始' })).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Edit sprint')).not.toBeInTheDocument()
   })
 })

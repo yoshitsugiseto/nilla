@@ -5,7 +5,8 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { BacklogPage } from '../pages/BacklogPage'
 import { useAppStore } from '../store'
-import type { Issue, ProjectLabel, Sprint, WorkspaceMember } from '../types'
+import { useAuthStore } from '../store/auth'
+import type { Issue, ProjectLabel, ProjectMember, Sprint } from '../types'
 
 const {
   mockGetIssues,
@@ -123,14 +124,17 @@ function makeSprint(overrides: Partial<Sprint> = {}): Sprint {
   }
 }
 
-function makeMember(overrides: Partial<WorkspaceMember> = {}): WorkspaceMember {
+function makeMember(overrides: Partial<ProjectMember> = {}): ProjectMember {
   return {
     workspace_id: 'workspace-1',
+    project_id: 'project-1',
     user_id: 'member-1',
     name: 'Alice',
     email: 'alice@example.com',
     avatar_url: null,
-    role: 'member',
+    role: 'editor',
+    workspace_role: 'member',
+    inherited: true,
     joined_at: '2026-03-01T00:00:00Z',
     ...overrides,
   }
@@ -178,6 +182,17 @@ describe('BacklogPage', () => {
     mockGetProjectMembers.mockReset()
     mockGetLabels.mockReset()
     mockShowToast.mockReset()
+    useAuthStore.setState({
+      accessToken: 'access-123',
+      user: {
+        id: 'member-1',
+        name: 'Alice',
+        email: 'alice@example.com',
+        avatar_url: null,
+        provider: 'github',
+      },
+      isLoading: false,
+    })
 
     mockGetIssues.mockResolvedValue([makeIssue(), makeIssue({ id: 'issue-2', number: 2, title: 'Second task' })])
     mockUpdateIssueSprint.mockResolvedValue(undefined)
@@ -199,6 +214,7 @@ describe('BacklogPage', () => {
       searchPresets: [],
       boardFilters: {},
     })
+    useAuthStore.setState({ accessToken: null, user: null, isLoading: false })
     vi.restoreAllMocks()
   })
 
@@ -209,6 +225,7 @@ describe('BacklogPage', () => {
 
     await waitFor(() => expect(mockGetIssues).toHaveBeenCalledWith('project-1'))
     expect(await screen.findByText('Backlog task')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Issueを作成' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Issueを作成' }))
     expect(screen.getByText('IssueForm:project-1')).toBeInTheDocument()
@@ -224,6 +241,7 @@ describe('BacklogPage', () => {
 
     await waitFor(() => expect(mockGetIssues).toHaveBeenCalled())
     expect(await screen.findByText('Backlog task')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '一括操作' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '一括操作' }))
     await waitFor(() => expect(mockGetProjectMembers).toHaveBeenCalledWith('project-1'))
@@ -267,6 +285,7 @@ describe('BacklogPage', () => {
     renderBacklogPage()
 
     await waitFor(() => expect(mockGetIssues).toHaveBeenCalled())
+    expect(await screen.findByRole('button', { name: '一括操作' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '一括操作' }))
     await waitFor(() => expect(mockGetLabels).toHaveBeenCalledWith('project-1'))
     await user.click(screen.getByText('Backlog task'))
@@ -291,6 +310,7 @@ describe('BacklogPage', () => {
     renderBacklogPage()
 
     await waitFor(() => expect(mockGetIssues).toHaveBeenCalled())
+    expect(await screen.findByRole('button', { name: '一括操作' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '一括操作' }))
     await waitFor(() => expect(mockGetLabels).toHaveBeenCalledWith('project-1'))
     await user.click(screen.getByText('Backlog task'))
@@ -309,5 +329,23 @@ describe('BacklogPage', () => {
         labels: ['Frontend', 'Backend'],
       })
     )
+  })
+
+  test('viewers do not see create or bulk edit controls', async () => {
+    mockGetProjectMembers.mockResolvedValue([
+      makeMember({
+        role: 'viewer',
+        workspace_role: 'viewer',
+      }),
+    ])
+
+    renderBacklogPage()
+
+    await waitFor(() => expect(mockGetIssues).toHaveBeenCalled())
+    expect(await screen.findByText('Backlog task')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Issueを作成' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '一括操作' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'イシューを編集' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'イシューを削除' })).not.toBeInTheDocument()
   })
 })
