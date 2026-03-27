@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { getIssuesPaged } from '../api/issues'
 import { getProjectMembers } from '../api/workspaces'
 import { useAppStore } from '../store'
+import { useAuthStore } from '../store/auth'
 import { TypeIcon, PriorityBadge, StatusBadge } from '../components/common/Badge'
 import { Modal } from '../components/common/Modal'
 import { IssueDetail } from '../components/Issue/IssueDetail'
@@ -15,6 +16,13 @@ import type { IssueSearchFilters } from '../types'
 
 const PAGE_SIZE = 20
 const EMPTY_FILTERS: IssueSearchFilters = { status: '', type: '', priority: '', assignee_id: '' }
+const QUICK_FILTERS = [
+  { key: 'mine', label: '自分の担当' },
+  { key: 'unassigned', label: '未割り当て' },
+  { key: 'in_progress', label: '進行中' },
+  { key: 'in_review', label: 'レビュー中' },
+  { key: 'critical', label: '緊急' },
+] as const
 
 interface Props {
   query: string
@@ -24,6 +32,7 @@ interface Props {
 }
 
 export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: Props) {
+  const { user } = useAuthStore()
   const {
     activeProjectId,
     searchPresets,
@@ -79,6 +88,43 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
     onFiltersChange({ ...filters, [key]: value })
 
   const clearFilters = () => onFiltersChange(EMPTY_FILTERS)
+  const applyQuickFilter = (key: (typeof QUICK_FILTERS)[number]['key']) => {
+    const nextFilters = { ...filters }
+    switch (key) {
+      case 'mine':
+        if (!user) return
+        nextFilters.assignee_id = user.id
+        break
+      case 'unassigned':
+        nextFilters.assignee_id = '__unassigned__'
+        break
+      case 'in_progress':
+        nextFilters.status = 'in_progress'
+        break
+      case 'in_review':
+        nextFilters.status = 'in_review'
+        break
+      case 'critical':
+        nextFilters.priority = 'critical'
+        break
+    }
+    onFiltersChange(nextFilters)
+    setShowFilters(true)
+  }
+  const isQuickFilterActive = (key: (typeof QUICK_FILTERS)[number]['key']) => {
+    switch (key) {
+      case 'mine':
+        return !!user && filters.assignee_id === user.id
+      case 'unassigned':
+        return filters.assignee_id === '__unassigned__'
+      case 'in_progress':
+        return filters.status === 'in_progress'
+      case 'in_review':
+        return filters.status === 'in_review'
+      case 'critical':
+        return filters.priority === 'critical'
+    }
+  }
   const saveCurrentPreset = () => {
     if (!activeProjectId || !canSavePreset) return
     const defaultName = query.trim().length >= 2 ? query.trim() : 'フィルタ'
@@ -139,6 +185,31 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
               )}
             </button>
           </div>
+        </div>
+
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-gray-400">よく使う条件</span>
+          {QUICK_FILTERS.filter(filter => filter.key !== 'mine' || !!user).map(filter => (
+            <button
+              key={filter.key}
+              onClick={() => applyQuickFilter(filter.key)}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                isQuickFilterActive(filter.key)
+                  ? 'border-blue-300 bg-blue-50 text-blue-700'
+                  : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {filter.label}
+            </button>
+          ))}
+          {hasFilters && (
+            <button
+              onClick={clearFilters}
+              className="text-xs text-gray-400 hover:text-gray-600"
+            >
+              条件をクリア
+            </button>
+          )}
         </div>
 
         {projectPresets.length > 0 && (

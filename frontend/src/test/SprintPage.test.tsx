@@ -251,7 +251,7 @@ describe('SprintPage', () => {
     renderSprintPage()
 
     await waitFor(() => expect(mockGetIssues).toHaveBeenCalledWith('project-1'))
-    expect(await screen.findByText('Sprint Active')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '完了' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '完了' }))
     await user.selectOptions(screen.getByLabelText('未完了イシューの移動先'), 'sprint-next')
@@ -298,5 +298,36 @@ describe('SprintPage', () => {
     await waitFor(() => expect(mockGetSprints).toHaveBeenCalled())
     expect(await screen.findByText('スプリントはまだありません。作成が必要な場合はプロジェクト管理者に依頼してください。')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Sprintを作成' })).not.toBeInTheDocument()
+  })
+
+  test('surfaces active sprint risk signals for overdue and unassigned work', async () => {
+    mockGetSprints.mockResolvedValue([
+      makeSprint({ id: 'sprint-active', name: 'Sprint Active', status: 'active', end_date: '2026-03-28' }),
+    ])
+    mockGetIssues.mockResolvedValue([
+      makeIssue({
+        id: 'issue-1',
+        sprint_id: 'sprint-active',
+        title: 'Overdue task',
+        status: 'todo',
+        due_date: '2026-03-01',
+        assignee_id: null,
+      }),
+      makeIssue({
+        id: 'issue-2',
+        sprint_id: 'sprint-active',
+        title: 'Waiting review',
+        status: 'in_review',
+        due_date: null,
+        assignee_id: 'member-1',
+      }),
+    ])
+
+    renderSprintPage()
+
+    expect(await screen.findByLabelText('スプリント危険信号')).toBeInTheDocument()
+    expect(screen.getByText('期限超過 1件')).toBeInTheDocument()
+    expect(screen.getByText('未アサイン 1件')).toBeInTheDocument()
+    expect(screen.getByText('レビュー待ち 1件')).toBeInTheDocument()
   })
 })

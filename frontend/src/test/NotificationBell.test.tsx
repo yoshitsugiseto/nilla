@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { NotificationBell } from '../components/Layout/NotificationBell'
@@ -198,5 +198,56 @@ describe('NotificationBell', () => {
 
     expect(filterChips).toHaveClass('flex-wrap')
     expect(filterChips).not.toHaveClass('overflow-x-auto')
+  })
+
+  test('prioritizes unread direct notifications before older read comments', async () => {
+    const user = userEvent.setup()
+    const queryClient = createQueryClient()
+
+    mockGetNotifications.mockResolvedValue([
+      {
+        id: 'notif-1',
+        user_id: 'user-1',
+        issue_id: 'issue-1',
+        type: 'comment',
+        message: 'Read comment',
+        read: true,
+        created_at: '2026-03-26T02:00:00Z',
+      },
+      {
+        id: 'notif-2',
+        user_id: 'user-1',
+        issue_id: 'issue-2',
+        type: 'assigned',
+        message: 'Unread assign',
+        read: false,
+        created_at: '2026-03-26T01:00:00Z',
+      },
+      {
+        id: 'notif-3',
+        user_id: 'user-1',
+        issue_id: 'issue-3',
+        type: 'mention',
+        message: 'Unread mention',
+        read: false,
+        created_at: '2026-03-26T00:00:00Z',
+      },
+    ])
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NotificationBell />
+      </QueryClientProvider>
+    )
+
+    await user.click(screen.getByRole('button', { name: '通知' }))
+    const notificationList = await screen.findByLabelText('通知一覧')
+    const buttons = within(notificationList).getAllByRole('button', { name: /通知を開く:/ })
+
+    expect(buttons.map(button => button.getAttribute('aria-label'))).toEqual([
+      '通知を開く: Unread mention',
+      '通知を開く: Unread assign',
+      '通知を開く: Read comment',
+    ])
   })
 })

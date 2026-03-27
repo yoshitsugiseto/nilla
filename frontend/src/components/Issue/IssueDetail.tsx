@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getIssue, updateIssue, getIssueChildren, getIssueLinks, createIssueLink, deleteIssueLink, getIssues } from '../../api/issues'
 import { getAttachments } from '../../api/attachments'
 import { getLabels } from '../../api/labels'
+import { getProjectMembers } from '../../api/workspaces'
+import { getSprints } from '../../api/sprints'
 import { TypeIcon, PriorityBadge } from '../common/Badge'
 import { Avatar } from '../common/Avatar'
 import { IssueForm } from './IssueForm'
@@ -14,7 +16,7 @@ import { useToast } from '../common/useToast'
 import { useCurrentTime } from '../../hooks/useCurrentTime'
 import { useProjectPermissions } from '../../hooks/useProjectPermissions'
 import { dueDateLabel } from '../../utils/date'
-import type { IssueStatus, IssueLinkType } from '../../types'
+import type { IssueStatus, IssueLinkType, IssuePriority } from '../../types'
 import { Pencil, MessageSquare, Clock, Plus, ListTodo, Paperclip, Link2, X } from 'lucide-react'
 
 const LINK_TYPE_LABELS: Record<IssueLinkType, string> = {
@@ -36,6 +38,13 @@ const STATUS_OPTIONS: { value: IssueStatus; label: string }[] = [
   { value: 'in_progress', label: 'In Progress' },
   { value: 'in_review', label: 'In Review' },
   { value: 'done', label: 'Done' },
+]
+
+const PRIORITY_OPTIONS: { value: IssuePriority; label: string }[] = [
+  { value: 'critical', label: '緊急' },
+  { value: 'high', label: '高' },
+  { value: 'medium', label: '中' },
+  { value: 'low', label: '低' },
 ]
 
 interface Props {
@@ -133,11 +142,29 @@ export function IssueDetail({ issueId, projectId }: Props) {
     queryFn: () => getLabels(projectId),
   })
 
+  const { data: projectMembers = [] } = useQuery({
+    queryKey: ['project-members', projectId],
+    queryFn: () => getProjectMembers(projectId),
+    enabled: canEditProject,
+    staleTime: 30_000,
+  })
+
+  const { data: projectSprints = [] } = useQuery({
+    queryKey: ['sprints', projectId],
+    queryFn: () => getSprints(projectId),
+    enabled: canEditProject,
+    staleTime: 30_000,
+  })
+
+  const invalidateIssueLists = () => {
+    qc.invalidateQueries({ queryKey: ['issue', issueId] })
+    qc.invalidateQueries({ queryKey: ['issues', projectId] })
+  }
+
   const labelsMutation = useMutation({
     mutationFn: (labels: string[]) => updateIssue(issueId, { labels }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['issue', issueId] })
-      qc.invalidateQueries({ queryKey: ['issues', projectId] })
+      invalidateIssueLists()
     },
     onError: () => showToast('ラベルの更新に失敗しました', 'error'),
   })
@@ -145,17 +172,40 @@ export function IssueDetail({ issueId, projectId }: Props) {
   const statusMutation = useMutation({
     mutationFn: (status: IssueStatus) => updateIssue(issueId, { status }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['issue', issueId] })
-      qc.invalidateQueries({ queryKey: ['issues', projectId] })
+      invalidateIssueLists()
     },
     onError: () => showToast('ステータスの更新に失敗しました', 'error'),
+  })
+
+  const priorityMutation = useMutation({
+    mutationFn: (priority: IssuePriority) => updateIssue(issueId, { priority }),
+    onSuccess: () => {
+      invalidateIssueLists()
+    },
+    onError: () => showToast('優先度の更新に失敗しました', 'error'),
+  })
+
+  const assigneeMutation = useMutation({
+    mutationFn: (assignee_id: string | null) => updateIssue(issueId, { assignee_id }),
+    onSuccess: () => {
+      invalidateIssueLists()
+    },
+    onError: () => showToast('担当者の更新に失敗しました', 'error'),
+  })
+
+  const sprintMutation = useMutation({
+    mutationFn: (sprint_id: string | null) => updateIssue(issueId, { sprint_id }),
+    onSuccess: () => {
+      invalidateIssueLists()
+      qc.invalidateQueries({ queryKey: ['sprints', projectId] })
+    },
+    onError: () => showToast('スプリントの更新に失敗しました', 'error'),
   })
 
   const epicMutation = useMutation({
     mutationFn: (epic_id: string | null) => updateIssue(issueId, { epic_id }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['issue', issueId] })
-      qc.invalidateQueries({ queryKey: ['issues', projectId] })
+      invalidateIssueLists()
     },
     onError: () => showToast('エピックの更新に失敗しました', 'error'),
   })
@@ -167,6 +217,7 @@ export function IssueDetail({ issueId, projectId }: Props) {
     staleTime: 30_000,
   })
   const epics = epicIssues.filter(i => i.id !== issueId)
+  const sprintOptions = projectSprints.filter(sprint => sprint.status !== 'completed' || sprint.id === issue?.sprint_id)
 
   if (isLoading) {
     return <div role="status" aria-label="読み込み中" className="p-8 text-center text-gray-400">Loading...</div>
@@ -425,6 +476,7 @@ export function IssueDetail({ issueId, projectId }: Props) {
             value={issue.status}
             onChange={e => statusMutation.mutate(e.target.value as IssueStatus)}
             disabled={!canEditProject}
+            aria-label="ステータス"
             className="w-full border border-gray-200 rounded px-2 py-1 text-sm"
           >
             {STATUS_OPTIONS.map(o => (
@@ -435,7 +487,23 @@ export function IssueDetail({ issueId, projectId }: Props) {
 
         <div>
           <p className="text-xs text-gray-400 mb-1">優先度</p>
-          <PriorityBadge priority={issue.priority} />
+          {canEditProject ? (
+            <select
+              value={issue.priority}
+              onChange={e => priorityMutation.mutate(e.target.value as IssuePriority)}
+              disabled={priorityMutation.isPending}
+              aria-label="優先度"
+              className="w-full border border-gray-200 rounded px-2 py-1 text-sm"
+            >
+              {PRIORITY_OPTIONS.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <PriorityBadge priority={issue.priority} />
+          )}
         </div>
 
         <div>
@@ -453,11 +521,32 @@ export function IssueDetail({ issueId, projectId }: Props) {
               value={issue.epic_id ?? ''}
               onChange={e => epicMutation.mutate(e.target.value || null)}
               disabled={!canEditProject || epicMutation.isPending}
+              aria-label="エピック"
               className="w-full border border-gray-200 rounded px-2 py-1 text-xs"
             >
               <option value="">なし</option>
               {epics.map(ep => (
                 <option key={ep.id} value={ep.id}>#{ep.number} {ep.title}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {canEditProject && (
+          <div>
+            <p className="text-xs text-gray-400 mb-1">スプリント</p>
+            <select
+              value={issue.sprint_id ?? ''}
+              onChange={e => sprintMutation.mutate(e.target.value || null)}
+              disabled={sprintMutation.isPending}
+              aria-label="スプリント"
+              className="w-full border border-gray-200 rounded px-2 py-1 text-sm"
+            >
+              <option value="">Backlog</option>
+              {sprintOptions.map(sprint => (
+                <option key={sprint.id} value={sprint.id}>
+                  {sprint.name}
+                </option>
               ))}
             </select>
           </div>
@@ -470,15 +559,32 @@ export function IssueDetail({ issueId, projectId }: Props) {
           </div>
         )}
 
-        {issue.assignee_name && (
-          <div>
-            <p className="text-xs text-gray-400 mb-1">担当者</p>
+        <div>
+          <p className="text-xs text-gray-400 mb-1">担当者</p>
+          {canEditProject ? (
+            <select
+              value={issue.assignee_id ?? ''}
+              onChange={e => assigneeMutation.mutate(e.target.value || null)}
+              disabled={assigneeMutation.isPending}
+              aria-label="担当者"
+              className="w-full border border-gray-200 rounded px-2 py-1 text-sm"
+            >
+              <option value="">未割り当て</option>
+              {projectMembers.map(member => (
+                <option key={member.user_id} value={member.user_id}>
+                  {member.name}
+                </option>
+              ))}
+            </select>
+          ) : issue.assignee_name ? (
             <div className="flex items-center gap-2">
               <Avatar name={issue.assignee_name} avatarUrl={issue.assignee_avatar_url ?? undefined} />
               <span className="text-gray-700">{issue.assignee_name}</span>
             </div>
-          </div>
-        )}
+          ) : (
+            <span className="text-gray-400">未割り当て</span>
+          )}
+        </div>
 
         {issue.due_date && nowMs && (
           <div>

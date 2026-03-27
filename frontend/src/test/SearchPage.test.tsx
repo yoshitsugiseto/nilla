@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { SearchPage } from '../pages/SearchPage'
 import { useAppStore } from '../store'
+import { useAuthStore } from '../store/auth'
 import type { Issue, IssueSearchFilters, WorkspaceMember } from '../types'
 
 const {
@@ -117,6 +118,17 @@ describe('SearchPage', () => {
     localStorage.clear()
     mockGetIssuesPaged.mockReset()
     mockGetProjectMembers.mockReset()
+    useAuthStore.setState({
+      accessToken: 'access-123',
+      user: {
+        id: 'user-1',
+        name: 'Alice',
+        email: 'alice@example.com',
+        avatar_url: null,
+        provider: 'github',
+      },
+      isLoading: false,
+    })
     mockGetIssuesPaged.mockResolvedValue({
       items: [makeIssue()],
       total: 41,
@@ -125,6 +137,7 @@ describe('SearchPage', () => {
   })
 
   afterEach(() => {
+    useAuthStore.setState({ accessToken: null, user: null, isLoading: false })
     useAppStore.setState({
       activeProjectId: null,
       activeSprint: null,
@@ -248,5 +261,27 @@ describe('SearchPage', () => {
         project_id: 'project-1',
       }),
     ])
+  })
+
+  test('applies a quick filter for the current user without typing a query', async () => {
+    const user = userEvent.setup()
+
+    renderSearchPage('')
+
+    expect(mockGetIssuesPaged).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: '自分の担当' }))
+
+    await waitFor(() =>
+      expect(mockGetIssuesPaged).toHaveBeenLastCalledWith('project-1', {
+        q: undefined,
+        limit: 20,
+        offset: 0,
+        status: undefined,
+        type: undefined,
+        priority: undefined,
+        assignee_id: 'user-1',
+      })
+    )
+    expect(screen.getByText('フィルター結果')).toBeInTheDocument()
   })
 })

@@ -46,6 +46,19 @@ function notificationMeta(type: string) {
   }
 }
 
+function notificationPriority(type: string): number {
+  switch (type) {
+    case 'mention':
+      return 0
+    case 'assigned':
+      return 1
+    case 'comment':
+      return 2
+    default:
+      return 3
+  }
+}
+
 export function NotificationBell() {
   const [notifOpen, setNotifOpen] = useState(false)
   const [activeFilter, setActiveFilter] = useState<NotificationFilter>('all')
@@ -67,11 +80,19 @@ export function NotificationBell() {
   })
 
   const unreadCount = notifications.filter(n => !n.read).length
-  const visibleNotifications = notifications.filter((notification) => {
-    if (activeFilter === 'all') return true
-    if (activeFilter === 'unread') return !notification.read
-    return notification.type === activeFilter
-  })
+  const visibleNotifications = notifications
+    .filter((notification) => {
+      if (activeFilter === 'all') return true
+      if (activeFilter === 'unread') return !notification.read
+      return notification.type === activeFilter
+    })
+    .slice()
+    .sort((left, right) => {
+      if (left.read !== right.read) return left.read ? 1 : -1
+      const typeDelta = notificationPriority(left.type) - notificationPriority(right.type)
+      if (typeDelta !== 0) return typeDelta
+      return right.created_at.localeCompare(left.created_at)
+    })
 
   const markReadMutation = useMutation({
     mutationFn: markNotificationRead,
@@ -167,7 +188,7 @@ export function NotificationBell() {
               ))}
             </div>
           </div>
-          <div className="overflow-y-auto flex-1">
+          <div aria-label="通知一覧" className="overflow-y-auto flex-1">
             {visibleNotifications.length === 0 ? (
               <p className="text-xs text-gray-400 text-center py-4">通知なし</p>
             ) : (
@@ -181,6 +202,7 @@ export function NotificationBell() {
                   <button
                     onClick={() => handleNotifClick(n)}
                     className="flex-1 text-left min-w-0"
+                    aria-label={`通知を開く: ${n.message}`}
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${meta.badgeClassName}`}>

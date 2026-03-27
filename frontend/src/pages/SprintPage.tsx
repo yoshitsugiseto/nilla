@@ -32,8 +32,59 @@ interface SprintReportData {
   }
 }
 
+interface SprintRiskSignal {
+  sprint_id: string
+  sprint_name: string
+  overdue_count: number
+  unassigned_count: number
+  review_count: number
+  remaining_points: number
+  remaining_issues: number
+  days_left: number | null
+}
+
 const TYPE_LABELS: Record<IssueType, string> = {
   epic: 'Epic', story: 'Story', task: 'Task', bug: 'Bug', spike: 'Spike',
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function daysLeftUntil(endDate: string, nowMs: number): number {
+  const endMs = new Date(`${endDate}T23:59:59`).getTime()
+  return Math.ceil((endMs - nowMs) / DAY_MS)
+}
+
+function buildSprintRiskSignal(sprint: Sprint, issues: Issue[], nowMs: number | null): SprintRiskSignal | null {
+  if (sprint.status !== 'active') return null
+
+  const sprintIssues = issues.filter(issue => issue.sprint_id === sprint.id && !issue.parent_id)
+  if (sprintIssues.length === 0) return null
+
+  const overdueCount = sprintIssues.filter(issue =>
+    issue.status !== 'done' &&
+    !!issue.due_date &&
+    nowMs != null &&
+    new Date(`${issue.due_date}T23:59:59`).getTime() < nowMs
+  ).length
+  const unassignedCount = sprintIssues.filter(issue => issue.status !== 'done' && !issue.assignee_id).length
+  const reviewCount = sprintIssues.filter(issue => issue.status === 'in_review').length
+  const remainingIssues = sprintIssues.filter(issue => issue.status !== 'done')
+  const remainingPoints = remainingIssues.reduce((sum, issue) => sum + (issue.points ?? 0), 0)
+  const daysLeft = sprint.end_date && nowMs != null ? daysLeftUntil(sprint.end_date, nowMs) : null
+  const isUrgent = daysLeft != null && daysLeft <= 2 && remainingIssues.length > 0
+
+  if (!overdueCount && !unassignedCount && !reviewCount && !isUrgent) return null
+
+  return {
+    sprint_id: sprint.id,
+    sprint_name: sprint.name,
+    overdue_count: overdueCount,
+    unassigned_count: unassignedCount,
+    review_count: reviewCount,
+    remaining_points: remainingPoints,
+    remaining_issues: remainingIssues.length,
+    days_left: daysLeft,
+  }
 }
 
 function SprintReportModal({
@@ -406,6 +457,7 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
   const { activeProjectId } = useAppStore()
   const qc = useQueryClient()
   const showToast = useToast()
+  const nowMs = useCurrentTime()
   const { role, canEditProject } = useProjectPermissions(activeProjectId)
   const [creating, setCreating] = useState(false)
   const [completing, setCompleting] = useState<string | null>(null)
@@ -481,6 +533,10 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
     onError: (err) => showToast(extractErrorMessage(err, 'スプリントの完了に失敗しました'), 'error'),
   })
 
+  const sprintRiskSignals = sprints
+    .map(sprint => buildSprintRiskSignal(sprint, issues, nowMs))
+    .filter((signal): signal is SprintRiskSignal => signal !== null)
+
   if (!activeProjectId) {
     return <div className="flex-1 flex items-center justify-center text-gray-400">← プロジェクトを選択してください</div>
   }
@@ -511,6 +567,61 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
         <div role="status" aria-label="読み込み中" className="text-gray-400 text-center py-12">読み込み中...</div>
       ) : (
         <div className="space-y-4">
+          {sprintRiskSignals.length > 0 && (
+            <section
+              aria-label="スプリント危険信号"
+              className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4"
+            >
+              <div className="mb-3 flex items-center gap-2">
+                <AlertCircle size={16} className="text-amber-600" />
+                <div>
+                  <h2 className="text-sm font-semibold text-amber-900">危険信号</h2>
+                  <p className="text-xs text-amber-800">期限超過、未アサイン、レビュー滞留を先に確認できます。</p>
+                </div>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                {sprintRiskSignals.map(signal => (
+                  <div key={signal.sprint_id} className="rounded-xl border border-amber-200 bg-white p-4">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <p className="font-medium text-gray-900">{signal.sprint_name}</p>
+                      {signal.days_left != null && (
+                        <span className={`text-xs font-medium ${
+                          signal.days_left < 0 ? 'text-red-600' : signal.days_left <= 2 ? 'text-amber-700' : 'text-gray-500'
+                        }`}>
+                          {signal.days_left < 0
+                            ? `${Math.abs(signal.days_left)}日超過`
+                            : signal.days_left === 0
+                              ? '今日が最終日'
+                              : `残り${signal.days_left}日`}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {signal.overdue_count > 0 && (
+                        <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
+                          期限超過 {signal.overdue_count}件
+                        </span>
+                      )}
+                      {signal.unassigned_count > 0 && (
+                        <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                          未アサイン {signal.unassigned_count}件
+                        </span>
+                      )}
+                      {signal.review_count > 0 && (
+                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                          レビュー待ち {signal.review_count}件
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-3 text-xs text-gray-500">
+                      未完了 {signal.remaining_issues}件 / 残り {signal.remaining_points}pt
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {sprints.filter(s => s.status !== 'completed').map(sprint => {
             const sprintIssues = issues.filter(i => i.sprint_id === sprint.id)
             const totalPts = sprintIssues.reduce((s, i) => s + (i.points ?? 0), 0)
