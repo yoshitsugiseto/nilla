@@ -60,6 +60,7 @@ export function DashboardPage() {
   const highPriorityOpen = issues
     .filter(i => (i.priority === 'critical' || i.priority === 'high') && i.status !== 'done')
     .slice(0, 5)
+  const hasHighPriorityIssues = issues.some(i => i.priority === 'critical' || i.priority === 'high')
 
   const recentIssues = [...issues]
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
@@ -169,10 +170,14 @@ export function DashboardPage() {
             <AlertCircle size={14} className="text-red-500" /> 優先度 High/Critical（未完了）
           </h2>
           {highPriorityOpen.length === 0 ? (
-            <div className="flex items-center gap-2 text-sm text-emerald-600">
-              <CheckCircle2 size={14} />
-              <span>すべて対応済みです</span>
-            </div>
+            hasHighPriorityIssues ? (
+              <div className="flex items-center gap-2 text-sm text-emerald-600">
+                <CheckCircle2 size={14} />
+                <span>すべて対応済みです</span>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 italic">High / Critical のイシューはありません</p>
+            )
           ) : (
             <div className="space-y-2">
               {highPriorityOpen.map(issue => (

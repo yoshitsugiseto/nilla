@@ -112,4 +112,46 @@ describe('DashboardPage', () => {
     expect(screen.getByText('2. Sprints')).toBeInTheDocument()
     expect(screen.getByText('3. Board')).toBeInTheDocument()
   })
+
+  test('distinguishes projects with no high-priority issues from completed ones', async () => {
+    const queryClient = createQueryClient()
+
+    mockGetIssues.mockResolvedValue([
+      {
+        id: 'issue-1',
+        project_id: 'project-1',
+        sprint_id: null,
+        parent_id: null,
+        epic_id: null,
+        epic_title: null,
+        number: 1,
+        title: 'Normal issue',
+        description: null,
+        type: 'task',
+        status: 'todo',
+        priority: 'medium',
+        points: null,
+        assignee_id: null,
+        assignee_name: null,
+        assignee_avatar_url: null,
+        labels: [],
+        position: 0,
+        due_date: null,
+        created_at: '2026-03-01T00:00:00Z',
+        updated_at: '2026-03-01T00:00:00Z',
+      },
+    ])
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <DashboardPage />
+      </QueryClientProvider>
+    )
+
+    await waitFor(() => expect(mockGetIssues).toHaveBeenCalledWith('project-1'))
+    const emptyState = await screen.findByText('High / Critical のイシューはありません')
+    expect(emptyState).toHaveClass('text-gray-400')
+    expect(emptyState).toHaveClass('italic')
+    expect(screen.queryByText('すべて対応済みです')).not.toBeInTheDocument()
+  })
 })
