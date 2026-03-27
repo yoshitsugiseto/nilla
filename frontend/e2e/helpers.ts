@@ -82,6 +82,13 @@ export const NEXT_SPRINT = {
   status: 'planning',
 }
 
+export const WORKSPACE_AUTOMATION = {
+  notify_on_assignee_change: true,
+  notify_on_review_ready: true,
+  notify_on_overdue_transition: true,
+  sprint_carryover_mode: 'prompt',
+}
+
 export async function clearStorage(page: Page) {
   await page.addInitScript(() => {
     localStorage.removeItem('nilla-app-state')
@@ -108,9 +115,13 @@ export async function mockEmptyApi(page: Page) {
 export async function mockProjectApi(page: Page) {
   await mockAuth(page)
   await page.route('**/api/workspaces', route => route.fulfill({ json: [WORKSPACE] }))
+  await page.route('**/api/workspaces/ws-1/automation', route =>
+    route.fulfill({ json: WORKSPACE_AUTOMATION })
+  )
   await page.route(/\/api\/projects(\?.*)?$/, route => route.fulfill({ json: [PROJECT] }))
   await page.route('**/api/projects/proj-1/members', route => route.fulfill({ json: [PROJECT_MEMBER] }))
   await page.route('**/api/projects/proj-1/sprints', route => route.fulfill({ json: [SPRINT] }))
+  await page.route('**/api/projects/proj-1/velocity', route => route.fulfill({ json: [] }))
   await page.route('**/api/projects/proj-1/issues**', route =>
     route.fulfill({ json: [], headers: { 'x-total-count': '0' } })
   )

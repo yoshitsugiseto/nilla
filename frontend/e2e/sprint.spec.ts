@@ -9,7 +9,7 @@ test('completing a sprint shows the report modal', async ({ page }) => {
   await page.goto('/')
 
   await page.getByRole('button', { name: 'Sprints', exact: true }).click()
-  await expect(page.getByText('Sprint Active')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Sprint Active' })).toBeVisible()
 
   await page.getByRole('button', { name: '完了' }).click()
   await page.getByLabel('未完了イシューの移動先').selectOption('sprint-2')
