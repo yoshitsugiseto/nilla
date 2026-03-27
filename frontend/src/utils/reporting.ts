@@ -1,4 +1,4 @@
-import type { Issue, Sprint } from '../types'
+import type { ActivityLog, Issue, Sprint } from '../types'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -27,6 +27,19 @@ function safeDayDiff(startIso: string, endIso: string) {
     return null
   }
   return Math.max(1, Math.ceil((endMs - startMs) / DAY_MS))
+}
+
+function getCycleDurationFromActivity(
+  issue: Issue,
+  activity: ActivityLog[] | undefined,
+): number | null {
+  const statusChanges = (activity ?? []).filter(item => item.field === 'status')
+  const startedAt = statusChanges.find(item =>
+    item.new_value === 'in_progress' || item.new_value === 'in_review'
+  )?.created_at ?? issue.created_at
+  const completedAt = statusChanges.find(item => item.new_value === 'done')?.created_at ?? issue.updated_at
+
+  return safeDayDiff(startedAt, completedAt)
 }
 
 function doneIssuesWithinWindow(issues: Issue[], nowMs: number, windowDays: number) {
@@ -58,12 +71,13 @@ export function buildAverageCycleSnapshot(
   issues: Issue[],
   nowMs: number | null,
   windowDays: number,
+  activityByIssueId: Record<string, ActivityLog[]> = {},
 ): number | null {
   if (nowMs == null) return null
 
   const completed = doneIssuesWithinWindow(issues, nowMs, windowDays)
   const durations = completed
-    .map(issue => safeDayDiff(issue.created_at, issue.updated_at))
+    .map(issue => getCycleDurationFromActivity(issue, activityByIssueId[issue.id]))
     .filter((value): value is number => value != null)
 
   if (durations.length === 0) return null
@@ -86,6 +100,7 @@ export function buildActiveSprintSnapshot(
   sprint: Sprint | undefined,
   issues: Issue[],
   nowMs: number | null,
+  activityByIssueId: Record<string, ActivityLog[]> = {},
 ): ActiveSprintSnapshot | null {
   if (!sprint) return null
 
@@ -109,7 +124,7 @@ export function buildActiveSprintSnapshot(
     avgCycleDays: doneIssues.length > 0
       ? (() => {
           const durations = doneIssues
-            .map(issue => safeDayDiff(issue.created_at, issue.updated_at))
+            .map(issue => getCycleDurationFromActivity(issue, activityByIssueId[issue.id]))
             .filter((value): value is number => value != null)
           if (durations.length === 0) return null
           return Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length)

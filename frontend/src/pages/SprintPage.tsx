@@ -1,8 +1,8 @@
 import { useId, useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Play, CheckCircle, BarChart2, AlertCircle, History, Pencil, Trophy, TrendingUp } from 'lucide-react'
 import { getSprints, createSprint, updateSprint, startSprint, completeSprint } from '../api/sprints'
-import { getIssues } from '../api/issues'
+import { getActivity, getIssues } from '../api/issues'
 import { getWorkspaceAutomationSettings } from '../api/workspaces'
 import { useAppStore } from '../store'
 import { Modal } from '../components/common/Modal'
@@ -50,6 +50,7 @@ const TYPE_LABELS: Record<IssueType, string> = {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
+const MAX_CYCLE_ACTIVITY_ISSUES = 20
 
 function daysLeftUntil(endDate: string, nowMs: number): number {
   const endMs = new Date(`${endDate}T23:59:59`).getTime()
@@ -558,7 +559,28 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
     .map(sprint => buildSprintRiskSignal(sprint, issues, nowMs))
     .filter((signal): signal is SprintRiskSignal => signal !== null)
   const activeSprint = sprints.find(sprint => sprint.status === 'active')
-  const activeSprintSnapshot = buildActiveSprintSnapshot(activeSprint, issues, nowMs)
+  const activeSprintDoneIssues = activeSprint
+    ? issues
+        .filter(issue => issue.sprint_id === activeSprint.id && !issue.parent_id && issue.status === 'done')
+        .sort((left, right) => right.updated_at.localeCompare(left.updated_at))
+        .slice(0, MAX_CYCLE_ACTIVITY_ISSUES)
+    : []
+  const activeSprintCycleQueries = useQueries({
+    queries: activeSprintDoneIssues.map(issue => ({
+      queryKey: ['activity', issue.id],
+      queryFn: () => getActivity(issue.id),
+      enabled: !!activeProjectId,
+    })),
+  })
+  const activeSprintActivityByIssueId = Object.fromEntries(
+    activeSprintDoneIssues.map((issue, index) => [issue.id, activeSprintCycleQueries[index]?.data ?? []]),
+  )
+  const activeSprintSnapshot = buildActiveSprintSnapshot(
+    activeSprint,
+    issues,
+    nowMs,
+    activeSprintActivityByIssueId,
+  )
 
   if (!activeProjectId) {
     return <div className="flex-1 flex items-center justify-center text-gray-400">← プロジェクトを選択してください</div>
@@ -626,7 +648,7 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
                     <p className="mt-1 text-2xl font-bold text-gray-900">
                       {activeSprintSnapshot.avgCycleDays != null ? `${activeSprintSnapshot.avgCycleDays}日` : '—'}
                     </p>
-                    <p className="mt-1 text-sm text-gray-500">この sprint で完了した issue ベース</p>
+                    <p className="mt-1 text-sm text-gray-500">作業開始から完了まで。activity がないものは近似</p>
                   </div>
                   <div className="rounded-xl border border-blue-100 bg-white p-4">
                     <p className="text-xs text-gray-500">リスク</p>

@@ -14,6 +14,7 @@ const {
   mockStartSprint,
   mockCompleteSprint,
   mockGetIssues,
+  mockGetActivity,
   mockGetProjectMembers,
   mockGetWorkspaceAutomationSettings,
   mockShowToast,
@@ -25,6 +26,7 @@ const {
   mockStartSprint: vi.fn(),
   mockCompleteSprint: vi.fn(),
   mockGetIssues: vi.fn(),
+  mockGetActivity: vi.fn(),
   mockGetProjectMembers: vi.fn(),
   mockGetWorkspaceAutomationSettings: vi.fn(),
   mockShowToast: vi.fn(),
@@ -41,6 +43,7 @@ vi.mock('../api/sprints', () => ({
 
 vi.mock('../api/issues', () => ({
   getIssues: mockGetIssues,
+  getActivity: mockGetActivity,
 }))
 
 vi.mock('../api/workspaces', () => ({
@@ -172,6 +175,7 @@ describe('SprintPage', () => {
     mockStartSprint.mockReset()
     mockCompleteSprint.mockReset()
     mockGetIssues.mockReset()
+    mockGetActivity.mockReset()
     mockGetProjectMembers.mockReset()
     mockGetWorkspaceAutomationSettings.mockReset()
     mockShowToast.mockReset()
@@ -195,6 +199,7 @@ describe('SprintPage', () => {
     mockStartSprint.mockResolvedValue(makeSprint({ status: 'active' }))
     mockCompleteSprint.mockResolvedValue(makeSprint({ status: 'completed' }))
     mockGetIssues.mockResolvedValue([])
+    mockGetActivity.mockResolvedValue([])
     mockGetProjectMembers.mockResolvedValue([makeMember()])
     mockGetWorkspaceAutomationSettings.mockResolvedValue(makeAutomationSettings())
   })
@@ -376,6 +381,29 @@ describe('SprintPage', () => {
         updated_at: '2026-03-05T00:00:00Z',
       }),
     ])
+    mockGetActivity.mockImplementation(async (issueId: string) => {
+      if (issueId === 'issue-1') {
+        return [
+          {
+            id: 'activity-1',
+            issue_id: issueId,
+            field: 'status',
+            old_value: 'todo',
+            new_value: 'in_progress',
+            created_at: '2026-03-02T00:00:00Z',
+          },
+          {
+            id: 'activity-2',
+            issue_id: issueId,
+            field: 'status',
+            old_value: 'in_progress',
+            new_value: 'done',
+            created_at: '2026-03-04T00:00:00Z',
+          },
+        ]
+      }
+      return []
+    })
 
     renderSprintPage()
 
@@ -383,7 +411,7 @@ describe('SprintPage', () => {
     expect(screen.getByText('アクティブスプリントの見通し')).toBeInTheDocument()
     expect(screen.getByText('1/2')).toBeInTheDocument()
     expect(screen.getByText('5/8pt')).toBeInTheDocument()
-    expect(screen.getByText('3日')).toBeInTheDocument()
+    expect(screen.getByText('2日')).toBeInTheDocument()
     expect(screen.getByText('バーンダウントレンド')).toBeInTheDocument()
     expect(screen.getByText('BurndownChart')).toBeInTheDocument()
   })

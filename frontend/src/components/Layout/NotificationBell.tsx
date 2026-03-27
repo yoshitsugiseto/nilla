@@ -7,7 +7,14 @@ import { getProject } from '../../api/projects'
 import { useAuthStore } from '../../store/auth'
 import { useAppStore } from '../../store'
 
-type NotificationFilter = 'all' | 'unread' | 'mention' | 'comment' | 'assigned'
+type NotificationFilter =
+  | 'all'
+  | 'unread'
+  | 'mention'
+  | 'comment'
+  | 'assigned'
+  | 'review_ready'
+  | 'overdue'
 
 const FILTERS: { value: NotificationFilter; label: string }[] = [
   { value: 'all', label: 'すべて' },
@@ -15,6 +22,8 @@ const FILTERS: { value: NotificationFilter; label: string }[] = [
   { value: 'mention', label: 'メンション' },
   { value: 'comment', label: 'コメント' },
   { value: 'assigned', label: 'アサイン' },
+  { value: 'review_ready', label: 'レビュー待ち' },
+  { value: 'overdue', label: '期限超過' },
 ]
 
 function notificationMeta(type: string) {

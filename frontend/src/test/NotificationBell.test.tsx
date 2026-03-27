@@ -104,7 +104,7 @@ describe('NotificationBell', () => {
       project_id: 'project-1',
       title: 'Issue from notification',
     })
-    mockGetProject.mockResolvedValue({
+  mockGetProject.mockResolvedValue({
       id: 'project-1',
       workspace_id: 'workspace-1',
     })
@@ -162,6 +162,50 @@ describe('NotificationBell', () => {
 
     expect(screen.getByText('Issue updated')).toBeInTheDocument()
     expect(screen.queryByText('Comment added')).not.toBeInTheDocument()
+  })
+
+  test('filters review-ready and overdue notifications', async () => {
+    const user = userEvent.setup()
+    const queryClient = createQueryClient()
+
+    mockGetNotifications.mockResolvedValue([
+      {
+        id: 'notif-1',
+        user_id: 'user-1',
+        issue_id: 'issue-1',
+        type: 'review_ready',
+        message: 'Review is ready',
+        read: false,
+        created_at: '2026-03-26T03:00:00Z',
+      },
+      {
+        id: 'notif-2',
+        user_id: 'user-1',
+        issue_id: 'issue-2',
+        type: 'overdue',
+        message: 'Issue is overdue',
+        read: false,
+        created_at: '2026-03-26T04:00:00Z',
+      },
+    ])
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NotificationBell />
+      </QueryClientProvider>
+    )
+
+    await user.click(screen.getByRole('button', { name: '通知' }))
+    expect(await screen.findByText('Review is ready')).toBeInTheDocument()
+    expect(screen.getByText('Issue is overdue')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'レビュー待ち' }))
+    expect(screen.getByText('Review is ready')).toBeInTheDocument()
+    expect(screen.queryByText('Issue is overdue')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '期限超過' }))
+    expect(screen.getByText('Issue is overdue')).toBeInTheDocument()
+    expect(screen.queryByText('Review is ready')).not.toBeInTheDocument()
   })
 
   test('shows localized notification badges', async () => {

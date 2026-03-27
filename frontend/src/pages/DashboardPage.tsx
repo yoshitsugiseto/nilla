@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { getIssues } from '../api/issues'
+import { useQueries, useQuery } from '@tanstack/react-query'
+import { getActivity, getIssues } from '../api/issues'
 import { getSprints } from '../api/sprints'
 import { useAppStore } from '../store'
 import { TypeIcon, PriorityBadge } from '../components/common/Badge'
@@ -32,6 +32,8 @@ const STATUS_LABELS: Record<string, string> = {
   done: 'Done',
 }
 
+const MAX_CYCLE_ACTIVITY_ISSUES = 20
+
 export function DashboardPage() {
   const { activeProjectId } = useAppStore()
   const { role } = useProjectPermissions(activeProjectId)
@@ -50,10 +52,6 @@ export function DashboardPage() {
     enabled: !!activeProjectId,
   })
 
-  if (!activeProjectId) {
-    return <div className="flex-1 flex items-center justify-center text-gray-400">← プロジェクトを選択してください</div>
-  }
-
   const activeSprint = sprints.find(s => s.status === 'active')
   const activeIssues = activeSprint ? issues.filter(i => i.sprint_id === activeSprint.id) : []
   const totalPts = activeIssues.reduce((s, i) => s + (i.points ?? 0), 0)
@@ -68,13 +66,37 @@ export function DashboardPage() {
     .slice(0, 5)
   const hasHighPriorityIssues = issues.some(i => i.priority === 'critical' || i.priority === 'high')
   const throughput14d = buildThroughputSnapshot(issues, nowMs, 14)
-  const avgCycle30d = buildAverageCycleSnapshot(issues, nowMs, 30)
+  const recentDoneIssues = nowMs == null
+    ? []
+    : issues
+        .filter(issue => {
+          if (issue.status !== 'done') return false
+          const updatedMs = new Date(issue.updated_at).getTime()
+          return Number.isFinite(updatedMs) && updatedMs >= nowMs - 30 * 24 * 60 * 60 * 1000
+        })
+        .sort((left, right) => right.updated_at.localeCompare(left.updated_at))
+        .slice(0, MAX_CYCLE_ACTIVITY_ISSUES)
+  const cycleActivityQueries = useQueries({
+    queries: recentDoneIssues.map(issue => ({
+      queryKey: ['activity', issue.id],
+      queryFn: () => getActivity(issue.id),
+      enabled: !!activeProjectId,
+    })),
+  })
+  const cycleActivityByIssueId = Object.fromEntries(
+    recentDoneIssues.map((issue, index) => [issue.id, cycleActivityQueries[index]?.data ?? []]),
+  )
+  const avgCycle30d = buildAverageCycleSnapshot(issues, nowMs, 30, cycleActivityByIssueId)
   const openRiskSnapshot = buildOpenRiskSnapshot(issues, nowMs)
 
   const recentIssues = [...issues]
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
     .slice(0, 5)
   const needsOnboarding = issues.length === 0 || sprints.length === 0
+
+  if (!activeProjectId) {
+    return <div className="flex-1 flex items-center justify-center text-gray-400">← プロジェクトを選択してください</div>
+  }
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -222,7 +244,7 @@ export function DashboardPage() {
             <p className="mt-1 text-2xl font-bold text-gray-900">
               {avgCycle30d != null ? `${avgCycle30d}日` : '—'}
             </p>
-            <p className="mt-1 text-sm text-gray-500">直近30日で完了した issue ベース</p>
+            <p className="mt-1 text-sm text-gray-500">作業開始から完了まで。activity がないものは近似</p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4">
             <p className="text-xs text-gray-500">期限超過</p>

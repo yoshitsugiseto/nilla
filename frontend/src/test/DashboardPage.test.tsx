@@ -7,16 +7,19 @@ import { useAuthStore } from '../store/auth'
 
 const {
   mockGetIssues,
+  mockGetActivity,
   mockGetSprints,
   mockGetProjectMembers,
 } = vi.hoisted(() => ({
   mockGetIssues: vi.fn(),
+  mockGetActivity: vi.fn(),
   mockGetSprints: vi.fn(),
   mockGetProjectMembers: vi.fn(),
 }))
 
 vi.mock('../api/issues', () => ({
   getIssues: mockGetIssues,
+  getActivity: mockGetActivity,
 }))
 
 vi.mock('../api/sprints', () => ({
@@ -47,9 +50,11 @@ function createQueryClient() {
 describe('DashboardPage', () => {
   beforeEach(() => {
     mockGetIssues.mockReset()
+    mockGetActivity.mockReset()
     mockGetSprints.mockReset()
     mockGetProjectMembers.mockReset()
     mockGetIssues.mockResolvedValue([])
+    mockGetActivity.mockResolvedValue([])
     mockGetSprints.mockResolvedValue([])
     mockGetProjectMembers.mockResolvedValue([
       {
@@ -246,6 +251,49 @@ describe('DashboardPage', () => {
         updated_at: '2026-03-01T00:00:00Z',
       },
     ])
+    mockGetActivity.mockImplementation(async (issueId: string) => {
+      if (issueId === 'issue-done-1') {
+        return [
+          {
+            id: 'activity-1',
+            issue_id: issueId,
+            field: 'status',
+            old_value: 'todo',
+            new_value: 'in_progress',
+            created_at: '2026-03-16T00:00:00Z',
+          },
+          {
+            id: 'activity-2',
+            issue_id: issueId,
+            field: 'status',
+            old_value: 'in_progress',
+            new_value: 'done',
+            created_at: '2026-03-18T00:00:00Z',
+          },
+        ]
+      }
+      if (issueId === 'issue-done-2') {
+        return [
+          {
+            id: 'activity-3',
+            issue_id: issueId,
+            field: 'status',
+            old_value: 'todo',
+            new_value: 'in_progress',
+            created_at: '2026-03-20T00:00:00Z',
+          },
+          {
+            id: 'activity-4',
+            issue_id: issueId,
+            field: 'status',
+            old_value: 'in_progress',
+            new_value: 'done',
+            created_at: '2026-03-22T00:00:00Z',
+          },
+        ]
+      }
+      return []
+    })
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -256,7 +304,7 @@ describe('DashboardPage', () => {
     await waitFor(() => expect(mockGetIssues).toHaveBeenCalledWith('project-1'))
     expect(await screen.findByLabelText('デリバリースナップショット')).toBeInTheDocument()
     expect(screen.getByText('13pt 完了')).toBeInTheDocument()
-    expect(screen.getByText('3日')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('2日')).toBeInTheDocument())
     expect(screen.getByText('期限超過')).toBeInTheDocument()
     expect(screen.getByText('レビュー待ち')).toBeInTheDocument()
     expect(screen.getByText('VelocityChart:project-1')).toBeInTheDocument()
