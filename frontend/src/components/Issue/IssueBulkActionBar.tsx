@@ -42,6 +42,44 @@ export function formatBulkUpdateToast(result: BulkUpdateResult) {
   }
 }
 
+export function BulkUpdateResultPanel({
+  result,
+  onDismiss,
+}: {
+  result: BulkUpdateResult
+  onDismiss: () => void
+}) {
+  return (
+    <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-gray-900">一括更新結果</p>
+          <p className="mt-1 text-sm text-gray-600">
+            {result.updated_count}件更新
+            {result.skipped.length > 0 ? ` / ${result.skipped.length}件スキップ` : ''}
+          </p>
+        </div>
+        <button onClick={onDismiss} className="text-gray-400 hover:text-gray-600">
+          <X size={14} />
+        </button>
+      </div>
+      {result.skipped.length > 0 && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+          <p className="text-xs font-medium text-amber-800">スキップ詳細</p>
+          <div className="mt-2 space-y-1 text-xs text-amber-900">
+            {result.skipped.map(item => (
+              <div key={item.issue_id} className="flex items-center gap-2">
+                <span className="font-mono text-amber-700">{item.issue_id}</span>
+                <span>{item.reason}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function IssueBulkActionBar({
   selectedCount,
   members,

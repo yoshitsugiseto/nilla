@@ -12,14 +12,18 @@ const {
   mockMarkAllNotificationsRead,
   mockDeleteNotification,
   mockGetIssue,
+  mockUpdateIssue,
   mockGetProject,
+  mockUseToast,
 } = vi.hoisted(() => ({
   mockGetNotifications: vi.fn(),
   mockMarkNotificationRead: vi.fn(),
   mockMarkAllNotificationsRead: vi.fn(),
   mockDeleteNotification: vi.fn(),
   mockGetIssue: vi.fn(),
+  mockUpdateIssue: vi.fn(),
   mockGetProject: vi.fn(),
+  mockUseToast: vi.fn(),
 }))
 
 vi.mock('../api/notifications', () => ({
@@ -31,10 +35,15 @@ vi.mock('../api/notifications', () => ({
 
 vi.mock('../api/issues', () => ({
   getIssue: mockGetIssue,
+  updateIssue: mockUpdateIssue,
 }))
 
 vi.mock('../api/projects', () => ({
   getProject: mockGetProject,
+}))
+
+vi.mock('../components/common/useToast', () => ({
+  useToast: () => mockUseToast,
 }))
 
 function createQueryClient() {
@@ -53,7 +62,9 @@ describe('NotificationBell', () => {
     mockMarkAllNotificationsRead.mockReset()
     mockDeleteNotification.mockReset()
     mockGetIssue.mockReset()
+    mockUpdateIssue.mockReset()
     mockGetProject.mockReset()
+    mockUseToast.mockReset()
 
     useAuthStore.setState({
       accessToken: 'access-123',
@@ -103,7 +114,9 @@ describe('NotificationBell', () => {
       id: 'issue-1',
       project_id: 'project-1',
       title: 'Issue from notification',
+      priority: 'high',
     })
+    mockUpdateIssue.mockResolvedValue(undefined)
   mockGetProject.mockResolvedValue({
       id: 'project-1',
       workspace_id: 'workspace-1',
@@ -206,6 +219,38 @@ describe('NotificationBell', () => {
     await user.click(screen.getByRole('button', { name: '期限超過' }))
     expect(screen.getByText('Issue is overdue')).toBeInTheDocument()
     expect(screen.queryByText('Review is ready')).not.toBeInTheDocument()
+  })
+
+  test('supports quick notification actions', async () => {
+    const user = userEvent.setup()
+    const queryClient = createQueryClient()
+
+    mockGetNotifications.mockResolvedValue([
+      {
+        id: 'notif-1',
+        user_id: 'user-1',
+        issue_id: 'issue-1',
+        type: 'overdue',
+        message: 'Issue is overdue',
+        read: false,
+        created_at: '2026-03-26T04:00:00Z',
+      },
+    ])
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NotificationBell />
+      </QueryClientProvider>
+    )
+
+    await user.click(screen.getByRole('button', { name: '通知' }))
+    expect(await screen.findByText('Issue is overdue')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '担当する' }))
+    await waitFor(() => expect(mockUpdateIssue).toHaveBeenCalledWith('issue-1', { assignee_id: 'user-1' }))
+
+    await user.click(screen.getByRole('button', { name: '優先度を上げる' }))
+    await waitFor(() => expect(mockUpdateIssue).toHaveBeenCalledWith('issue-1', { priority: 'critical' }))
   })
 
   test('shows localized notification badges', async () => {

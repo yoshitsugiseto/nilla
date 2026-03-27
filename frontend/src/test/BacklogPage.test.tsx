@@ -202,6 +202,7 @@ describe('BacklogPage', () => {
       items: [],
       updated_count: 1,
       skipped_ids: [],
+      skipped: [],
     })
     mockGetSprints.mockResolvedValue([makeSprint()])
     mockGetProjectMembers.mockResolvedValue([makeMember()])
@@ -317,6 +318,35 @@ describe('BacklogPage', () => {
         priority: 'high',
       })
     )
+  })
+
+  test('shows bulk skip details after update', async () => {
+    const user = userEvent.setup()
+
+    mockBulkUpdateIssues.mockResolvedValue({
+      items: [],
+      updated_count: 1,
+      skipped_ids: ['missing-id'],
+      skipped: [{ issue_id: 'missing-id', reason: '見つからないか対象外' }],
+    })
+
+    renderBacklogPage()
+
+    await waitFor(() => expect(mockGetIssues).toHaveBeenCalled())
+    expect(await screen.findByText('Backlog task')).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: '一括操作' }))
+    await user.click(screen.getByText('Backlog task'))
+
+    const bulkBar = screen.getByText('1件選択中').closest('div')
+    if (!bulkBar) {
+      throw new Error('bulk action bar not found')
+    }
+
+    await user.selectOptions(within(bulkBar).getAllByRole('combobox')[0], 'done')
+
+    expect(await screen.findByText('一括更新結果')).toBeInTheDocument()
+    expect(screen.getByText('missing-id')).toBeInTheDocument()
+    expect(screen.getByText('見つからないか対象外')).toBeInTheDocument()
   })
 
   test('bulk assignee update can clear assignments back to unassigned', async () => {

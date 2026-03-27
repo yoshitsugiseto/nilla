@@ -2,10 +2,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bell, X, AtSign, MessageSquare, UserRoundPlus, Filter } from 'lucide-react'
 import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification } from '../../api/notifications'
-import { getIssue } from '../../api/issues'
+import { getIssue, updateIssue } from '../../api/issues'
 import { getProject } from '../../api/projects'
 import { useAuthStore } from '../../store/auth'
 import { useAppStore } from '../../store'
+import { useToast } from '../common/useToast'
 
 type NotificationFilter =
   | 'all'
@@ -25,6 +26,13 @@ const FILTERS: { value: NotificationFilter; label: string }[] = [
   { value: 'review_ready', label: 'レビュー待ち' },
   { value: 'overdue', label: '期限超過' },
 ]
+
+const NEXT_PRIORITY: Record<string, string | null> = {
+  low: 'medium',
+  medium: 'high',
+  high: 'critical',
+  critical: null,
+}
 
 function notificationMeta(type: string) {
   switch (type) {
@@ -96,6 +104,7 @@ export function NotificationBell() {
     setPendingOpenIssueTitle,
   } = useAppStore()
   const qc = useQueryClient()
+  const showToast = useToast()
 
   const { data: notifications = [] } = useQuery({
     queryKey: ['notifications'],
@@ -132,6 +141,50 @@ export function NotificationBell() {
   const deleteNotifMutation = useMutation({
     mutationFn: deleteNotification,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+  const quickActionMutation = useMutation({
+    mutationFn: async ({
+      issueId,
+      action,
+    }: {
+      issueId: string
+      action: 'assign_to_me' | 'promote_priority'
+    }) => {
+      const issue = await getIssue(issueId)
+      if (action === 'assign_to_me') {
+        if (!user) return
+        await updateIssue(issueId, { assignee_id: user.id })
+        return
+      }
+
+      const nextPriority = NEXT_PRIORITY[issue.priority]
+      if (!nextPriority) {
+        throw new Error('already_max_priority')
+      }
+      await updateIssue(issueId, { priority: nextPriority as 'medium' | 'high' | 'critical' })
+    },
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['notifications'] })
+      qc.invalidateQueries({ queryKey: ['issues'] })
+      showToast(
+        variables.action === 'assign_to_me'
+          ? '自分に割り当てました'
+          : '優先度を引き上げました',
+        'success',
+      )
+    },
+    onError: (error: Error, variables) => {
+      if (error.message === 'already_max_priority') {
+        showToast('すでに最優先です', 'info')
+        return
+      }
+      showToast(
+        variables.action === 'assign_to_me'
+          ? '担当更新に失敗しました'
+          : '優先度更新に失敗しました',
+        'error',
+      )
+    },
   })
 
   const handleClickOutside = useCallback((e: MouseEvent) => {
@@ -224,23 +277,43 @@ export function NotificationBell() {
                   key={n.id}
                   className={`flex items-start gap-1 px-3 py-2 border-b border-gray-50 hover:bg-gray-50 transition-colors ${n.read ? 'opacity-60' : ''}`}
                 >
-                  <button
-                    onClick={() => handleNotifClick(n)}
-                    className="flex-1 text-left min-w-0"
-                    aria-label={`通知を開く: ${n.message}`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${meta.badgeClassName}`}>
-                        {meta.icon}
-                        {meta.label}
-                      </span>
-                      {!n.read && <span className="inline-block w-1.5 h-1.5 bg-blue-500 rounded-full" />}
-                    </div>
-                    <p className="text-xs text-gray-700 leading-relaxed">{n.message}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">
-                      {new Date(n.created_at).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </button>
+                  <div className="min-w-0 flex-1">
+                    <button
+                      onClick={() => handleNotifClick(n)}
+                      className="w-full text-left"
+                      aria-label={`通知を開く: ${n.message}`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${meta.badgeClassName}`}>
+                          {meta.icon}
+                          {meta.label}
+                        </span>
+                        {!n.read && <span className="inline-block w-1.5 h-1.5 bg-blue-500 rounded-full" />}
+                      </div>
+                      <p className="text-xs text-gray-700 leading-relaxed">{n.message}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        {new Date(n.created_at).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </button>
+                    {n.issue_id && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          onClick={() => quickActionMutation.mutate({ issueId: n.issue_id!, action: 'assign_to_me' })}
+                          className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-200"
+                        >
+                          担当する
+                        </button>
+                        {n.type === 'overdue' && (
+                          <button
+                            onClick={() => quickActionMutation.mutate({ issueId: n.issue_id!, action: 'promote_priority' })}
+                            className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-200"
+                          >
+                            優先度を上げる
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); deleteNotifMutation.mutate(n.id) }}
                     className="shrink-0 text-gray-300 hover:text-red-400 transition-colors p-0.5"

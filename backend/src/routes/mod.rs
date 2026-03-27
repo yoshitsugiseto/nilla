@@ -3,6 +3,7 @@ mod issues;
 mod labels;
 mod notifications;
 mod projects;
+mod search_presets;
 mod sprints;
 mod templates;
 mod workspaces;
@@ -89,6 +90,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/projects/{id}/issues/bulk",
             patch(issues::bulk_update_issues),
+        )
+        .route(
+            "/api/projects/{id}/search-presets",
+            get(search_presets::list_search_presets).post(search_presets::create_search_preset),
+        )
+        .route(
+            "/api/search-presets/{id}",
+            put(search_presets::update_search_preset).delete(search_presets::delete_search_preset),
         )
         // Labels
         .route(

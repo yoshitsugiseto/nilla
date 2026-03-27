@@ -965,6 +965,7 @@ async fn bulk_update_can_change_priority_and_labels() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["updated_count"], 1);
     assert_eq!(json["skipped_ids"], json!([]));
+    assert_eq!(json["skipped"], json!([]));
     let items = json["items"].as_array().unwrap();
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["priority"], "high");
@@ -995,6 +996,10 @@ async fn bulk_update_tracks_due_date_and_skipped_ids_in_result() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["updated_count"], 1);
     assert_eq!(json["skipped_ids"], json!(["missing-id"]));
+    assert_eq!(
+        json["skipped"],
+        json!([{ "issue_id": "missing-id", "reason": "見つからないか対象外" }])
+    );
     let items = json["items"].as_array().unwrap();
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["status"], "done");

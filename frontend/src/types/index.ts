@@ -255,6 +255,10 @@ export interface BulkUpdateResult {
   items: Issue[]
   updated_count: number
   skipped_ids: string[]
+  skipped: Array<{
+    issue_id: string
+    reason: string
+  }>
 }
 
 export interface SearchPreset {

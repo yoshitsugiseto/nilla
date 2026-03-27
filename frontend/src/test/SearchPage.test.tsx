@@ -13,6 +13,10 @@ const {
   mockGetProjectMembers,
   mockGetSprints,
   mockGetLabels,
+  mockGetSearchPresets,
+  mockCreateSearchPreset,
+  mockUpdateSearchPreset,
+  mockDeleteSearchPreset,
   mockBulkUpdateIssues,
   mockShowToast,
 } = vi.hoisted(() => ({
@@ -20,6 +24,10 @@ const {
   mockGetProjectMembers: vi.fn(),
   mockGetSprints: vi.fn(),
   mockGetLabels: vi.fn(),
+  mockGetSearchPresets: vi.fn(),
+  mockCreateSearchPreset: vi.fn(),
+  mockUpdateSearchPreset: vi.fn(),
+  mockDeleteSearchPreset: vi.fn(),
   mockBulkUpdateIssues: vi.fn(),
   mockShowToast: vi.fn(),
 }))
@@ -35,6 +43,13 @@ vi.mock('../api/sprints', () => ({
 
 vi.mock('../api/labels', () => ({
   getLabels: mockGetLabels,
+}))
+
+vi.mock('../api/searchPresets', () => ({
+  getSearchPresets: mockGetSearchPresets,
+  createSearchPreset: mockCreateSearchPreset,
+  updateSearchPreset: mockUpdateSearchPreset,
+  deleteSearchPreset: mockDeleteSearchPreset,
 }))
 
 vi.mock('../api/workspaces', () => ({
@@ -148,6 +163,10 @@ describe('SearchPage', () => {
     mockGetProjectMembers.mockReset()
     mockGetSprints.mockReset()
     mockGetLabels.mockReset()
+    mockGetSearchPresets.mockReset()
+    mockCreateSearchPreset.mockReset()
+    mockUpdateSearchPreset.mockReset()
+    mockDeleteSearchPreset.mockReset()
     mockBulkUpdateIssues.mockReset()
     mockShowToast.mockReset()
     useAuthStore.setState({
@@ -188,10 +207,33 @@ describe('SearchPage', () => {
         created_at: '2026-03-01T00:00:00Z',
       },
     ])
+    mockGetSearchPresets.mockResolvedValue([
+      {
+        id: 'shared-1',
+        project_id: 'project-1',
+        name: '共有レビュー待ち',
+        query: '',
+        filters: { status: 'in_review', type: '', priority: '', assignee_id: '', sprint_id: '', due_state: '' },
+        created_at: '2026-03-01T00:00:00Z',
+        updated_at: '2026-03-01T00:00:00Z',
+      },
+    ])
+    mockCreateSearchPreset.mockResolvedValue({
+      id: 'shared-2',
+      project_id: 'project-1',
+      name: '共有条件',
+      query: 'bug',
+      filters: { status: '', type: '', priority: '', assignee_id: '', sprint_id: '', due_state: '' },
+      created_at: '2026-03-01T00:00:00Z',
+      updated_at: '2026-03-01T00:00:00Z',
+    })
+    mockUpdateSearchPreset.mockResolvedValue(undefined)
+    mockDeleteSearchPreset.mockResolvedValue(undefined)
     mockBulkUpdateIssues.mockResolvedValue({
       items: [],
       updated_count: 1,
       skipped_ids: [],
+      skipped: [],
     })
   })
 
@@ -347,7 +389,7 @@ describe('SearchPage', () => {
     renderSearchPage('bug')
 
     await waitFor(() => expect(mockGetIssuesPaged).toHaveBeenCalled())
-    await user.click(screen.getByRole('button', { name: '条件を保存' }))
+    await user.click(screen.getByRole('button', { name: '個人保存' }))
 
     expect(promptSpy).toHaveBeenCalledWith('プリセット名', 'bug')
     expect(useAppStore.getState().searchPresets).toEqual([
@@ -357,6 +399,49 @@ describe('SearchPage', () => {
         project_id: 'project-1',
       }),
     ])
+  })
+
+  test('saves and applies shared search presets', async () => {
+    const user = userEvent.setup()
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('共有条件')
+    const onApplyPreset = vi.fn()
+
+    renderSearchPage(
+      'bug',
+      { status: '', type: '', priority: '', assignee_id: '', sprint_id: '', due_state: '' },
+      onApplyPreset,
+    )
+
+    await waitFor(() => expect(mockGetSearchPresets).toHaveBeenCalledWith('project-1'))
+    expect(await screen.findByText('共有プリセット')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '共有レビュー待ち' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '共有保存' }))
+    await waitFor(() =>
+      expect(mockCreateSearchPreset).toHaveBeenCalledWith('project-1', {
+        name: '共有条件',
+        query: 'bug',
+        filters: {
+          status: '',
+          type: '',
+          priority: '',
+          assignee_id: '',
+          sprint_id: '',
+          due_state: '',
+        },
+      })
+    )
+
+    await user.click(screen.getByRole('button', { name: '共有レビュー待ち' }))
+    expect(onApplyPreset).toHaveBeenCalledWith('', {
+      status: 'in_review',
+      type: '',
+      priority: '',
+      assignee_id: '',
+      sprint_id: '',
+      due_state: '',
+    })
+    promptSpy.mockRestore()
   })
 
   test('applies a quick filter for the current user without typing a query', async () => {
@@ -381,6 +466,34 @@ describe('SearchPage', () => {
       })
     )
     expect(screen.getByText('フィルター結果')).toBeInTheDocument()
+  })
+
+  test('shows bulk skip details after update', async () => {
+    const user = userEvent.setup()
+
+    mockBulkUpdateIssues.mockResolvedValue({
+      items: [],
+      updated_count: 1,
+      skipped_ids: ['missing-id'],
+      skipped: [{ issue_id: 'missing-id', reason: '見つからないか対象外' }],
+    })
+
+    renderSearchPage('bug')
+
+    await waitFor(() => expect(mockGetIssuesPaged).toHaveBeenCalled())
+    await user.click(await screen.findByRole('button', { name: '一括操作' }))
+    await user.click(screen.getByRole('button', { name: '表示中を全選択' }))
+
+    const bulkBar = screen.getByText('1件選択中').closest('div')
+    if (!bulkBar) {
+      throw new Error('bulk action bar not found')
+    }
+
+    await user.selectOptions(within(bulkBar).getAllByRole('combobox')[2], '__unassigned__')
+
+    expect(await screen.findByText('一括更新結果')).toBeInTheDocument()
+    expect(screen.getByText('missing-id')).toBeInTheDocument()
+    expect(screen.getByText('見つからないか対象外')).toBeInTheDocument()
   })
 
   test('bulk updates visible search results', async () => {

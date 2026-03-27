@@ -15,9 +15,9 @@ use crate::{
     db::{check_project_access, check_project_permission, ProjectPermission},
     error::{AppError, Result},
     models::issue::{
-        BulkUpdateIssues, BulkUpdateResult, CreateIssue, CreateIssueLink, Issue, IssueFilters,
-        IssueLink, IssuePriority, IssueRow, IssueType, UpdateIssue, UpdateIssueSprint,
-        UpdateIssueStatus,
+        BulkUpdateIssues, BulkUpdateResult, BulkUpdateSkippedItem, CreateIssue,
+        CreateIssueLink, Issue, IssueFilters, IssueLink, IssuePriority, IssueRow, IssueType,
+        UpdateIssue, UpdateIssueSprint, UpdateIssueStatus,
     },
     realtime::RealtimeHub,
 };
@@ -1369,11 +1369,16 @@ pub async fn bulk_update_issues(
     let mut tx = pool.begin().await?;
     let mut updated_ids = Vec::new();
     let mut skipped_ids = Vec::new();
+    let mut skipped = Vec::new();
     let today = Utc::now().date_naive();
 
     for issue_id in &issue_ids {
         let Some(current) = current_by_id.get(issue_id) else {
             skipped_ids.push(issue_id.clone());
+            skipped.push(BulkUpdateSkippedItem {
+                issue_id: issue_id.clone(),
+                reason: "見つからないか対象外".to_string(),
+            });
             continue;
         };
 
@@ -1422,6 +1427,10 @@ pub async fn bulk_update_issues(
 
         if update_result.rows_affected() == 0 {
             skipped_ids.push(issue_id.clone());
+            skipped.push(BulkUpdateSkippedItem {
+                issue_id: issue_id.clone(),
+                reason: "更新できませんでした".to_string(),
+            });
             continue;
         }
 
@@ -1589,5 +1598,6 @@ pub async fn bulk_update_issues(
         items,
         updated_count: updated_ids.len(),
         skipped_ids,
+        skipped,
     }))
 }

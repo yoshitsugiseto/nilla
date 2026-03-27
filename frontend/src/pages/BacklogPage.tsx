@@ -10,7 +10,7 @@ import { useAppStore } from '../store'
 import { Modal } from '../components/common/Modal'
 import { DetailPanel } from '../components/common/DetailPanel'
 import { IssueForm } from '../components/Issue/IssueForm'
-import { IssueBulkActionBar, formatBulkUpdateToast } from '../components/Issue/IssueBulkActionBar'
+import { BulkUpdateResultPanel, IssueBulkActionBar, formatBulkUpdateToast } from '../components/Issue/IssueBulkActionBar'
 import { IssueDetail } from '../components/Issue/IssueDetail'
 import { TypeIcon, PriorityBadge, StatusBadge } from '../components/common/Badge'
 import { Avatar } from '../components/common/Avatar'
@@ -347,6 +347,7 @@ export function BacklogPage() {
   const [filterQuery, setFilterQuery] = useState('')
   const [bulkMode, setBulkMode] = useState(false)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
+  const [lastBulkResult, setLastBulkResult] = useState<import('../types').BulkUpdateResult | null>(null)
 
   const { data: sprints = [] } = useQuery({
     queryKey: ['sprints', activeProjectId],
@@ -380,6 +381,7 @@ export function BacklogPage() {
       qc.invalidateQueries({ queryKey: ['issues', activeProjectId] })
       setBulkSelected(new Set())
       setBulkMode(false)
+      setLastBulkResult(result)
       const toast = formatBulkUpdateToast(result)
       showToast(toast.message, toast.type)
     },
@@ -569,6 +571,10 @@ export function BacklogPage() {
             表示中を全選択
           </button>
         </div>
+      )}
+
+      {lastBulkResult && (
+        <BulkUpdateResultPanel result={lastBulkResult} onDismiss={() => setLastBulkResult(null)} />
       )}
 
       {!isLoading && topLevel.length === 0 && (

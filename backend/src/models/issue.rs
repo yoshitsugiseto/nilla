@@ -334,10 +334,17 @@ pub struct BulkUpdateIssues {
 }
 
 #[derive(Debug, Serialize)]
+pub struct BulkUpdateSkippedItem {
+    pub issue_id: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Serialize)]
 pub struct BulkUpdateResult {
     pub items: Vec<Issue>,
     pub updated_count: usize,
     pub skipped_ids: Vec<String>,
+    pub skipped: Vec<BulkUpdateSkippedItem>,
 }
 
 fn deserialize_nullable_field<'de, D, T>(
