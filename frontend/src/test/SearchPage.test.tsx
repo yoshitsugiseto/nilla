@@ -188,6 +188,11 @@ describe('SearchPage', () => {
     await user.click(screen.getByRole('button', { name: 'フィルター' }))
     await waitFor(() => expect(mockGetProjectMembers).toHaveBeenCalledWith('project-1'))
 
+    expect(screen.getByRole('option', { name: '未着手' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '進行中' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'ストーリー' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '緊急' })).toBeInTheDocument()
+
     await user.selectOptions(screen.getByLabelText('ステータス'), 'done')
     await user.selectOptions(screen.getByLabelText('担当者'), '__unassigned__')
 

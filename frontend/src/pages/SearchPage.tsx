@@ -187,10 +187,10 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
                   className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
                 >
                   <option value="">すべて</option>
-                  <option value="todo">Todo</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="in_review">In Review</option>
-                  <option value="done">Done</option>
+                  <option value="todo">未着手</option>
+                  <option value="in_progress">進行中</option>
+                  <option value="in_review">レビュー中</option>
+                  <option value="done">完了</option>
                 </select>
               </div>
               <div>
@@ -202,10 +202,10 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
                   className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
                 >
                   <option value="">すべて</option>
-                  <option value="story">Story</option>
-                  <option value="task">Task</option>
-                  <option value="bug">Bug</option>
-                  <option value="spike">Spike</option>
+                  <option value="story">ストーリー</option>
+                  <option value="task">タスク</option>
+                  <option value="bug">バグ</option>
+                  <option value="spike">スパイク</option>
                 </select>
               </div>
               <div>
@@ -217,10 +217,10 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
                   className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
                 >
                   <option value="">すべて</option>
-                  <option value="critical">Critical</option>
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
+                  <option value="critical">緊急</option>
+                  <option value="high">高</option>
+                  <option value="medium">中</option>
+                  <option value="low">低</option>
                 </select>
               </div>
               <div>

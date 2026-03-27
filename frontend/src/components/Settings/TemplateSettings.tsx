@@ -5,6 +5,20 @@ import { getTemplates, createTemplate, updateTemplate, deleteTemplate } from '..
 import { useToast } from '../common/useToast'
 import { useProjectPermissions } from '../../hooks/useProjectPermissions'
 
+const TEMPLATE_TYPE_LABELS: Record<string, string> = {
+  task: 'タスク',
+  story: 'ストーリー',
+  bug: 'バグ',
+  spike: 'スパイク',
+}
+
+const PRIORITY_LABELS: Record<string, string> = {
+  low: '低',
+  medium: '中',
+  high: '高',
+  critical: '緊急',
+}
+
 interface Props {
   projectId: string
 }
@@ -71,7 +85,7 @@ export function TemplateSettings({ projectId }: Props) {
       </h2>
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-4">
         {templatesError ? (
-          <p className="px-4 py-3 text-sm text-red-400">取得に失敗しました（project: {projectId}）</p>
+          <p className="px-4 py-3 text-sm text-red-400">取得に失敗しました</p>
         ) : templates.length === 0 ? (
           <p className="px-4 py-3 text-sm text-gray-400">テンプレートなし</p>
         ) : (
@@ -100,20 +114,20 @@ export function TemplateSettings({ projectId }: Props) {
                         onChange={e => setEditTplForm(f => ({ ...f, type: e.target.value }))}
                         className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
                       >
-                        <option value="task">Task</option>
-                        <option value="story">Story</option>
-                        <option value="bug">Bug</option>
-                        <option value="spike">Spike</option>
+                        <option value="task">タスク</option>
+                        <option value="story">ストーリー</option>
+                        <option value="bug">バグ</option>
+                        <option value="spike">スパイク</option>
                       </select>
                       <select
                         value={editTplForm.priority}
                         onChange={e => setEditTplForm(f => ({ ...f, priority: e.target.value }))}
                         className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
                       >
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
-                        <option value="critical">Critical</option>
+                        <option value="low">低</option>
+                        <option value="medium">中</option>
+                        <option value="high">高</option>
+                        <option value="critical">緊急</option>
                       </select>
                       <input
                         type="number"
@@ -154,8 +168,12 @@ export function TemplateSettings({ projectId }: Props) {
                 ) : (
                   <div className="flex items-center gap-3 px-4 py-2.5">
                     <span className="flex-1 text-sm text-gray-800">{tpl.name}</span>
-                    <span className="text-xs text-gray-400 px-1.5 py-0.5 bg-gray-100 rounded">{tpl.type}</span>
-                    <span className="text-xs text-gray-400 px-1.5 py-0.5 bg-gray-100 rounded">{tpl.priority}</span>
+                    <span className="text-xs text-gray-400 px-1.5 py-0.5 bg-gray-100 rounded">
+                      {TEMPLATE_TYPE_LABELS[tpl.type] ?? tpl.type}
+                    </span>
+                    <span className="text-xs text-gray-400 px-1.5 py-0.5 bg-gray-100 rounded">
+                      {PRIORITY_LABELS[tpl.priority] ?? tpl.priority}
+                    </span>
                     {tpl.points != null && (
                       <span className="text-xs text-gray-400 font-mono">{tpl.points}pt</span>
                     )}
@@ -199,20 +217,20 @@ export function TemplateSettings({ projectId }: Props) {
               onChange={e => setNewTplType(e.target.value)}
               className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
             >
-              <option value="task">Task</option>
-              <option value="story">Story</option>
-              <option value="bug">Bug</option>
-              <option value="spike">Spike</option>
+              <option value="task">タスク</option>
+              <option value="story">ストーリー</option>
+              <option value="bug">バグ</option>
+              <option value="spike">スパイク</option>
             </select>
             <select
               value={newTplPriority}
               onChange={e => setNewTplPriority(e.target.value)}
               className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
             >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
+              <option value="low">低</option>
+              <option value="medium">中</option>
+              <option value="high">高</option>
+              <option value="critical">緊急</option>
             </select>
             <button
               onClick={() => createTemplateMutation.mutate()}

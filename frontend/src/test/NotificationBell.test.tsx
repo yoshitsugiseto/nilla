@@ -164,6 +164,23 @@ describe('NotificationBell', () => {
     expect(screen.queryByText('Comment added')).not.toBeInTheDocument()
   })
 
+  test('shows localized notification badges', async () => {
+    const user = userEvent.setup()
+    const queryClient = createQueryClient()
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NotificationBell />
+      </QueryClientProvider>
+    )
+
+    await user.click(screen.getByRole('button', { name: '通知' }))
+
+    expect(await screen.findByText('Issue updated')).toBeInTheDocument()
+    expect(screen.getAllByText('メンション').length).toBeGreaterThan(1)
+    expect(screen.getAllByText('コメント').length).toBeGreaterThan(1)
+  })
+
   test('uses wrapped filter chips instead of horizontal scrolling', async () => {
     const user = userEvent.setup()
     const queryClient = createQueryClient()

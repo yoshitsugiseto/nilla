@@ -21,19 +21,19 @@ function notificationMeta(type: string) {
   switch (type) {
     case 'mention':
       return {
-        label: 'Mention',
+        label: 'メンション',
         icon: <AtSign size={12} className="text-fuchsia-600" />,
         badgeClassName: 'bg-fuchsia-100 text-fuchsia-700',
       }
     case 'comment':
       return {
-        label: 'Comment',
+        label: 'コメント',
         icon: <MessageSquare size={12} className="text-blue-600" />,
         badgeClassName: 'bg-blue-100 text-blue-700',
       }
     case 'assigned':
       return {
-        label: 'Assigned',
+        label: 'アサイン',
         icon: <UserRoundPlus size={12} className="text-emerald-600" />,
         badgeClassName: 'bg-emerald-100 text-emerald-700',
       }

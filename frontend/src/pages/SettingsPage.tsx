@@ -45,7 +45,7 @@ export function SettingsPage() {
                 ? 'border-blue-200 bg-blue-50 text-blue-900'
                 : 'border-amber-200 bg-amber-50 text-amber-900'
             }`}>
-              <p className="text-xs font-semibold uppercase tracking-wide opacity-70">Project Summary</p>
+              <p className="text-xs font-semibold uppercase tracking-wide opacity-70">権限サマリー</p>
               <p className="mt-2 font-medium">
                 現在のプロジェクト権限は「{roleMeta?.label ?? '未設定'}」です。
               </p>
@@ -65,13 +65,13 @@ export function SettingsPage() {
             : 'grid gap-8'}
         >
           <div className="min-w-0">
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Workspace</h2>
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">ワークスペース</h2>
             <WorkspaceSettings workspaceId={activeWorkspaceId} />
           </div>
 
           {activeProjectId && (
             <div className="min-w-0">
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Project</h2>
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">プロジェクト</h2>
               <ProjectSettings projectId={activeProjectId} />
             </div>
           )}
