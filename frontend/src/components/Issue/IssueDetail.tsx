@@ -160,12 +160,13 @@ export function IssueDetail({ issueId, projectId }: Props) {
     onError: () => showToast('エピックの更新に失敗しました', 'error'),
   })
 
-  const { data: allIssues = [] } = useQuery({
-    queryKey: ['issues', projectId],
-    queryFn: () => getIssues(projectId),
+  const { data: epicIssues = [] } = useQuery({
+    queryKey: ['issues', projectId, 'epics'],
+    queryFn: () => getIssues(projectId, { type: 'epic', limit: 1000 }),
+    enabled: canEditProject && issue?.type !== 'epic',
     staleTime: 30_000,
   })
-  const epics = allIssues.filter(i => i.type === 'epic' && i.id !== issueId)
+  const epics = epicIssues.filter(i => i.id !== issueId)
 
   if (isLoading) {
     return <div role="status" aria-label="読み込み中" className="p-8 text-center text-gray-400">Loading...</div>

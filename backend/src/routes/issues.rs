@@ -6,6 +6,7 @@ use axum::{
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 use crate::{
@@ -413,7 +414,7 @@ pub async fn get_issue(
     Path(id): Path<String>,
 ) -> Result<Json<Issue>> {
     let project_id = get_project_id_for_issue(&pool, &id).await?;
-    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
+    check_project_access(&pool, &user_id.0, &project_id).await?;
 
     let row = sqlx::query_as::<_, IssueRow>(&build_issue_select_sql("WHERE i.id = ?", ""))
         .bind(&id)
@@ -432,7 +433,7 @@ pub async fn update_issue(
     Json(body): Json<UpdateIssue>,
 ) -> Result<Json<Issue>> {
     let project_id = get_project_id_for_issue(&pool, &id).await?;
-    check_project_access(&pool, &user_id.0, &project_id).await?;
+    check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
 
     if let Some(ref title) = body.title {
         if title.trim().is_empty() {
@@ -923,7 +924,7 @@ pub async fn create_comment(
     };
 
     // @メンション通知
-    let mentioned_names: Vec<&str> = body
+    let mentioned_names: HashSet<&str> = body
         .body
         .split_whitespace()
         .filter(|w| w.starts_with('@') && w.len() > 1)
@@ -933,12 +934,19 @@ pub async fn create_comment(
         })
         .collect();
     for name in mentioned_names {
-        if let Ok(Some(mentioned_uid)) =
-            sqlx::query_scalar::<_, String>("SELECT id FROM users WHERE name = ?")
-                .bind(name)
-                .fetch_optional(&pool)
-                .await
-        {
+        let mentioned_user_ids = sqlx::query_scalar::<_, String>(
+            "SELECT DISTINCT wm.user_id
+             FROM workspace_members wm
+             JOIN projects p ON p.workspace_id = wm.workspace_id
+             JOIN users u ON u.id = wm.user_id
+             WHERE p.id = ? AND u.name = ?",
+        )
+        .bind(&project_id)
+        .bind(name)
+        .fetch_all(&pool)
+        .await?;
+
+        for mentioned_uid in mentioned_user_ids {
             if mentioned_uid != user_id.0 {
                 let msg = format!(
                     "「{}」で {} があなたをメンションしました",

@@ -2,6 +2,44 @@ mod common;
 
 use axum::http::StatusCode;
 use serde_json::json;
+use sqlx::SqlitePool;
+
+async fn add_workspace_member(
+    pool: &SqlitePool,
+    workspace_id: &str,
+    user_id: &str,
+    name: &str,
+    email: &str,
+    role: &str,
+) {
+    sqlx::query(
+        "INSERT INTO users (id, provider, provider_id, email, name, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET name = excluded.name, email = excluded.email, updated_at = excluded.updated_at",
+    )
+    .bind(user_id)
+    .bind("test")
+    .bind(format!("provider-{user_id}"))
+    .bind(email)
+    .bind(name)
+    .bind("2026-01-01T00:00:00")
+    .bind("2026-01-01T00:00:00")
+    .execute(pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO workspace_members (workspace_id, user_id, role, joined_at)
+         VALUES (?, ?, ?, ?)",
+    )
+    .bind(workspace_id)
+    .bind(user_id)
+    .bind(role)
+    .bind("2026-01-01T00:00:00")
+    .execute(pool)
+    .await
+    .unwrap();
+}
 
 #[tokio::test]
 async fn create_issue_success() {
@@ -448,6 +486,47 @@ async fn update_issue_fields() {
 }
 
 #[tokio::test]
+async fn viewer_can_get_issue_detail_but_cannot_update_issue() {
+    let (app, pool) = common::setup_app_with_pool().await;
+    common::insert_user_b(&pool).await;
+
+    let pid = common::create_project(&app, "P", "PI").await;
+    let workspace_id: String = sqlx::query_scalar("SELECT workspace_id FROM projects WHERE id = ?")
+        .bind(&pid)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO workspace_members (workspace_id, user_id, role, joined_at)
+         VALUES (?, ?, 'viewer', ?)",
+    )
+    .bind(&workspace_id)
+    .bind(common::TEST_USER_B_ID)
+    .bind("2026-01-01T00:00:00")
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let iid = common::create_issue(&app, &pid, "Viewer readable").await;
+    let viewer_token = common::token_for(common::TEST_USER_B_ID);
+
+    let (status, json) = common::send(&app, common::get_as(&format!("/api/issues/{iid}"), &viewer_token)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["title"], "Viewer readable");
+
+    let (status, _) = common::send(
+        &app,
+        common::put_as(
+            &format!("/api/issues/{iid}"),
+            json!({ "title": "Should fail" }),
+            &viewer_token,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn update_issue_can_clear_assignee() {
     let app = common::setup_app().await;
     let pid = common::create_project(&app, "P", "PI").await;
@@ -490,6 +569,69 @@ async fn create_issue_with_cross_project_sprint_returns_400() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn mentions_only_notify_users_in_the_same_workspace() {
+    let (app, pool) = common::setup_app_with_pool().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let workspace_id: String = sqlx::query_scalar("SELECT workspace_id FROM projects WHERE id = ?")
+        .bind(&pid)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    add_workspace_member(
+        &pool,
+        &workspace_id,
+        "workspace-mention-user",
+        "Alex",
+        "alex-in@example.com",
+        "member",
+    )
+    .await;
+
+    sqlx::query(
+        "INSERT INTO users (id, provider, provider_id, email, name, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind("external-mention-user")
+    .bind("test")
+    .bind("provider-external")
+    .bind("alex-out@example.com")
+    .bind("Alex")
+    .bind("2026-01-01T00:00:00")
+    .bind("2026-01-01T00:00:00")
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let iid = common::create_issue(&app, &pid, "Mention issue").await;
+    let (status, _) = common::send(
+        &app,
+        common::post(
+            &format!("/api/issues/{iid}/comments"),
+            json!({ "body": "@Alex 確認お願いします" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let workspace_notifications: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM notifications WHERE user_id = ?")
+            .bind("workspace-mention-user")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let external_notifications: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM notifications WHERE user_id = ?")
+            .bind("external-mention-user")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    assert_eq!(workspace_notifications, 1);
+    assert_eq!(external_notifications, 0);
 }
 
 #[tokio::test]
