@@ -445,6 +445,14 @@ async fn complete_sprint_uses_next_available_sprint_when_workspace_rule_is_next_
 
     let (_, issue) = common::send(&app, common::get(&format!("/api/issues/{issue_id}"))).await;
     assert_eq!(issue["sprint_id"], next_sid);
+
+    let (_, activity) = common::send(&app, common::get(&format!("/api/issues/{issue_id}/activity"))).await;
+    let items = activity.as_array().unwrap();
+    assert!(items.iter().any(|entry| {
+        entry["field"] == "sprint_carryover"
+            && entry["old_value"] == current_sid
+            && entry["new_value"] == next_sid
+    }));
 }
 
 #[tokio::test]

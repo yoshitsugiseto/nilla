@@ -161,6 +161,26 @@ fn issue_is_overdue(due_date: Option<NaiveDate>, status: &str, today: NaiveDate)
     status != "done" && due_date.map(|value| value < today).unwrap_or(false)
 }
 
+async fn insert_activity_log(
+    pool: &SqlitePool,
+    issue_id: &str,
+    field: &str,
+    old_value: Option<&str>,
+    new_value: Option<&str>,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO activity_logs (id, issue_id, field, old_value, new_value) VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind(issue_id)
+    .bind(field)
+    .bind(old_value)
+    .bind(new_value)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 async fn notify_assignee_change(
     pool: &SqlitePool,
     realtime: &RealtimeHub,
@@ -212,6 +232,14 @@ async fn notify_review_ready(
         actor_name, issue_title
     );
     create_notification(pool, realtime, assignee_id, issue_id, "review_ready", &msg).await;
+    let _ = insert_activity_log(
+        pool,
+        issue_id,
+        "review_ready",
+        Some(actor_name),
+        Some(assignee_id),
+    )
+    .await;
 }
 
 async fn notify_overdue(
@@ -236,6 +264,7 @@ async fn notify_overdue(
 
     let msg = format!("「{}」が期限超過になりました", issue_title);
     create_notification(pool, realtime, assignee_id, issue_id, "overdue", &msg).await;
+    let _ = insert_activity_log(pool, issue_id, "overdue", None, Some(assignee_id)).await;
 }
 
 async fn ensure_sprint_belongs_to_project(

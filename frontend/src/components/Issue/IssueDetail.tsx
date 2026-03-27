@@ -464,7 +464,7 @@ export function IssueDetail({ issueId, projectId }: Props) {
 
         {tab === 'comments' && <IssueComments issueId={issueId} canEdit={canEditProject} />}
         {tab === 'files' && <IssueFiles issueId={issueId} canEdit={canEditProject} />}
-        {tab === 'activity' && <IssueActivity issueId={issueId} />}
+        {tab === 'activity' && <IssueActivity issueId={issueId} projectId={projectId} />}
 
       </div>
 

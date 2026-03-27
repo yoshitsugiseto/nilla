@@ -1163,6 +1163,14 @@ async fn update_issue_status_to_in_review_creates_review_ready_notification() {
         count_notifications(&pool, common::TEST_USER_B_ID, "review_ready").await,
         1
     );
+
+    let (_, activity) = common::send(&app, common::get(&format!("/api/issues/{issue_id}/activity"))).await;
+    let items = activity.as_array().unwrap();
+    assert!(items.iter().any(|entry| {
+        entry["field"] == "review_ready"
+            && entry["old_value"] == "Test User"
+            && entry["new_value"] == common::TEST_USER_B_ID
+    }));
 }
 
 #[tokio::test]
@@ -1252,4 +1260,10 @@ async fn update_issue_due_date_past_today_creates_overdue_notification() {
         count_notifications(&pool, common::TEST_USER_B_ID, "overdue").await,
         1
     );
+
+    let (_, activity) = common::send(&app, common::get(&format!("/api/issues/{issue_id}/activity"))).await;
+    let items = activity.as_array().unwrap();
+    assert!(items.iter().any(|entry| {
+        entry["field"] == "overdue" && entry["new_value"] == common::TEST_USER_B_ID
+    }));
 }

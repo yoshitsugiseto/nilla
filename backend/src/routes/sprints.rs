@@ -303,6 +303,13 @@ pub async fn complete_sprint(
 
     let mut tx = pool.begin().await?;
 
+    let moved_issue_ids = sqlx::query_scalar::<_, String>(
+        "SELECT id FROM issues WHERE sprint_id = ? AND status != 'done'",
+    )
+    .bind(&id)
+    .fetch_all(&mut *tx)
+    .await?;
+
     // Move incomplete issues to next sprint or backlog
     sqlx::query(
         "UPDATE issues SET sprint_id=?, updated_at=CURRENT_TIMESTAMP WHERE sprint_id=? AND status != 'done'",
@@ -311,6 +318,18 @@ pub async fn complete_sprint(
     .bind(&id)
     .execute(&mut *tx)
     .await?;
+
+    for issue_id in moved_issue_ids {
+        sqlx::query(
+            "INSERT INTO activity_logs (id, issue_id, field, old_value, new_value) VALUES (?, ?, 'sprint_carryover', ?, ?)",
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind(&issue_id)
+        .bind(&id)
+        .bind(next_sprint_id.as_deref())
+        .execute(&mut *tx)
+        .await?;
+    }
 
     let updated_row = sqlx::query_as::<_, SprintRow>(
         "UPDATE sprints SET status='completed', updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING id, project_id, name, goal, status, start_date, end_date, created_at, updated_at",
