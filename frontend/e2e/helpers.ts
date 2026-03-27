@@ -173,6 +173,7 @@ export async function mockSprintCompletionApi(page: Page) {
   await page.route('**/api/projects/proj-1/issues**', route =>
     route.fulfill({ json: issues, headers: { 'x-total-count': String(issues.length) } })
   )
+  await page.route('**/api/issues/issue-2/activity', route => route.fulfill({ json: [] }))
   await page.route('**/api/sprints/sprint-1/complete', route =>
     route.fulfill({ json: { ...activeSprint, status: 'completed' } })
   )
