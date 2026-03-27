@@ -11,13 +11,14 @@ import { extractErrorMessage } from '../../api/client'
 interface Props {
   projectId: string
   sprintId?: string
+  defaultType?: IssueType
   parentId?: string
   parentPriority?: IssuePriority
   issue?: Issue
   onClose: () => void
 }
 
-export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue, onClose }: Props) {
+export function IssueForm({ projectId, sprintId, defaultType, parentId, parentPriority, issue, onClose }: Props) {
   const qc = useQueryClient()
   const showToast = useToast()
   const templateSelectId = useId()
@@ -32,7 +33,7 @@ export function IssueForm({ projectId, sprintId, parentId, parentPriority, issue
   const [form, setForm] = useState({
     title: issue?.title ?? '',
     description: issue?.description ?? '',
-    type: (issue?.type ?? 'task') as IssueType,
+    type: (issue?.type ?? defaultType ?? 'task') as IssueType,
     priority: (issue?.priority ?? parentPriority ?? 'medium') as IssuePriority,
     points: issue?.points?.toString() ?? '',
     assignee_id: issue?.assignee_id ?? '',

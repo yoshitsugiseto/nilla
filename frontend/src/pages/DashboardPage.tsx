@@ -64,6 +64,7 @@ export function DashboardPage() {
   const recentIssues = [...issues]
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
     .slice(0, 5)
+  const needsOnboarding = issues.length === 0 || sprints.length === 0
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -73,6 +74,43 @@ export function DashboardPage() {
         <BarChart3 size={20} /> Dashboard
         <ProjectRoleBadge role={role} />
       </h1>
+
+      {needsOnboarding && (
+        <section aria-label="はじめての使い方" className="rounded-2xl border border-blue-200 bg-blue-50/60 p-5">
+          <h2 className="text-sm font-semibold text-blue-900">はじめての使い方</h2>
+          <p className="mt-1 text-sm text-blue-800">
+            {issues.length === 0 && sprints.length === 0
+              ? '最初は「イシューを作る」「スプリントを作る」「Boardで進捗を見る」の順で始めると分かりやすいです。'
+              : issues.length === 0
+                ? 'スプリントの準備はできています。次は Backlog でイシューを作ると進行を始められます。'
+                : 'イシューはあります。次は Sprints でスプリントを作ると Board が使いやすくなります。'}
+          </p>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl bg-white p-4">
+              <p className="text-xs font-medium text-gray-500">1. Backlog</p>
+              <p className="mt-1 text-sm text-gray-700">
+                {role === 'viewer'
+                  ? '作成されたイシュー一覧を確認できます。'
+                  : 'タスクやストーリーを作成して優先順位を整理します。'}
+              </p>
+            </div>
+            <div className="rounded-xl bg-white p-4">
+              <p className="text-xs font-medium text-gray-500">2. Sprints</p>
+              <p className="mt-1 text-sm text-gray-700">
+                {role === 'viewer'
+                  ? '進行中スプリントの状況を確認できます。'
+                  : '対象のイシューをスプリントへ割り当てて開始します。'}
+              </p>
+            </div>
+            <div className="rounded-xl bg-white p-4">
+              <p className="text-xs font-medium text-gray-500">3. Board</p>
+              <p className="mt-1 text-sm text-gray-700">
+                進行中・レビュー待ち・完了の流れを見ながら、毎日の更新を進めます。
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Stats row */}
       <div className="grid grid-cols-4 gap-4">

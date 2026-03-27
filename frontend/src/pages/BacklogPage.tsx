@@ -19,10 +19,15 @@ import { useToast } from '../components/common/useToast'
 import { useCurrentTime } from '../hooks/useCurrentTime'
 import { useProjectPermissions } from '../hooks/useProjectPermissions'
 import { deadlineLabel, dueDateLabel } from '../utils/date'
-import type { Issue, IssuePriority, IssueStatus } from '../types'
+import type { Issue, IssuePriority, IssueStatus, IssueType } from '../types'
 
 const BULK_SELECT_PLACEHOLDER = '__placeholder__'
 const BULK_UNASSIGNED_ASSIGNEE = '__unassigned__'
+const QUICK_CREATE_OPTIONS: { type: IssueType; label: string }[] = [
+  { type: 'task', label: 'タスク' },
+  { type: 'bug', label: 'バグ' },
+  { type: 'story', label: 'ストーリー' },
+]
 
 function SubtaskRow({ issue, selectedId, onDetail }: { issue: Issue; selectedId?: string | null; onDetail: (id: string) => void }) {
   return (
@@ -338,6 +343,7 @@ export function BacklogPage() {
   const showToast = useToast()
   const { role, canEditProject } = useProjectPermissions(activeProjectId)
   const [creating, setCreating] = useState(false)
+  const [createType, setCreateType] = useState<IssueType>('task')
   const [detailId, setDetailId] = useState<string | null>(null)
   const [filterQuery, setFilterQuery] = useState('')
   const [bulkMode, setBulkMode] = useState(false)
@@ -388,6 +394,10 @@ export function BacklogPage() {
       else next.add(id)
       return next
     })
+  }
+
+  const selectVisibleIssues = (ids: string[]) => {
+    setBulkSelected(new Set(ids))
   }
 
   const applyBulkLabels = () => {
@@ -499,7 +509,10 @@ export function BacklogPage() {
           )}
           {canEditProject && (
             <button
-              onClick={() => setCreating(true)}
+              onClick={() => {
+                setCreateType('task')
+                setCreating(true)
+              }}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
             >
               <Plus size={16} /> Issueを作成
@@ -507,6 +520,25 @@ export function BacklogPage() {
           )}
         </div>
       </div>
+
+      {canEditProject && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-gray-400">クイック作成</span>
+          {QUICK_CREATE_OPTIONS.map(option => (
+            <button
+              key={option.type}
+              onClick={() => {
+                setCreateType(option.type)
+                setCreating(true)
+              }}
+              className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-600 hover:bg-gray-50"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="relative mb-4">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
         <input
@@ -615,6 +647,29 @@ export function BacklogPage() {
         </div>
       )}
 
+      {canEditProject && bulkMode && bulkSelected.size === 0 && topLevel.length > 0 && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+          <span className="text-gray-500">表示中のイシューをまとめて操作できます</span>
+          <button
+            onClick={() => selectVisibleIssues(topLevel.map(issue => issue.id))}
+            className="text-blue-600 hover:text-blue-700"
+          >
+            表示中を全選択
+          </button>
+        </div>
+      )}
+
+      {!isLoading && topLevel.length === 0 && (
+        <div className="mb-4 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-4">
+          <p className="text-sm font-medium text-gray-800">まだイシューがありません</p>
+          <p className="mt-1 text-sm text-gray-500">
+            {canEditProject
+              ? 'まずはタスクかストーリーを1件作成すると、Backlog と Board の流れをすぐ確認できます。'
+              : 'イシューが作成されるとここに一覧表示されます。必要ならプロジェクト管理者に作成を依頼してください。'}
+          </p>
+        </div>
+      )}
+
       {isLoading ? (
         <div role="status" aria-label="読み込み中" className="text-gray-400 text-center py-12">読み込み中...</div>
       ) : (
@@ -660,8 +715,8 @@ export function BacklogPage() {
       )}
 
       {creating && canEditProject && (
-        <Modal title="New Issue" onClose={() => setCreating(false)}>
-          <IssueForm projectId={activeProjectId} onClose={() => setCreating(false)} />
+        <Modal title={`${QUICK_CREATE_OPTIONS.find(option => option.type === createType)?.label ?? 'Issue'}を作成`} onClose={() => setCreating(false)}>
+          <IssueForm projectId={activeProjectId} defaultType={createType} onClose={() => setCreating(false)} />
         </Modal>
       )}
       </div>

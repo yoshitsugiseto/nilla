@@ -11,7 +11,7 @@ import { Modal } from '../components/common/Modal'
 import { IssueForm } from '../components/Issue/IssueForm'
 import { ProjectRoleBadge } from '../components/common/ProjectRoleBadge'
 import { useProjectPermissions } from '../hooks/useProjectPermissions'
-import type { Issue, Sprint } from '../types'
+import type { Issue, Sprint, IssueType } from '../types'
 
 const PRIORITY_ORDER: Record<string, number> = {
   critical: 0, high: 1, medium: 2, low: 3,
@@ -23,10 +23,16 @@ const statusLabel: Record<string, { text: string; className: string }> = {
   completed: { text: 'Completed', className: 'bg-emerald-100 text-emerald-700' },
 }
 
+const QUICK_CREATE_OPTIONS: { type: IssueType; label: string }[] = [
+  { type: 'task', label: 'タスク' },
+  { type: 'bug', label: 'バグ' },
+]
+
 export function BoardPage() {
   const { activeProjectId, activeSprint, setActiveSprint } = useAppStore()
   const { role, canEditProject } = useProjectPermissions(activeProjectId)
   const [creating, setCreating] = useState(false)
+  const [createType, setCreateType] = useState<IssueType>('task')
   const [filters, setFilters] = useState<Filters>({})
   const [showFilters, setShowFilters] = useState(true)
   const [showBurndown, setShowBurndown] = useState(false)
@@ -62,12 +68,10 @@ export function BoardPage() {
       <div className="flex-1 overflow-auto">
         <div className="p-6 max-w-6xl">
           <h1 className="text-xl font-bold text-gray-900 mb-6">Board</h1>
-          <div className="text-center py-12 text-gray-400">
-            <p>スプリントがありません</p>
-            <p className="text-sm mt-1">
-              {canEditProject
-                ? 'サイドバーの「Sprints」からスプリントを作成してください'
-                : 'スプリントが作成されるとここにボードが表示されます'}
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6">
+            <p className="text-base font-medium text-gray-800">スプリントがまだありません</p>
+            <p className="mt-2 text-sm text-gray-500">
+              最初の流れは「Sprints でスプリント作成 → Board で進捗確認」です。編集権限がない場合はプロジェクト管理者に作成を依頼してください。
             </p>
           </div>
         </div>
@@ -189,12 +193,31 @@ export function BoardPage() {
             </button>
 
             {canEditProject && (
-              <button
-                onClick={() => setCreating(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-              >
-                <Plus size={16} /> Issueを作成
-              </button>
+              <>
+                <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1">
+                  {QUICK_CREATE_OPTIONS.map(option => (
+                    <button
+                      key={option.type}
+                      onClick={() => {
+                        setCreateType(option.type)
+                        setCreating(true)
+                      }}
+                      className="rounded-md px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => {
+                    setCreateType('task')
+                    setCreating(true)
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                >
+                  <Plus size={16} /> Issueを作成
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -243,10 +266,11 @@ export function BoardPage() {
       </div>
 
       {creating && canEditProject && (
-        <Modal title="New Issue" onClose={() => setCreating(false)}>
+        <Modal title={`${QUICK_CREATE_OPTIONS.find(option => option.type === createType)?.label ?? 'Issue'}を作成`} onClose={() => setCreating(false)}>
           <IssueForm
             projectId={activeProjectId}
             sprintId={currentSprint?.id}
+            defaultType={createType}
             onClose={() => setCreating(false)}
           />
         </Modal>

@@ -55,7 +55,7 @@ vi.mock('../components/common/useToast', () => ({
 }))
 
 vi.mock('../components/Issue/IssueForm', () => ({
-  IssueForm: ({ projectId }: { projectId: string }) => <div>IssueForm:{projectId}</div>,
+  IssueForm: ({ projectId, defaultType }: { projectId: string; defaultType?: string }) => <div>IssueForm:{projectId}:{defaultType ?? 'none'}</div>,
 }))
 
 vi.mock('../components/Issue/IssueDetail', () => ({
@@ -228,10 +228,21 @@ describe('BacklogPage', () => {
     expect(await screen.findByRole('button', { name: 'Issueを作成' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Issueを作成' }))
-    expect(screen.getByText('IssueForm:project-1')).toBeInTheDocument()
+    expect(screen.getByText('IssueForm:project-1:task')).toBeInTheDocument()
 
     await user.click(screen.getByText('Backlog task'))
     expect(screen.getByText('IssueDetail:issue-1')).toBeInTheDocument()
+  })
+
+  test('opens quick create with the selected issue type', async () => {
+    const user = userEvent.setup()
+
+    renderBacklogPage()
+
+    await waitFor(() => expect(mockGetIssues).toHaveBeenCalled())
+    await user.click(await screen.findByRole('button', { name: 'バグ' }))
+
+    expect(screen.getByText('IssueForm:project-1:bug')).toBeInTheDocument()
   })
 
   test('bulk status change submits selected issues', async () => {
