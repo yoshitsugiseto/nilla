@@ -67,9 +67,9 @@ export function LabelSettings({ projectId }: Props) {
       </h2>
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-4">
         {labelsError ? (
-          <p className="px-4 py-3 text-sm text-red-400">取得に失敗しました（project: {projectId}）</p>
+          <p className="px-4 py-3 text-sm text-red-400">取得に失敗しました</p>
         ) : labels.length === 0 ? (
-          <p className="px-4 py-3 text-sm text-gray-400">ラベルなし（project: {projectId}）</p>
+          <p className="px-4 py-3 text-sm text-gray-400">ラベルなし</p>
         ) : (
           <ul className="divide-y divide-gray-100">
             {labels.map(label => (
