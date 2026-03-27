@@ -315,6 +315,7 @@ pub struct IssueFilters {
     pub r#type: Option<String>,
     pub priority: Option<String>,
     pub assignee_id: Option<String>,
+    pub due_state: Option<String>,
     pub q: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,

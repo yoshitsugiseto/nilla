@@ -348,6 +348,9 @@ fn build_issue_where(project_id: &str, filters: &IssueFilters) -> (String, Vec<S
             args.push(assignee_id.clone());
         }
     }
+    if filters.due_state.as_deref() == Some("overdue") {
+        clause.push_str(" AND i.status != 'done' AND i.due_date IS NOT NULL AND i.due_date < date('now')");
+    }
     if let Some(q) = &filters.q {
         clause.push_str(
             " AND (i.title LIKE ? OR i.description LIKE ? OR CAST(i.number AS TEXT) LIKE ?)",

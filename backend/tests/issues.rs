@@ -266,6 +266,57 @@ async fn list_issues_filter_by_unassigned() {
 }
 
 #[tokio::test]
+async fn list_issues_filter_by_overdue() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let overdue_date = (chrono::Utc::now().date_naive() - chrono::Duration::days(1)).to_string();
+    let future_date = (chrono::Utc::now().date_naive() + chrono::Duration::days(2)).to_string();
+
+    common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Overdue", "due_date": overdue_date }),
+        ),
+    )
+    .await;
+    common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Upcoming", "due_date": future_date }),
+        ),
+    )
+    .await;
+    let (_, done_issue) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Done overdue", "due_date": overdue_date }),
+        ),
+    )
+    .await;
+    let done_issue_id = done_issue["id"].as_str().unwrap();
+    common::send(
+        &app,
+        common::patch(
+            &format!("/api/issues/{done_issue_id}/status"),
+            json!({ "status": "done" }),
+        ),
+    )
+    .await;
+
+    let (_, _, json) = common::send_with_headers(
+        &app,
+        common::get(&format!("/api/projects/{pid}/issues?due_state=overdue")),
+    )
+    .await;
+    let items = json.as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["title"], "Overdue");
+}
+
+#[tokio::test]
 async fn list_issues_search_query() {
     let app = common::setup_app().await;
     let pid = common::create_project(&app, "P", "PI").await;

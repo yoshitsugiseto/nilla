@@ -32,6 +32,8 @@ const EMPTY_SEARCH_FILTERS: IssueSearchFilters = {
   type: '',
   priority: '',
   assignee_id: '',
+  sprint_id: '',
+  due_state: '',
 }
 
 export default function App() {
@@ -100,10 +102,10 @@ export default function App() {
               />
             )
             : <>
-                {page === 'dashboard' && <DashboardPage />}
+                {page === 'dashboard' && <DashboardPage onOpenSearch={applySearchPreset} />}
                 {page === 'board' && <BoardPage />}
                 {page === 'backlog' && <BacklogPage />}
-                {page === 'sprints' && <SprintPage onNavigate={p => setPage(p as Page)} />}
+                {page === 'sprints' && <SprintPage onNavigate={p => setPage(p as Page)} onOpenSearch={applySearchPreset} />}
                 {page === 'sprint-history' && <SprintHistoryPage onNavigate={p => setPage(p as Page)} />}
                 {page === 'settings' && <SettingsPage />}
               </>

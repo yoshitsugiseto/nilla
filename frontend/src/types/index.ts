@@ -225,6 +225,8 @@ export interface IssueSearchFilters {
   type: string
   priority: string
   assignee_id: string
+  sprint_id: string
+  due_state: string
 }
 
 export interface IssueTemplate {

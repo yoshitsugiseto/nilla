@@ -1,13 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { SearchPreset, Sprint } from '../types'
-
-interface SearchPresetFilters {
-  status: string
-  type: string
-  priority: string
-  assignee_id: string
-}
+import type { IssueSearchFilters, SearchPreset, Sprint } from '../types'
 
 interface AppState {
   activeProjectId: string | null
@@ -26,7 +19,7 @@ interface AppState {
   setActiveWorkspace: (id: string | null) => void
   setPendingOpenIssueId: (id: string | null) => void
   setPendingOpenIssueTitle: (title: string | null) => void
-  saveSearchPreset: (projectId: string, name: string, query: string, filters: SearchPresetFilters) => void
+  saveSearchPreset: (projectId: string, name: string, query: string, filters: IssueSearchFilters) => void
   renameSearchPreset: (id: string, name: string) => void
   deleteSearchPreset: (id: string) => void
   setBoardFilter: (key: string, value: string | undefined) => void

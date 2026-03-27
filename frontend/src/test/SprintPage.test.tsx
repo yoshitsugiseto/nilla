@@ -143,7 +143,7 @@ function makeAutomationSettings(
   }
 }
 
-function renderSprintPage() {
+function renderSprintPage(onOpenSearch = vi.fn()) {
   const queryClient = createQueryClient()
   useAppStore.setState({
     activeProjectId: 'project-1',
@@ -159,11 +159,11 @@ function renderSprintPage() {
 
   render(
     <QueryClientProvider client={queryClient}>
-      <SprintPage onNavigate={onNavigate} />
+      <SprintPage onNavigate={onNavigate} onOpenSearch={onOpenSearch} />
     </QueryClientProvider>
   )
 
-  return { onNavigate }
+  return { onNavigate, onOpenSearch }
 }
 
 describe('SprintPage', () => {
@@ -414,6 +414,75 @@ describe('SprintPage', () => {
     expect(screen.getByText('2日')).toBeInTheDocument()
     expect(screen.getByText('バーンダウントレンド')).toBeInTheDocument()
     expect(screen.getByText('BurndownChart')).toBeInTheDocument()
+  })
+
+  test('opens sprint drill-down searches from active snapshot and risk chips', async () => {
+    const user = userEvent.setup()
+    const onOpenSearch = vi.fn()
+
+    mockGetSprints.mockResolvedValue([
+      makeSprint({ id: 'sprint-active', name: 'Sprint Active', status: 'active', end_date: '2026-03-28' }),
+    ])
+    mockGetIssues.mockResolvedValue([
+      makeIssue({
+        id: 'issue-1',
+        sprint_id: 'sprint-active',
+        title: 'Overdue task',
+        status: 'todo',
+        due_date: '2026-03-01',
+        assignee_id: null,
+      }),
+      makeIssue({
+        id: 'issue-2',
+        sprint_id: 'sprint-active',
+        title: 'Waiting review',
+        status: 'in_review',
+        due_date: null,
+        assignee_id: 'member-1',
+      }),
+      makeIssue({
+        id: 'issue-3',
+        sprint_id: 'sprint-active',
+        title: 'Done task',
+        status: 'done',
+        due_date: null,
+        assignee_id: 'member-1',
+      }),
+    ])
+
+    renderSprintPage(onOpenSearch)
+
+    expect(await screen.findByLabelText('アクティブスプリントサマリー')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '対象 issue を見る' }))
+    expect(onOpenSearch).toHaveBeenCalledWith('', {
+      status: '',
+      type: '',
+      priority: '',
+      assignee_id: '',
+      sprint_id: 'sprint-active',
+      due_state: '',
+    })
+
+    await user.click(screen.getByRole('button', { name: '期限超過を見る' }))
+    expect(onOpenSearch).toHaveBeenLastCalledWith('', {
+      status: '',
+      type: '',
+      priority: '',
+      assignee_id: '',
+      sprint_id: 'sprint-active',
+      due_state: 'overdue',
+    })
+
+    await user.click(screen.getByRole('button', { name: 'レビュー待ち 1件' }))
+    expect(onOpenSearch).toHaveBeenLastCalledWith('', {
+      status: 'in_review',
+      type: '',
+      priority: '',
+      assignee_id: '',
+      sprint_id: 'sprint-active',
+      due_state: '',
+    })
   })
 
   test('uses workspace automation for sprint carryover when mode is next_sprint', async () => {

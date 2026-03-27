@@ -14,7 +14,7 @@ import { useProjectPermissions } from '../hooks/useProjectPermissions'
 import { extractErrorMessage } from '../api/client'
 import { deadlineLabel } from '../utils/date'
 import { buildActiveSprintSnapshot } from '../utils/reporting'
-import type { Issue, Sprint, IssueType, SprintCarryoverMode } from '../types'
+import type { Issue, IssueSearchFilters, Sprint, IssueType, SprintCarryoverMode } from '../types'
 
 interface SprintReportData {
   sprint: Sprint
@@ -51,6 +51,14 @@ const TYPE_LABELS: Record<IssueType, string> = {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const MAX_CYCLE_ACTIVITY_ISSUES = 20
+const EMPTY_SEARCH_FILTERS: IssueSearchFilters = {
+  status: '',
+  type: '',
+  priority: '',
+  assignee_id: '',
+  sprint_id: '',
+  due_state: '',
+}
 
 function daysLeftUntil(endDate: string, nowMs: number): number {
   const endMs = new Date(`${endDate}T23:59:59`).getTime()
@@ -470,7 +478,13 @@ function SprintCard({
   )
 }
 
-export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void }) {
+export function SprintPage({
+  onNavigate,
+  onOpenSearch,
+}: {
+  onNavigate: (page: string) => void
+  onOpenSearch?: (query: string, filters: IssueSearchFilters) => void
+}) {
   const { activeProjectId, activeWorkspaceId } = useAppStore()
   const qc = useQueryClient()
   const showToast = useToast()
@@ -581,6 +595,12 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
     nowMs,
     activeSprintActivityByIssueId,
   )
+  const openSearch = (partial: Partial<IssueSearchFilters>) => {
+    onOpenSearch?.('', { ...EMPTY_SEARCH_FILTERS, ...partial })
+  }
+  const openSprintSearch = (sprintId: string, partial: Partial<IssueSearchFilters> = {}) => {
+    openSearch({ sprint_id: sprintId, ...partial })
+  }
 
   if (!activeProjectId) {
     return <div className="flex-1 flex items-center justify-center text-gray-400">← プロジェクトを選択してください</div>
@@ -622,10 +642,18 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
                   <h2 className="text-sm font-semibold text-blue-900">アクティブスプリントの見通し</h2>
                   <p className="text-xs text-blue-800">{activeSprint.name} の進み具合とペースをまとめています。</p>
                 </div>
-                {activeSprint.end_date && nowMs && (() => {
-                  const deadline = deadlineLabel(activeSprint.end_date, nowMs)
-                  return <span className={`text-xs font-medium ${deadline.className}`}>{deadline.text}</span>
-                })()}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => openSprintSearch(activeSprint.id)}
+                    className="text-xs font-medium text-blue-700 hover:text-blue-800"
+                  >
+                    対象 issue を見る
+                  </button>
+                  {activeSprint.end_date && nowMs && (() => {
+                    const deadline = deadlineLabel(activeSprint.end_date, nowMs)
+                    return <span className={`text-xs font-medium ${deadline.className}`}>{deadline.text}</span>
+                  })()}
+                </div>
               </div>
               <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -637,11 +665,23 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
                     <p className="mt-1 text-sm text-gray-500">
                       {activeSprintSnapshot.donePoints}/{activeSprintSnapshot.totalPoints}pt
                     </p>
+                    <button
+                      onClick={() => openSprintSearch(activeSprint.id, { status: 'done' })}
+                      className="mt-3 text-xs font-medium text-blue-700 hover:text-blue-800"
+                    >
+                      完了 issue を見る
+                    </button>
                   </div>
                   <div className="rounded-xl border border-blue-100 bg-white p-4">
                     <p className="text-xs text-gray-500">残り作業</p>
                     <p className="mt-1 text-2xl font-bold text-gray-900">{activeSprintSnapshot.remainingIssues}件</p>
                     <p className="mt-1 text-sm text-gray-500">{activeSprintSnapshot.remainingPoints}pt 残り</p>
+                    <button
+                      onClick={() => openSprintSearch(activeSprint.id)}
+                      className="mt-3 text-xs font-medium text-blue-700 hover:text-blue-800"
+                    >
+                      スプリント全体を見る
+                    </button>
                   </div>
                   <div className="rounded-xl border border-blue-100 bg-white p-4">
                     <p className="text-xs text-gray-500">平均 cycle time</p>
@@ -649,6 +689,12 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
                       {activeSprintSnapshot.avgCycleDays != null ? `${activeSprintSnapshot.avgCycleDays}日` : '—'}
                     </p>
                     <p className="mt-1 text-sm text-gray-500">作業開始から完了まで。activity がないものは近似</p>
+                    <button
+                      onClick={() => openSprintSearch(activeSprint.id, { status: 'done' })}
+                      className="mt-3 text-xs font-medium text-blue-700 hover:text-blue-800"
+                    >
+                      算出対象を見る
+                    </button>
                   </div>
                   <div className="rounded-xl border border-blue-100 bg-white p-4">
                     <p className="text-xs text-gray-500">リスク</p>
@@ -658,6 +704,26 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
                     <p className="mt-1 text-sm text-gray-500">
                       期限超過 {activeSprintSnapshot.overdueCount} / 未アサイン {activeSprintSnapshot.unassignedCount} / レビュー待ち {activeSprintSnapshot.reviewCount}
                     </p>
+                    <div className="mt-3 flex flex-wrap gap-3 text-xs font-medium">
+                      <button
+                        onClick={() => openSprintSearch(activeSprint.id, { due_state: 'overdue' })}
+                        className="text-red-700 hover:text-red-800"
+                      >
+                        期限超過を見る
+                      </button>
+                      <button
+                        onClick={() => openSprintSearch(activeSprint.id, { assignee_id: '__unassigned__' })}
+                        className="text-amber-700 hover:text-amber-800"
+                      >
+                        未アサインを見る
+                      </button>
+                      <button
+                        onClick={() => openSprintSearch(activeSprint.id, { status: 'in_review' })}
+                        className="text-blue-700 hover:text-blue-800"
+                      >
+                        レビュー待ちを見る
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div className="rounded-xl border border-blue-100 bg-white p-4">
@@ -702,19 +768,28 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {signal.overdue_count > 0 && (
-                        <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
+                        <button
+                          onClick={() => openSprintSearch(signal.sprint_id, { due_state: 'overdue' })}
+                          className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+                        >
                           期限超過 {signal.overdue_count}件
-                        </span>
+                        </button>
                       )}
                       {signal.unassigned_count > 0 && (
-                        <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                        <button
+                          onClick={() => openSprintSearch(signal.sprint_id, { assignee_id: '__unassigned__' })}
+                          className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                        >
                           未アサイン {signal.unassigned_count}件
-                        </span>
+                        </button>
                       )}
                       {signal.review_count > 0 && (
-                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                        <button
+                          onClick={() => openSprintSearch(signal.sprint_id, { status: 'in_review' })}
+                          className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                        >
                           レビュー待ち {signal.review_count}件
-                        </span>
+                        </button>
                       )}
                     </div>
                     <p className="mt-3 text-xs text-gray-500">

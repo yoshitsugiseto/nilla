@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { DashboardPage } from '../pages/DashboardPage'
 import { useAppStore } from '../store'
@@ -308,5 +309,88 @@ describe('DashboardPage', () => {
     expect(screen.getByText('期限超過')).toBeInTheDocument()
     expect(screen.getByText('レビュー待ち')).toBeInTheDocument()
     expect(screen.getByText('VelocityChart:project-1')).toBeInTheDocument()
+  })
+
+  test('opens drill-down searches from delivery snapshot actions', async () => {
+    const user = userEvent.setup()
+    const onOpenSearch = vi.fn()
+    const queryClient = createQueryClient()
+
+    mockGetIssues.mockResolvedValue([
+      {
+        id: 'issue-overdue',
+        project_id: 'project-1',
+        sprint_id: null,
+        parent_id: null,
+        epic_id: null,
+        epic_title: null,
+        number: 10,
+        title: 'Overdue issue',
+        description: null,
+        type: 'task',
+        status: 'todo',
+        priority: 'medium',
+        points: null,
+        assignee_id: null,
+        assignee_name: null,
+        assignee_avatar_url: null,
+        labels: [],
+        position: 0,
+        due_date: '2026-03-01',
+        created_at: '2026-03-01T00:00:00Z',
+        updated_at: '2026-03-02T00:00:00Z',
+      },
+      {
+        id: 'issue-review',
+        project_id: 'project-1',
+        sprint_id: null,
+        parent_id: null,
+        epic_id: null,
+        epic_title: null,
+        number: 11,
+        title: 'Review issue',
+        description: null,
+        type: 'task',
+        status: 'in_review',
+        priority: 'medium',
+        points: null,
+        assignee_id: 'user-1',
+        assignee_name: 'Alice',
+        assignee_avatar_url: null,
+        labels: [],
+        position: 1000,
+        due_date: null,
+        created_at: '2026-03-01T00:00:00Z',
+        updated_at: '2026-03-02T00:00:00Z',
+      },
+    ])
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <DashboardPage onOpenSearch={onOpenSearch} />
+      </QueryClientProvider>
+    )
+
+    await waitFor(() => expect(mockGetIssues).toHaveBeenCalledWith('project-1'))
+
+    await user.click(screen.getByRole('button', { name: '対象 issue を見る' }))
+    expect(onOpenSearch).toHaveBeenCalledWith('', {
+      status: '',
+      type: '',
+      priority: '',
+      assignee_id: '',
+      sprint_id: '',
+      due_state: 'overdue',
+    })
+
+    await user.click(screen.getByRole('button', { name: 'レビュー待ちを見る' }))
+    expect(onOpenSearch).toHaveBeenLastCalledWith('', {
+      status: 'in_review',
+      type: '',
+      priority: '',
+      assignee_id: '',
+      sprint_id: '',
+      due_state: '',
+    })
   })
 })

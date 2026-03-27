@@ -19,7 +19,14 @@ import { Search, ChevronLeft, ChevronRight, SlidersHorizontal, X, CheckSquare, S
 import type { BulkUpdatePayload, IssueSearchFilters } from '../types'
 
 const PAGE_SIZE = 20
-const EMPTY_FILTERS: IssueSearchFilters = { status: '', type: '', priority: '', assignee_id: '' }
+const EMPTY_FILTERS: IssueSearchFilters = {
+  status: '',
+  type: '',
+  priority: '',
+  assignee_id: '',
+  sprint_id: '',
+  due_state: '',
+}
 const QUICK_FILTERS = [
   { key: 'mine', label: '自分の担当' },
   { key: 'unassigned', label: '未割り当て' },
@@ -50,6 +57,8 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
   const typeId = useId()
   const priorityId = useId()
   const assigneeId = useId()
+  const sprintId = useId()
+  const dueStateId = useId()
   const nowMs = useCurrentTime()
   const { role, canEditProject } = useProjectPermissions(activeProjectId)
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -73,7 +82,7 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
   const { data: sprints = [] } = useQuery({
     queryKey: ['sprints', activeProjectId],
     queryFn: () => getSprints(activeProjectId!),
-    enabled: !!activeProjectId && bulkMode,
+    enabled: !!activeProjectId && (showFilters || bulkMode),
   })
 
   const { data: projectLabels = [] } = useQuery({
@@ -93,6 +102,8 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
         type: filters.type || undefined,
         priority: filters.priority || undefined,
         assignee_id: filters.assignee_id || undefined,
+        sprint_id: filters.sprint_id || undefined,
+        due_state: filters.due_state || undefined,
       }),
     enabled: !!activeProjectId && (query.length >= 2 || hasFilters),
     placeholderData: prev => prev,
@@ -330,7 +341,7 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
         {/* Filter panel */}
         {showFilters && (
           <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-xl">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
               <div>
                 <label htmlFor={statusId} className="block text-xs text-gray-500 mb-1">ステータス</label>
                 <select
@@ -389,6 +400,33 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
                   {members.map(m => (
                     <option key={m.user_id} value={m.user_id}>{m.name}</option>
                   ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor={sprintId} className="block text-xs text-gray-500 mb-1">Sprint</label>
+                <select
+                  id={sprintId}
+                  value={filters.sprint_id}
+                  onChange={e => setFilter('sprint_id', e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                >
+                  <option value="">すべて</option>
+                  <option value="backlog">Backlog</option>
+                  {sprints.map(sprint => (
+                    <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor={dueStateId} className="block text-xs text-gray-500 mb-1">期限</label>
+                <select
+                  id={dueStateId}
+                  value={filters.due_state}
+                  onChange={e => setFilter('due_state', e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                >
+                  <option value="">すべて</option>
+                  <option value="overdue">期限超過</option>
                 </select>
               </div>
             </div>

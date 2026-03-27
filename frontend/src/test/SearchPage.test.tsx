@@ -100,7 +100,14 @@ function makeMember(overrides: Partial<WorkspaceMember> = {}): WorkspaceMember {
 
 function renderSearchPage(
   query: string,
-  filters: IssueSearchFilters = { status: '', type: '', priority: '', assignee_id: '' },
+  filters: IssueSearchFilters = {
+    status: '',
+    type: '',
+    priority: '',
+    assignee_id: '',
+    sprint_id: '',
+    due_state: '',
+  },
   onApplyPreset: (query: string, filters: IssueSearchFilters) => void = () => undefined,
 ) {
   const queryClient = createQueryClient()
@@ -215,6 +222,8 @@ describe('SearchPage', () => {
       type: '',
       priority: '',
       assignee_id: '',
+      sprint_id: '',
+      due_state: '',
     })
 
     await waitFor(() =>
@@ -226,6 +235,8 @@ describe('SearchPage', () => {
         type: undefined,
         priority: undefined,
         assignee_id: undefined,
+        sprint_id: undefined,
+        due_state: undefined,
       })
     )
 
@@ -247,6 +258,8 @@ describe('SearchPage', () => {
         type: undefined,
         priority: undefined,
         assignee_id: undefined,
+        sprint_id: undefined,
+        due_state: undefined,
       })
     )
 
@@ -270,6 +283,35 @@ describe('SearchPage', () => {
         type: undefined,
         priority: undefined,
         assignee_id: '__unassigned__',
+        sprint_id: undefined,
+        due_state: undefined,
+      })
+    )
+  })
+
+  test('supports sprint and overdue filters for drill-down flows', async () => {
+    const user = userEvent.setup()
+
+    renderSearchPage('bug')
+
+    await waitFor(() => expect(mockGetIssuesPaged).toHaveBeenCalled())
+    await user.click(screen.getByRole('button', { name: 'フィルター' }))
+    await waitFor(() => expect(mockGetSprints).toHaveBeenCalledWith('project-1'))
+
+    await user.selectOptions(screen.getByLabelText('Sprint'), 'sprint-1')
+    await user.selectOptions(screen.getByLabelText('期限'), 'overdue')
+
+    await waitFor(() =>
+      expect(mockGetIssuesPaged).toHaveBeenLastCalledWith('project-1', {
+        q: 'bug',
+        limit: 20,
+        offset: 0,
+        status: undefined,
+        type: undefined,
+        priority: undefined,
+        assignee_id: undefined,
+        sprint_id: 'sprint-1',
+        due_state: 'overdue',
       })
     )
   })
@@ -292,6 +334,8 @@ describe('SearchPage', () => {
         type: undefined,
         priority: undefined,
         assignee_id: undefined,
+        sprint_id: undefined,
+        due_state: undefined,
       })
     )
   })
@@ -332,6 +376,8 @@ describe('SearchPage', () => {
         type: undefined,
         priority: undefined,
         assignee_id: 'user-1',
+        sprint_id: undefined,
+        due_state: undefined,
       })
     )
     expect(screen.getByText('フィルター結果')).toBeInTheDocument()

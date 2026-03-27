@@ -17,6 +17,7 @@ import {
   buildOpenRiskSnapshot,
   buildThroughputSnapshot,
 } from '../utils/reporting'
+import type { IssueSearchFilters } from '../types'
 
 const STATUS_COLORS: Record<string, string> = {
   todo: 'bg-gray-200',
@@ -33,8 +34,20 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 const MAX_CYCLE_ACTIVITY_ISSUES = 20
+const EMPTY_SEARCH_FILTERS: IssueSearchFilters = {
+  status: '',
+  type: '',
+  priority: '',
+  assignee_id: '',
+  sprint_id: '',
+  due_state: '',
+}
 
-export function DashboardPage() {
+export function DashboardPage({
+  onOpenSearch,
+}: {
+  onOpenSearch?: (query: string, filters: IssueSearchFilters) => void
+}) {
   const { activeProjectId } = useAppStore()
   const { role } = useProjectPermissions(activeProjectId)
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -93,6 +106,9 @@ export function DashboardPage() {
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
     .slice(0, 5)
   const needsOnboarding = issues.length === 0 || sprints.length === 0
+  const openSearch = (partial: Partial<IssueSearchFilters>) => {
+    onOpenSearch?.('', { ...EMPTY_SEARCH_FILTERS, ...partial })
+  }
 
   if (!activeProjectId) {
     return <div className="flex-1 flex items-center justify-center text-gray-400">← プロジェクトを選択してください</div>
@@ -189,6 +205,12 @@ export function DashboardPage() {
                   </p>
                 )
               })()}
+              <button
+                onClick={() => openSearch({ sprint_id: activeSprint.id })}
+                className="mt-3 text-xs font-medium text-blue-700 hover:text-blue-800"
+              >
+                対象 issue を見る
+              </button>
             </>
           ) : (
             <p className="text-sm text-gray-400 italic">アクティブなスプリントはありません</p>
@@ -252,13 +274,33 @@ export function DashboardPage() {
               {openRiskSnapshot.overdueCount}件
             </p>
             <p className="mt-1 text-sm text-gray-500">未完了 issue のみ</p>
+            <button
+              onClick={() => openSearch({ due_state: 'overdue' })}
+              className="mt-3 text-xs font-medium text-red-700 hover:text-red-800"
+            >
+              対象 issue を見る
+            </button>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4">
             <p className="text-xs text-gray-500">レビュー待ち</p>
             <p className={`mt-1 text-2xl font-bold ${openRiskSnapshot.reviewCount > 0 ? 'text-blue-700' : 'text-gray-900'}`}>
               {openRiskSnapshot.reviewCount}件
             </p>
-            <p className="mt-1 text-sm text-gray-500">未アサイン {openRiskSnapshot.unassignedCount}件</p>
+            <div className="mt-1 text-sm text-gray-500">未アサイン {openRiskSnapshot.unassignedCount}件</div>
+            <div className="mt-3 flex flex-wrap gap-3 text-xs font-medium">
+              <button
+                onClick={() => openSearch({ status: 'in_review' })}
+                className="text-blue-700 hover:text-blue-800"
+              >
+                レビュー待ちを見る
+              </button>
+              <button
+                onClick={() => openSearch({ assignee_id: '__unassigned__' })}
+                className="text-amber-700 hover:text-amber-800"
+              >
+                未アサインを見る
+              </button>
+            </div>
           </div>
         </div>
       </section>

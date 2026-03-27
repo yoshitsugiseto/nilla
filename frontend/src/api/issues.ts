@@ -16,6 +16,7 @@ export interface IssueFilters {
   type?: string
   priority?: string
   assignee_id?: string
+  due_state?: string
   q?: string
   limit?: number
   offset?: number
