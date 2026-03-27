@@ -4,6 +4,7 @@ import { Trash2, Crown, Shield, User as UserIcon, Eye, Pencil, Check, X, UserPlu
 import {
   getWorkspaceMembers,
   getWorkspaceAutomationSettings,
+  getWorkspaceAutomationLogs,
   addWorkspaceMember,
   removeWorkspaceMember,
   updateMemberRole,
@@ -15,7 +16,7 @@ import { Avatar } from '../common/Avatar'
 import { useToast } from '../common/useToast'
 import { useAuthStore } from '../../store/auth'
 import { useAppStore } from '../../store'
-import type { SprintCarryoverMode } from '../../types'
+import type { SprintCarryoverMode, WorkspaceAutomationLog } from '../../types'
 
 type Role = 'owner' | 'admin' | 'member' | 'viewer'
 
@@ -35,6 +36,36 @@ const roleColor: Record<Role, string> = {
 
 interface Props {
   workspaceId: string
+}
+
+function automationRuleLabel(ruleType: WorkspaceAutomationLog['rule_type']) {
+  switch (ruleType) {
+    case 'assignee_change':
+      return '担当変更'
+    case 'review_ready':
+      return 'レビュー待ち'
+    case 'overdue':
+      return '期限超過'
+    case 'sprint_carryover':
+      return 'スプリント移動'
+    default:
+      return ruleType
+  }
+}
+
+function automationStatusLabel(status: WorkspaceAutomationLog['status']) {
+  switch (status) {
+    case 'sent':
+      return { label: '送信', className: 'bg-emerald-100 text-emerald-700' }
+    case 'applied':
+      return { label: '適用', className: 'bg-blue-100 text-blue-700' }
+    case 'disabled':
+      return { label: '無効', className: 'bg-gray-100 text-gray-600' }
+    case 'skipped':
+      return { label: 'スキップ', className: 'bg-amber-100 text-amber-700' }
+    default:
+      return { label: status, className: 'bg-gray-100 text-gray-600' }
+  }
 }
 
 export function WorkspaceSettings({ workspaceId }: Props) {
@@ -61,6 +92,11 @@ export function WorkspaceSettings({ workspaceId }: Props) {
   const { data: automationSettings } = useQuery({
     queryKey: ['workspace-automation', workspaceId],
     queryFn: () => getWorkspaceAutomationSettings(workspaceId),
+    enabled: !!workspaceId,
+  })
+  const { data: automationLogs = [] } = useQuery({
+    queryKey: ['workspace-automation-logs', workspaceId],
+    queryFn: () => getWorkspaceAutomationLogs(workspaceId),
     enabled: !!workspaceId,
   })
 
@@ -244,7 +280,68 @@ export function WorkspaceSettings({ workspaceId }: Props) {
               <option value="next_sprint">次の未完了 sprint に送る</option>
             </select>
             {!isAdmin && (
-              <p className="mt-2 text-xs text-gray-400">Automation 設定の変更はワークスペース管理者のみ可能です。</p>
+              <p className="mt-2 text-xs text-gray-400">自動化設定の変更はワークスペース管理者のみ可能です。</p>
+            )}
+          </div>
+
+          <div className="border-t border-gray-100 pt-4">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-gray-800">最近の自動化実行</p>
+                <p className="mt-1 text-xs text-gray-500">直近の通知送信やスプリント移動の結果を確認できます。</p>
+              </div>
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                {automationLogs.length}件
+              </span>
+            </div>
+            {automationLogs.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-xs text-gray-400">
+                まだ自動化実行ログはありません
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {automationLogs.map(log => {
+                  const statusMeta = automationStatusLabel(log.status)
+                  return (
+                    <div
+                      key={log.id}
+                      className="rounded-lg border border-gray-200 bg-gray-50/70 px-3 py-3"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                          {automationRuleLabel(log.rule_type)}
+                        </span>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${statusMeta.className}`}>
+                          {statusMeta.label}
+                        </span>
+                        <span className="text-[11px] text-gray-400">
+                          {new Date(log.created_at).toLocaleString('ja-JP', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm text-gray-700">{log.message}</p>
+                      {(log.issue_title || log.target_user_name) && (
+                        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-gray-500">
+                          {log.issue_title && (
+                            <span className="rounded bg-white px-2 py-1 text-gray-600">
+                              {log.issue_title}
+                            </span>
+                          )}
+                          {log.target_user_name && (
+                            <span className="rounded bg-white px-2 py-1 text-gray-600">
+                              宛先: {log.target_user_name}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             )}
           </div>
         </div>

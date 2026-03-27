@@ -266,6 +266,61 @@ async fn test_workspace_admin_can_update_automation_settings() {
 }
 
 #[tokio::test]
+async fn test_workspace_automation_logs_are_listed() {
+    let (app, pool) = common::setup_app_with_pool().await;
+    common::insert_user_b(&pool).await;
+
+    let ws_id = common::create_workspace(&app).await;
+    let pid = common::create_project_in(&app, "P", "PI", &ws_id).await;
+
+    common::send(
+        &app,
+        common::post(
+            &format!("/api/workspaces/{ws_id}/members"),
+            json!({ "user_id": common::TEST_USER_B_ID }),
+        ),
+    )
+    .await;
+
+    let (_, issue) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({
+                "title": "Needs review",
+                "assignee_id": common::TEST_USER_B_ID
+            }),
+        ),
+    )
+    .await;
+    let issue_id = issue["id"].as_str().unwrap();
+
+    let (status, _) = common::send(
+        &app,
+        common::patch(
+            &format!("/api/issues/{issue_id}/status"),
+            json!({ "status": "in_review" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, json) = common::send(
+        &app,
+        common::get(&format!("/api/workspaces/{ws_id}/automation/logs")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let items = json.as_array().unwrap();
+    assert!(!items.is_empty());
+    assert!(items.iter().any(|entry| {
+        entry["rule_type"] == "review_ready"
+            && entry["status"] == "sent"
+            && entry["issue_title"] == "Needs review"
+    }));
+}
+
+#[tokio::test]
 async fn test_owner_can_remove_member() {
     let (app, pool) = common::setup_app_with_pool().await;
     common::insert_user_b(&pool).await;

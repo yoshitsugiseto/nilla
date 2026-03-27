@@ -115,6 +115,7 @@ describe('NotificationBell', () => {
       project_id: 'project-1',
       title: 'Issue from notification',
       priority: 'high',
+      status: 'todo',
     })
     mockUpdateIssue.mockResolvedValue(undefined)
   mockGetProject.mockResolvedValue({
@@ -230,6 +231,15 @@ describe('NotificationBell', () => {
         id: 'notif-1',
         user_id: 'user-1',
         issue_id: 'issue-1',
+        type: 'assigned',
+        message: 'Issue assigned',
+        read: false,
+        created_at: '2026-03-26T03:00:00Z',
+      },
+      {
+        id: 'notif-2',
+        user_id: 'user-1',
+        issue_id: 'issue-1',
         type: 'overdue',
         message: 'Issue is overdue',
         read: false,
@@ -244,13 +254,52 @@ describe('NotificationBell', () => {
     )
 
     await user.click(screen.getByRole('button', { name: '通知' }))
-    expect(await screen.findByText('Issue is overdue')).toBeInTheDocument()
+    expect(await screen.findByText('Issue assigned')).toBeInTheDocument()
+    expect(screen.getByText('Issue is overdue')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '担当する' }))
+    await user.click(screen.getAllByRole('button', { name: '担当する' })[0])
     await waitFor(() => expect(mockUpdateIssue).toHaveBeenCalledWith('issue-1', { assignee_id: 'user-1' }))
+
+    await user.click(screen.getByRole('button', { name: '着手する' }))
+    await waitFor(() => expect(mockUpdateIssue).toHaveBeenCalledWith('issue-1', { status: 'in_progress' }))
 
     await user.click(screen.getByRole('button', { name: '優先度を上げる' }))
     await waitFor(() => expect(mockUpdateIssue).toHaveBeenCalledWith('issue-1', { priority: 'critical' }))
+  })
+
+  test('shows info toast when start-work action is already applied', async () => {
+    const user = userEvent.setup()
+    const queryClient = createQueryClient()
+
+    mockGetNotifications.mockResolvedValue([
+      {
+        id: 'notif-1',
+        user_id: 'user-1',
+        issue_id: 'issue-1',
+        type: 'review_ready',
+        message: 'Review is ready',
+        read: false,
+        created_at: '2026-03-26T04:00:00Z',
+      },
+    ])
+    mockGetIssue.mockResolvedValue({
+      id: 'issue-1',
+      project_id: 'project-1',
+      title: 'Issue from notification',
+      priority: 'high',
+      status: 'in_progress',
+    })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NotificationBell />
+      </QueryClientProvider>
+    )
+
+    await user.click(screen.getByRole('button', { name: '通知' }))
+    expect(await screen.findByText('Review is ready')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '着手する' }))
+    await waitFor(() => expect(mockUseToast).toHaveBeenCalledWith('すでに進行中です', 'info'))
   })
 
   test('shows localized notification badges', async () => {

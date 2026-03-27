@@ -148,12 +148,19 @@ export function NotificationBell() {
       action,
     }: {
       issueId: string
-      action: 'assign_to_me' | 'promote_priority'
+      action: 'assign_to_me' | 'promote_priority' | 'start_work'
     }) => {
       const issue = await getIssue(issueId)
       if (action === 'assign_to_me') {
         if (!user) return
         await updateIssue(issueId, { assignee_id: user.id })
+        return
+      }
+      if (action === 'start_work') {
+        if (issue.status === 'in_progress') {
+          throw new Error('already_started')
+        }
+        await updateIssue(issueId, { status: 'in_progress' })
         return
       }
 
@@ -169,6 +176,8 @@ export function NotificationBell() {
       showToast(
         variables.action === 'assign_to_me'
           ? '自分に割り当てました'
+          : variables.action === 'start_work'
+            ? '進行中に更新しました'
           : '優先度を引き上げました',
         'success',
       )
@@ -178,9 +187,15 @@ export function NotificationBell() {
         showToast('すでに最優先です', 'info')
         return
       }
+      if (error.message === 'already_started') {
+        showToast('すでに進行中です', 'info')
+        return
+      }
       showToast(
         variables.action === 'assign_to_me'
           ? '担当更新に失敗しました'
+          : variables.action === 'start_work'
+            ? 'ステータス更新に失敗しました'
           : '優先度更新に失敗しました',
         'error',
       )
@@ -303,6 +318,14 @@ export function NotificationBell() {
                         >
                           担当する
                         </button>
+                        {(n.type === 'assigned' || n.type === 'review_ready') && (
+                          <button
+                            onClick={() => quickActionMutation.mutate({ issueId: n.issue_id!, action: 'start_work' })}
+                            className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-medium text-blue-700 hover:bg-blue-200"
+                          >
+                            着手する
+                          </button>
+                        )}
                         {n.type === 'overdue' && (
                           <button
                             onClick={() => quickActionMutation.mutate({ issueId: n.issue_id!, action: 'promote_priority' })}

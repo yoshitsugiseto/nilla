@@ -453,6 +453,18 @@ async fn complete_sprint_uses_next_available_sprint_when_workspace_rule_is_next_
             && entry["old_value"] == current_sid
             && entry["new_value"] == next_sid
     }));
+
+    let (_, logs) = common::send(
+        &app,
+        common::get(&format!("/api/workspaces/{ws_id}/automation/logs")),
+    )
+    .await;
+    let log_items = logs.as_array().unwrap();
+    assert!(log_items.iter().any(|entry| {
+        entry["rule_type"] == "sprint_carryover"
+            && entry["status"] == "applied"
+            && entry["issue_id"] == issue_id
+    }));
 }
 
 #[tokio::test]

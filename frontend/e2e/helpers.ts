@@ -83,11 +83,28 @@ export const NEXT_SPRINT = {
 }
 
 export const WORKSPACE_AUTOMATION = {
+  workspace_id: 'ws-1',
   notify_on_assignee_change: true,
   notify_on_review_ready: true,
   notify_on_overdue_transition: true,
   sprint_carryover_mode: 'prompt',
 }
+
+export const AUTOMATION_LOGS = [
+  {
+    id: 'log-1',
+    workspace_id: 'ws-1',
+    project_id: 'proj-1',
+    issue_id: 'issue-1',
+    issue_title: 'Login form validation',
+    rule_type: 'review_ready',
+    status: 'sent',
+    target_user_id: 'user-1',
+    target_user_name: 'Test User',
+    message: 'Test User が「Login form validation」をレビュー待ちにしました',
+    created_at: '2026-01-02T10:00:00',
+  },
+]
 
 export async function clearStorage(page: Page) {
   await page.addInitScript(() => {
@@ -118,10 +135,29 @@ export async function mockProjectApi(page: Page) {
   await page.route('**/api/workspaces/ws-1/automation', route =>
     route.fulfill({ json: WORKSPACE_AUTOMATION })
   )
+  await page.route('**/api/workspaces/ws-1/automation/logs', route =>
+    route.fulfill({ json: AUTOMATION_LOGS })
+  )
+  await page.route('**/api/workspaces/ws-1/members', route =>
+    route.fulfill({
+      json: [{
+        workspace_id: 'ws-1',
+        user_id: 'user-1',
+        name: 'Test User',
+        email: 'test@example.com',
+        avatar_url: null,
+        role: 'owner',
+        joined_at: '2026-01-01T00:00:00',
+      }],
+    })
+  )
+  await page.route('**/api/users', route => route.fulfill({ json: [TEST_USER] }))
   await page.route(/\/api\/projects(\?.*)?$/, route => route.fulfill({ json: [PROJECT] }))
   await page.route('**/api/projects/proj-1/members', route => route.fulfill({ json: [PROJECT_MEMBER] }))
   await page.route('**/api/projects/proj-1/sprints', route => route.fulfill({ json: [SPRINT] }))
   await page.route('**/api/projects/proj-1/velocity', route => route.fulfill({ json: [] }))
+  await page.route('**/api/projects/proj-1/labels', route => route.fulfill({ json: [] }))
+  await page.route('**/api/projects/proj-1/templates', route => route.fulfill({ json: [] }))
   await page.route('**/api/projects/proj-1/issues**', route =>
     route.fulfill({ json: [], headers: { 'x-total-count': '0' } })
   )
@@ -132,6 +168,7 @@ export async function mockProjectApi(page: Page) {
 export async function mockIssueDetailApi(page: Page, issue = SEARCH_ISSUE) {
   await page.route(`**/api/issues/${issue.id}`, route => route.fulfill({ json: issue }))
   await page.route(`**/api/issues/${issue.id}/comments`, route => route.fulfill({ json: [] }))
+  await page.route(`**/api/issues/${issue.id}/activity`, route => route.fulfill({ json: [] }))
   await page.route(`**/api/issues/${issue.id}/children`, route => route.fulfill({ json: [] }))
   await page.route(`**/api/issues/${issue.id}/links`, route => route.fulfill({ json: [] }))
   await page.route('**/api/projects/proj-1/labels', route => route.fulfill({ json: [] }))

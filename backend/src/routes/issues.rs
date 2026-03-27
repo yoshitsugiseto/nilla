@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::middleware::UserId,
-    automation::get_project_automation_settings,
+    automation::{get_project_automation_settings, record_automation_execution},
     db::{check_project_access, check_project_permission, ProjectPermission},
     error::{AppError, Result},
     models::issue::{
@@ -184,6 +184,7 @@ async fn insert_activity_log(
 async fn notify_assignee_change(
     pool: &SqlitePool,
     realtime: &RealtimeHub,
+    project_id: &str,
     actor_user_id: &str,
     actor_name: &str,
     enabled: bool,
@@ -192,23 +193,72 @@ async fn notify_assignee_change(
     assignee_id: Option<&str>,
 ) {
     if !enabled {
+        let _ = record_automation_execution(
+            pool,
+            project_id,
+            Some(issue_id),
+            "assignee_change",
+            "disabled",
+            assignee_id,
+            "担当変更通知はワークスペース設定で無効です",
+        )
+        .await;
         return;
     }
 
     let Some(assignee_id) = assignee_id else {
+        let _ = record_automation_execution(
+            pool,
+            project_id,
+            Some(issue_id),
+            "assignee_change",
+            "skipped",
+            None,
+            "担当者がいないため担当変更通知を送信しませんでした",
+        )
+        .await;
         return;
     };
     if assignee_id == actor_user_id {
+        let _ = record_automation_execution(
+            pool,
+            project_id,
+            Some(issue_id),
+            "assignee_change",
+            "skipped",
+            Some(assignee_id),
+            "担当者本人への担当変更通知はスキップしました",
+        )
+        .await;
         return;
     }
 
     let msg = format!("{} が「{}」にアサインしました", actor_name, issue_title);
     create_notification(pool, realtime, assignee_id, issue_id, "assigned", &msg).await;
+    let _ = insert_activity_log(
+        pool,
+        issue_id,
+        "assignee_notification",
+        Some(actor_name),
+        Some(assignee_id),
+    )
+    .await;
+    let _ = record_automation_execution(
+        pool,
+        project_id,
+        Some(issue_id),
+        "assignee_change",
+        "sent",
+        Some(assignee_id),
+        &msg,
+    )
+    .await;
 }
 
 async fn notify_review_ready(
     pool: &SqlitePool,
     realtime: &RealtimeHub,
+    project_id: &str,
     actor_user_id: &str,
     actor_name: &str,
     enabled: bool,
@@ -217,13 +267,43 @@ async fn notify_review_ready(
     assignee_id: Option<&str>,
 ) {
     if !enabled {
+        let _ = record_automation_execution(
+            pool,
+            project_id,
+            Some(issue_id),
+            "review_ready",
+            "disabled",
+            assignee_id,
+            "レビュー待ち通知はワークスペース設定で無効です",
+        )
+        .await;
         return;
     }
 
     let Some(assignee_id) = assignee_id else {
+        let _ = record_automation_execution(
+            pool,
+            project_id,
+            Some(issue_id),
+            "review_ready",
+            "skipped",
+            None,
+            "担当者がいないためレビュー待ち通知を送信しませんでした",
+        )
+        .await;
         return;
     };
     if assignee_id == actor_user_id {
+        let _ = record_automation_execution(
+            pool,
+            project_id,
+            Some(issue_id),
+            "review_ready",
+            "skipped",
+            Some(assignee_id),
+            "担当者本人へのレビュー待ち通知はスキップしました",
+        )
+        .await;
         return;
     }
 
@@ -240,11 +320,22 @@ async fn notify_review_ready(
         Some(assignee_id),
     )
     .await;
+    let _ = record_automation_execution(
+        pool,
+        project_id,
+        Some(issue_id),
+        "review_ready",
+        "sent",
+        Some(assignee_id),
+        &msg,
+    )
+    .await;
 }
 
 async fn notify_overdue(
     pool: &SqlitePool,
     realtime: &RealtimeHub,
+    project_id: &str,
     actor_user_id: &str,
     enabled: bool,
     issue_id: &str,
@@ -252,19 +343,59 @@ async fn notify_overdue(
     assignee_id: Option<&str>,
 ) {
     if !enabled {
+        let _ = record_automation_execution(
+            pool,
+            project_id,
+            Some(issue_id),
+            "overdue",
+            "disabled",
+            assignee_id,
+            "期限超過通知はワークスペース設定で無効です",
+        )
+        .await;
         return;
     }
 
     let Some(assignee_id) = assignee_id else {
+        let _ = record_automation_execution(
+            pool,
+            project_id,
+            Some(issue_id),
+            "overdue",
+            "skipped",
+            None,
+            "担当者がいないため期限超過通知を送信しませんでした",
+        )
+        .await;
         return;
     };
     if assignee_id == actor_user_id {
+        let _ = record_automation_execution(
+            pool,
+            project_id,
+            Some(issue_id),
+            "overdue",
+            "skipped",
+            Some(assignee_id),
+            "担当者本人への期限超過通知はスキップしました",
+        )
+        .await;
         return;
     }
 
     let msg = format!("「{}」が期限超過になりました", issue_title);
     create_notification(pool, realtime, assignee_id, issue_id, "overdue", &msg).await;
     let _ = insert_activity_log(pool, issue_id, "overdue", None, Some(assignee_id)).await;
+    let _ = record_automation_execution(
+        pool,
+        project_id,
+        Some(issue_id),
+        "overdue",
+        "sent",
+        Some(assignee_id),
+        &msg,
+    )
+    .await;
 }
 
 async fn ensure_sprint_belongs_to_project(
@@ -715,6 +846,7 @@ pub async fn update_issue(
         notify_assignee_change(
             &pool,
             &realtime,
+            &project_id,
             &user_id.0,
             &actor_name,
             automation_settings.notify_on_assignee_change,
@@ -728,6 +860,7 @@ pub async fn update_issue(
         notify_review_ready(
             &pool,
             &realtime,
+            &project_id,
             &user_id.0,
             &actor_name,
             automation_settings.notify_on_review_ready,
@@ -741,6 +874,7 @@ pub async fn update_issue(
         notify_overdue(
             &pool,
             &realtime,
+            &project_id,
             &user_id.0,
             automation_settings.notify_on_overdue_transition,
             &id,
@@ -853,6 +987,7 @@ pub async fn update_issue_status(
         notify_review_ready(
             &pool,
             &realtime,
+            &project_id,
             &user_id.0,
             &actor_name,
             automation_settings.notify_on_review_ready,
@@ -866,6 +1001,7 @@ pub async fn update_issue_status(
         notify_overdue(
             &pool,
             &realtime,
+            &project_id,
             &user_id.0,
             automation_settings.notify_on_overdue_transition,
             &id,
@@ -1551,6 +1687,7 @@ pub async fn bulk_update_issues(
             notify_assignee_change(
                 &pool,
                 &realtime,
+                &project_id,
                 &user_id.0,
                 &actor_name,
                 automation_settings.notify_on_assignee_change,
@@ -1568,6 +1705,7 @@ pub async fn bulk_update_issues(
             notify_review_ready(
                 &pool,
                 &realtime,
+                &project_id,
                 &user_id.0,
                 &actor_name,
                 automation_settings.notify_on_review_ready,
@@ -1584,6 +1722,7 @@ pub async fn bulk_update_issues(
             notify_overdue(
                 &pool,
                 &realtime,
+                &project_id,
                 &user_id.0,
                 automation_settings.notify_on_overdue_transition,
                 &item.id,

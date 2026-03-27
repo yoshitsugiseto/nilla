@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { IssueActivity } from '../components/Issue/IssueActivity'
 
@@ -109,6 +110,7 @@ describe('IssueActivity', () => {
   })
 
   test('renders grouped readable activity changes and automation events', async () => {
+    const user = userEvent.setup()
     const queryClient = createQueryClient()
 
     mockGetActivity.mockResolvedValue([
@@ -131,13 +133,21 @@ describe('IssueActivity', () => {
       {
         id: 'activity-3',
         issue_id: 'issue-1',
-        field: 'review_ready',
+        field: 'assignee_notification',
         old_value: 'Alice',
         new_value: 'user-2',
         created_at: '2026-03-27T10:00:00Z',
       },
       {
         id: 'activity-4',
+        issue_id: 'issue-1',
+        field: 'review_ready',
+        old_value: 'Alice',
+        new_value: 'user-2',
+        created_at: '2026-03-27T10:00:00Z',
+      },
+      {
+        id: 'activity-5',
         issue_id: 'issue-1',
         field: 'sprint_carryover',
         old_value: 'sprint-1',
@@ -154,11 +164,24 @@ describe('IssueActivity', () => {
 
     expect(await screen.findByText('確認お願いします')).toBeInTheDocument()
     expect(screen.getByText('まとめて更新')).toBeInTheDocument()
-    expect(screen.getByText('3件')).toBeInTheDocument()
+    expect(screen.getByText('4件')).toBeInTheDocument()
+    expect(screen.getByText('Alice が Bob に担当変更通知を送信')).toBeInTheDocument()
     expect(screen.getByText('Alice が Bob にレビュー待ち通知を送信')).toBeInTheDocument()
     expect(screen.getByText('スプリント完了に伴い Sprint Alpha から Sprint Beta に移動')).toBeInTheDocument()
     expect(screen.getByText('Bob')).toBeInTheDocument()
     expect(screen.getByText('Frontend')).toBeInTheDocument()
     expect(screen.getByText('Bug')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '自動化' }))
+    expect(screen.getByText('Alice が Bob に担当変更通知を送信')).toBeInTheDocument()
+    expect(screen.queryByText('Frontend')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'コメント' }))
+    expect(screen.getByText('確認お願いします')).toBeInTheDocument()
+    expect(screen.queryByText('スプリント完了に伴い Sprint Alpha から Sprint Beta に移動')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '変更' }))
+    expect(screen.getByText('Frontend')).toBeInTheDocument()
+    expect(screen.queryByText('Alice が Bob に担当変更通知を送信')).not.toBeInTheDocument()
   })
 })

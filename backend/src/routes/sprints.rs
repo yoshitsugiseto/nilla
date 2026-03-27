@@ -10,7 +10,9 @@ use uuid::Uuid;
 
 use crate::{
     auth::middleware::UserId,
-    automation::{get_next_carryover_sprint_id, get_project_automation_settings},
+    automation::{
+        get_next_carryover_sprint_id, get_project_automation_settings, record_automation_execution,
+    },
     db::{check_project_access, check_project_permission, ProjectPermission},
     error::{AppError, Result},
     models::sprint::{CreateSprint, Sprint, SprintRow, SprintStatus, UpdateSprint},
@@ -319,12 +321,12 @@ pub async fn complete_sprint(
     .execute(&mut *tx)
     .await?;
 
-    for issue_id in moved_issue_ids {
+    for issue_id in &moved_issue_ids {
         sqlx::query(
             "INSERT INTO activity_logs (id, issue_id, field, old_value, new_value) VALUES (?, ?, 'sprint_carryover', ?, ?)",
         )
         .bind(Uuid::new_v4().to_string())
-        .bind(&issue_id)
+        .bind(issue_id)
         .bind(&id)
         .bind(next_sprint_id.as_deref())
         .execute(&mut *tx)
@@ -339,6 +341,30 @@ pub async fn complete_sprint(
     .await?;
 
     tx.commit().await?;
+
+    let carryover_message = if let Some(next_id) = next_sprint_id.as_deref() {
+        let next_name = sqlx::query_scalar::<_, String>("SELECT name FROM sprints WHERE id = ?")
+            .bind(next_id)
+            .fetch_optional(&pool)
+            .await?
+            .unwrap_or_else(|| "次のスプリント".to_string());
+        format!("未完了イシューを {next_name} へ移動しました")
+    } else {
+        "未完了イシューを Backlog に戻しました".to_string()
+    };
+
+    for issue_id in moved_issue_ids {
+        let _ = record_automation_execution(
+            &pool,
+            &project_id,
+            Some(&issue_id),
+            "sprint_carryover",
+            "applied",
+            None,
+            &carryover_message,
+        )
+        .await;
+    }
 
     let updated = Sprint::from(updated_row);
     broadcast_sprint_event(&pool, &realtime, "sprint.updated", &updated).await;

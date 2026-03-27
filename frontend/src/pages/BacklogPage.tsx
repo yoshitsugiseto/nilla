@@ -400,6 +400,11 @@ export function BacklogPage() {
   const selectVisibleIssues = (ids: string[]) => {
     setBulkSelected(new Set(ids))
   }
+  const retrySkippedIssues = (issueIds: string[]) => {
+    setBulkMode(true)
+    setBulkSelected(new Set(issueIds))
+    setLastBulkResult(null)
+  }
   const { data: issues = [], isLoading } = useQuery({
     queryKey: ['issues', activeProjectId],
     queryFn: () => getIssues(activeProjectId!),
@@ -574,7 +579,11 @@ export function BacklogPage() {
       )}
 
       {lastBulkResult && (
-        <BulkUpdateResultPanel result={lastBulkResult} onDismiss={() => setLastBulkResult(null)} />
+        <BulkUpdateResultPanel
+          result={lastBulkResult}
+          onDismiss={() => setLastBulkResult(null)}
+          onRetrySkipped={retrySkippedIssues}
+        />
       )}
 
       {!isLoading && topLevel.length === 0 && (

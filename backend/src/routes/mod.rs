@@ -132,6 +132,10 @@ pub fn router() -> Router<AppState> {
                 .patch(workspaces::update_workspace_automation),
         )
         .route(
+            "/api/workspaces/{id}/automation/logs",
+            get(workspaces::list_workspace_automation_logs_route),
+        )
+        .route(
             "/api/workspaces/{id}/members",
             get(workspaces::list_members).post(workspaces::add_member),
         )

@@ -67,6 +67,21 @@ pub struct UpdateWorkspaceAutomationSettings {
     pub sprint_carryover_mode: Option<String>,
 }
 
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct WorkspaceAutomationLog {
+    pub id: String,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub issue_id: Option<String>,
+    pub issue_title: Option<String>,
+    pub rule_type: String,
+    pub status: String,
+    pub target_user_id: Option<String>,
+    pub target_user_name: Option<String>,
+    pub message: String,
+    pub created_at: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct UpdateMemberRole {
     pub role: String,

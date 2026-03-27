@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { History, MessageSquare } from 'lucide-react'
 import { getActivity, getComments } from '../../api/issues'
@@ -34,11 +35,14 @@ type TimelineItem =
       items: ActivityItem[]
     }
 
+type ActivityFilter = 'all' | 'comments' | 'changes' | 'automation'
+
 const FIELD_LABELS: Record<string, string> = {
   status: 'ステータス',
   sprint_id: 'スプリント',
   sprint_carryover: 'スプリント移動',
   assignee_id: '担当者',
+  assignee_notification: '担当変更通知',
   priority: '優先度',
   labels: 'ラベル',
   due_date: '期限日',
@@ -60,7 +64,7 @@ const PRIORITY_LABELS: Record<string, string> = {
   low: '低',
 }
 
-const SYSTEM_FIELDS = new Set(['review_ready', 'overdue', 'sprint_carryover'])
+const SYSTEM_FIELDS = new Set(['assignee_notification', 'review_ready', 'overdue', 'sprint_carryover'])
 
 function timelineLabel(field: string) {
   return FIELD_LABELS[field] ?? field
@@ -155,6 +159,8 @@ function systemMessage(
   switch (item.field) {
     case 'review_ready':
       return `${item.old_value ?? '誰か'} が ${resolveMemberName(item.new_value, memberNames)} にレビュー待ち通知を送信`
+    case 'assignee_notification':
+      return `${item.old_value ?? '誰か'} が ${resolveMemberName(item.new_value, memberNames)} に担当変更通知を送信`
     case 'overdue':
       return `${resolveMemberName(item.new_value, memberNames)} に期限超過通知を送信`
     case 'sprint_carryover':
@@ -210,7 +216,24 @@ function groupActivities(items: ActivityItem[]) {
   }, [])
 }
 
+function filterActivityItems(items: ActivityItem[], filter: ActivityFilter) {
+  switch (filter) {
+    case 'changes':
+      return items.filter(item => !SYSTEM_FIELDS.has(item.field))
+    case 'automation':
+      return items.filter(item => SYSTEM_FIELDS.has(item.field))
+    default:
+      return items
+  }
+}
+
+function badgeLabel(items: ActivityItem[]) {
+  const isSystemOnly = items.every(entry => SYSTEM_FIELDS.has(entry.field))
+  return isSystemOnly ? '自動化' : items.length > 1 ? 'まとめて更新' : '変更'
+}
+
 export function IssueActivity({ issueId, projectId }: Props) {
+  const [activeFilter, setActiveFilter] = useState<ActivityFilter>('all')
   const { data: activity = [], isError: activityError } = useQuery({
     queryKey: ['activity', issueId],
     queryFn: () => getActivity(issueId),
@@ -235,22 +258,32 @@ export function IssueActivity({ issueId, projectId }: Props) {
   const memberNames = Object.fromEntries(members.map(member => [member.user_id, member.name]))
   const sprintNames = Object.fromEntries(sprints.map(sprint => [sprint.id, sprint.name]))
 
-  const timeline: TimelineItem[] = [
-    ...comments.map(comment => ({
-      id: comment.id,
-      kind: 'comment' as const,
-      created_at: comment.created_at,
-      author_name: comment.author_name,
-      author_avatar_url: comment.author_avatar_url,
-      body: comment.body,
-    })),
-    ...groupActivities(activity).map(group => ({
-      id: group.id,
-      kind: 'activity_group' as const,
-      created_at: group.created_at,
-      items: group.items,
-    })),
-  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  const commentTimeline: TimelineItem[] = comments.map(comment => ({
+    id: comment.id,
+    kind: 'comment',
+    created_at: comment.created_at,
+    author_name: comment.author_name,
+    author_avatar_url: comment.author_avatar_url,
+    body: comment.body,
+  }))
+  const activityTimeline: TimelineItem[] = groupActivities(activity).map(group => ({
+    id: group.id,
+    kind: 'activity_group',
+    created_at: group.created_at,
+    items: group.items,
+  }))
+  const rawTimeline: TimelineItem[] = [
+    ...commentTimeline,
+    ...activityTimeline,
+  ]
+  const timeline: TimelineItem[] = rawTimeline
+    .filter(item => {
+      if (activeFilter === 'all') return true
+      if (activeFilter === 'comments') return item.kind === 'comment'
+      if (item.kind === 'comment') return false
+      return filterActivityItems(item.items, activeFilter).length > 0
+    })
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
   const groupedTimeline = timeline.reduce<Record<string, TimelineItem[]>>((groups, item) => {
     const key = groupKey(item.created_at)
@@ -261,6 +294,26 @@ export function IssueActivity({ issueId, projectId }: Props) {
 
   return (
     <div className="space-y-4">
+      <div aria-label="タイムラインフィルター" className="flex flex-wrap gap-2">
+        {[
+          { value: 'all' as const, label: 'すべて' },
+          { value: 'comments' as const, label: 'コメント' },
+          { value: 'changes' as const, label: '変更' },
+          { value: 'automation' as const, label: '自動化' },
+        ].map(filter => (
+          <button
+            key={filter.value}
+            onClick={() => setActiveFilter(filter.value)}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              activeFilter === filter.value
+                ? 'bg-blue-100 text-blue-700'
+                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+            }`}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
       {(activityError || commentsError) && (
         <p className="text-sm text-red-400">タイムラインの取得に失敗しました</p>
       )}
@@ -287,23 +340,23 @@ export function IssueActivity({ issueId, projectId }: Props) {
                   </div>
                 </div>
               ) : (() => {
-                  const tone = activityGroupTone(item.items)
-                  const isSystemOnly = item.items.every(entry => SYSTEM_FIELDS.has(entry.field))
-                  const badgeLabel = isSystemOnly ? '自動化' : item.items.length > 1 ? 'まとめて更新' : '変更'
+                  const visibleEntries = filterActivityItems(item.items, activeFilter)
+                  const tone = activityGroupTone(visibleEntries)
+                  const label = badgeLabel(visibleEntries)
 
                   return (
                     <div key={item.id} className={`rounded-xl border p-3 ${tone.container}`}>
                       <div className="mb-2 flex items-center gap-2">
                         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${tone.badge}`}>
-                          <History size={11} /> {badgeLabel}
+                          <History size={11} /> {label}
                         </span>
-                        {item.items.length > 1 && (
-                          <span className={`text-xs font-medium ${tone.summary}`}>{item.items.length}件</span>
+                        {visibleEntries.length > 1 && (
+                          <span className={`text-xs font-medium ${tone.summary}`}>{visibleEntries.length}件</span>
                         )}
                         <span className="text-xs text-gray-400">{timeLabel(item.created_at)}</span>
                       </div>
                       <div className="space-y-2">
-                        {item.items.map(entry => (
+                        {visibleEntries.map(entry => (
                           SYSTEM_FIELDS.has(entry.field) ? (
                             <p key={entry.id} className={`text-sm ${tone.detail}`}>
                               {systemMessage(entry, memberNames, sprintNames)}

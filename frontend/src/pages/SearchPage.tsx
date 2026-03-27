@@ -180,6 +180,11 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
   const selectVisibleIssues = () => {
     setBulkSelected(new Set(issues.map(issue => issue.id)))
   }
+  const retrySkippedIssues = (issueIds: string[]) => {
+    setBulkMode(true)
+    setBulkSelected(new Set(issueIds))
+    setLastBulkResult(null)
+  }
   const applyQuickFilter = (key: (typeof QUICK_FILTERS)[number]['key']) => {
     const nextFilters = { ...filters }
     switch (key) {
@@ -333,7 +338,11 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
         </div>
 
         {lastBulkResult && (
-          <BulkUpdateResultPanel result={lastBulkResult} onDismiss={() => setLastBulkResult(null)} />
+          <BulkUpdateResultPanel
+            result={lastBulkResult}
+            onDismiss={() => setLastBulkResult(null)}
+            onRetrySkipped={retrySkippedIssues}
+          />
         )}
 
         {sharedPresets.length > 0 && (

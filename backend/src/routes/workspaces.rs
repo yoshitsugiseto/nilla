@@ -7,13 +7,13 @@ use sqlx::SqlitePool;
 
 use crate::{
     auth::middleware::UserId,
-    automation::get_workspace_automation_settings,
+    automation::{get_workspace_automation_settings, list_workspace_automation_logs},
     db::{check_project_access, check_project_permission, ProjectPermission},
     error::{AppError, Result},
     models::workspace::{
         AddMember, CreateWorkspace, ProjectMember, UpdateMemberRole, UpdateProjectMemberRole,
         UpdateWorkspace, UpdateWorkspaceAutomationSettings, UserInfo, Workspace,
-        WorkspaceAutomationSettings, WorkspaceMember,
+        WorkspaceAutomationLog, WorkspaceAutomationSettings, WorkspaceMember,
     },
 };
 
@@ -246,6 +246,15 @@ pub async fn update_workspace_automation(
     .await?;
 
     Ok(Json(settings))
+}
+
+pub async fn list_workspace_automation_logs_route(
+    State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<WorkspaceAutomationLog>>> {
+    check_workspace_access(&pool, &user_id.0, &id).await?;
+    Ok(Json(list_workspace_automation_logs(&pool, &id, 20).await?))
 }
 
 pub async fn list_members(

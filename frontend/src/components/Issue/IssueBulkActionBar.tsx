@@ -45,9 +45,11 @@ export function formatBulkUpdateToast(result: BulkUpdateResult) {
 export function BulkUpdateResultPanel({
   result,
   onDismiss,
+  onRetrySkipped,
 }: {
   result: BulkUpdateResult
   onDismiss: () => void
+  onRetrySkipped?: (issueIds: string[]) => void
 }) {
   return (
     <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
@@ -65,7 +67,17 @@ export function BulkUpdateResultPanel({
       </div>
       {result.skipped.length > 0 && (
         <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
-          <p className="text-xs font-medium text-amber-800">スキップ詳細</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-medium text-amber-800">スキップ詳細</p>
+            {onRetrySkipped && (
+              <button
+                onClick={() => onRetrySkipped(result.skipped_ids)}
+                className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-amber-800 hover:bg-amber-100"
+              >
+                スキップ分を再選択
+              </button>
+            )}
+          </div>
           <div className="mt-2 space-y-1 text-xs text-amber-900">
             {result.skipped.map(item => (
               <div key={item.issue_id} className="flex items-center gap-2">

@@ -3,6 +3,7 @@ import type {
   ProjectMember,
   ProjectRole,
   Workspace,
+  WorkspaceAutomationLog,
   WorkspaceAutomationSettings,
   WorkspaceMember,
   User,
@@ -13,6 +14,8 @@ export const createWorkspace = (name: string) => client.post<Workspace>('/worksp
 export const updateWorkspace = (id: string, name: string) => client.put<Workspace>(`/workspaces/${id}`, { name }).then(r => r.data)
 export const getWorkspaceAutomationSettings = (workspaceId: string) =>
   client.get<WorkspaceAutomationSettings>(`/workspaces/${workspaceId}/automation`).then(r => r.data)
+export const getWorkspaceAutomationLogs = (workspaceId: string) =>
+  client.get<WorkspaceAutomationLog[]>(`/workspaces/${workspaceId}/automation/logs`).then(r => r.data)
 export const updateWorkspaceAutomationSettings = (
   workspaceId: string,
   data: Partial<WorkspaceAutomationSettings>

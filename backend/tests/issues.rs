@@ -50,6 +50,14 @@ async fn count_notifications(pool: &SqlitePool, user_id: &str, notif_type: &str)
         .unwrap()
 }
 
+async fn count_automation_logs(pool: &SqlitePool, rule_type: &str) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM automation_execution_logs WHERE rule_type = ?")
+        .bind(rule_type)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
 #[tokio::test]
 async fn create_issue_success() {
     let app = common::setup_app().await;
@@ -1168,6 +1176,7 @@ async fn update_issue_status_to_in_review_creates_review_ready_notification() {
         count_notifications(&pool, common::TEST_USER_B_ID, "review_ready").await,
         1
     );
+    assert_eq!(count_automation_logs(&pool, "review_ready").await, 1);
 
     let (_, activity) = common::send(&app, common::get(&format!("/api/issues/{issue_id}/activity"))).await;
     let items = activity.as_array().unwrap();
@@ -1219,6 +1228,14 @@ async fn update_issue_assignment_respects_workspace_automation_toggle() {
         count_notifications(&pool, common::TEST_USER_B_ID, "assigned").await,
         0
     );
+    assert_eq!(count_automation_logs(&pool, "assignee_change").await, 1);
+
+    let (_, activity) =
+        common::send(&app, common::get(&format!("/api/issues/{issue_id}/activity"))).await;
+    let items = activity.as_array().unwrap();
+    assert!(!items
+        .iter()
+        .any(|entry| entry["field"] == "assignee_notification"));
 }
 
 #[tokio::test]
@@ -1265,10 +1282,55 @@ async fn update_issue_due_date_past_today_creates_overdue_notification() {
         count_notifications(&pool, common::TEST_USER_B_ID, "overdue").await,
         1
     );
+    assert_eq!(count_automation_logs(&pool, "overdue").await, 1);
 
     let (_, activity) = common::send(&app, common::get(&format!("/api/issues/{issue_id}/activity"))).await;
     let items = activity.as_array().unwrap();
     assert!(items.iter().any(|entry| {
         entry["field"] == "overdue" && entry["new_value"] == common::TEST_USER_B_ID
+    }));
+}
+
+#[tokio::test]
+async fn update_issue_assignment_creates_assignee_activity_log() {
+    let (app, pool) = common::setup_app_with_pool().await;
+    common::insert_user_b(&pool).await;
+
+    let ws_id = common::create_workspace(&app).await;
+    let pid = common::create_project_in(&app, "P", "PI", &ws_id).await;
+    add_workspace_member(
+        &pool,
+        &ws_id,
+        common::TEST_USER_B_ID,
+        "Bob",
+        "bob@example.com",
+        "member",
+    )
+    .await;
+
+    let issue_id = common::create_issue(&app, &pid, "Assign me").await;
+
+    let (status, json) = common::send(
+        &app,
+        common::put(
+            &format!("/api/issues/{issue_id}"),
+            json!({ "assignee_id": common::TEST_USER_B_ID }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    assert_eq!(
+        count_notifications(&pool, common::TEST_USER_B_ID, "assigned").await,
+        1
+    );
+    assert_eq!(count_automation_logs(&pool, "assignee_change").await, 1);
+
+    let (_, activity) =
+        common::send(&app, common::get(&format!("/api/issues/{issue_id}/activity"))).await;
+    let items = activity.as_array().unwrap();
+    assert!(items.iter().any(|entry| {
+        entry["field"] == "assignee_notification"
+            && entry["old_value"] == "Test User"
+            && entry["new_value"] == common::TEST_USER_B_ID
     }));
 }
