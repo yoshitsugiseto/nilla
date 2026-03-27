@@ -30,7 +30,10 @@ impl RealtimeHub {
     }
 
     pub async fn publish_workspace(&self, workspace_id: &str, message: String) {
-        if let Some(sender) = self.get_sender(&self.workspace_channels, workspace_id).await {
+        if let Some(sender) = self
+            .get_sender(&self.workspace_channels, workspace_id)
+            .await
+        {
             let _ = sender.send(message);
         }
     }

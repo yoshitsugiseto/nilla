@@ -89,10 +89,11 @@ async fn check_issue_permission(
     issue_id: &str,
     required: ProjectPermission,
 ) -> Result<()> {
-    let project_id: Option<String> = sqlx::query_scalar("SELECT project_id FROM issues WHERE id = ?")
-        .bind(issue_id)
-        .fetch_optional(pool)
-        .await?;
+    let project_id: Option<String> =
+        sqlx::query_scalar("SELECT project_id FROM issues WHERE id = ?")
+            .bind(issue_id)
+            .fetch_optional(pool)
+            .await?;
     let project_id = project_id.ok_or(AppError::NotFound)?;
     check_project_permission(pool, user_id, &project_id, required).await
 }

@@ -45,11 +45,13 @@ async fn validate_ws_ticket(
     ticket: &str,
 ) -> Result<Option<String>, sqlx::Error> {
     let now = Utc::now().to_rfc3339();
-    sqlx::query_scalar("DELETE FROM ws_tickets WHERE ticket = ? AND expires_at > ? RETURNING user_id")
-        .bind(ticket)
-        .bind(&now)
-        .fetch_optional(pool)
-        .await
+    sqlx::query_scalar(
+        "DELETE FROM ws_tickets WHERE ticket = ? AND expires_at > ? RETURNING user_id",
+    )
+    .bind(ticket)
+    .bind(&now)
+    .fetch_optional(pool)
+    .await
 }
 
 async fn consume_ws_ticket(
