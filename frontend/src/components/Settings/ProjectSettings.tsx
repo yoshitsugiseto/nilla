@@ -64,14 +64,14 @@ export function ProjectSettings({ projectId }: Props) {
   })
 
   return (
-    <section className="mt-8">
+    <section>
       <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
         <FolderCog size={13} /> プロジェクト権限
       </h2>
       <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
         <p className="font-medium">
           {isProjectAdmin
-            ? 'このセクションでプロジェクト権限を変更できます。継承に戻すと ワークスペースベースの権限に戻ります。'
+            ? 'このセクションでプロジェクト権限を変更できます。継承に戻すとワークスペース由来の権限に戻ります。'
             : 'プロジェクト権限の変更はプロジェクト管理者のみ実行できます。'}
         </p>
         <p className="mt-1 text-xs text-blue-700">

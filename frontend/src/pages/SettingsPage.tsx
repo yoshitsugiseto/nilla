@@ -26,7 +26,7 @@ export function SettingsPage() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="p-6 max-w-6xl">
+      <div aria-label="settings-shell" className="w-full max-w-4xl p-6">
         <div className="mb-8 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -35,57 +35,61 @@ export function SettingsPage() {
               {activeProjectId && <ProjectRoleBadge role={role} />}
             </div>
             <p className="mt-2 max-w-2xl text-sm text-gray-500">
-              ワークスペース設定に加えて、選択中プロジェクトの権限、ラベル、テンプレートを管理できます。
+              ワークスペースとプロジェクトの境界を分けて、運用に必要な設定をセクションごとに確認できます。
             </p>
           </div>
-
-          {activeProjectId && (
-            <div className={`rounded-2xl border px-4 py-3 text-sm xl:max-w-sm ${
-              canAdminProject
-                ? 'border-blue-200 bg-blue-50 text-blue-900'
-                : 'border-amber-200 bg-amber-50 text-amber-900'
-            }`}>
-              <p className="text-xs font-semibold uppercase tracking-wide opacity-70">権限サマリー</p>
-              <p className="mt-2 font-medium">
-                現在のプロジェクト権限は「{roleMeta?.label ?? '未設定'}」です。
-              </p>
-              <p className={`mt-1 text-xs ${canAdminProject ? 'text-blue-700' : 'text-amber-700'}`}>
-                {canAdminProject
-                  ? 'プロジェクト権限、ラベル、テンプレートをここでまとめて管理できます。'
-                  : roleSummary}
-              </p>
-            </div>
-          )}
         </div>
 
         <div
-          aria-label="settings-columns"
-          className={activeProjectId
-            ? 'grid gap-8 xl:grid-cols-[minmax(18rem,0.95fr)_minmax(0,1.35fr)]'
-            : 'grid gap-8'}
+          aria-label="settings-sections"
+          className="flex flex-col gap-8"
         >
-          <div className="min-w-0">
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">ワークスペース</h2>
+          <section className="min-w-0 rounded-3xl border border-gray-200 bg-gray-50/60 p-5">
+            <div className="mb-5 border-b border-gray-200 pb-4">
+              <h2 className="text-base font-semibold text-gray-900">ワークスペース</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                一般設定、Automation、メンバー管理をワークスペース単位でまとめています。
+              </p>
+            </div>
             <WorkspaceSettings workspaceId={activeWorkspaceId} />
-          </div>
+          </section>
 
           {activeProjectId && (
-            <div className="min-w-0">
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">プロジェクト</h2>
-              <ProjectSettings projectId={activeProjectId} />
-            </div>
+            <section className="min-w-0 rounded-3xl border border-blue-100 bg-blue-50/40 p-5">
+              <div className="mb-5 border-b border-blue-100 pb-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-semibold text-gray-900">プロジェクト</h2>
+                  <ProjectRoleBadge role={role} />
+                </div>
+                <p className="mt-1 text-sm text-gray-500">
+                  プロジェクト権限、プロジェクトラベル、イシューテンプレートをプロジェクト単位で管理します。
+                </p>
+              </div>
+
+              <div className={`mb-6 rounded-2xl border px-4 py-3 text-sm ${
+                canAdminProject
+                  ? 'border-blue-200 bg-white text-blue-900'
+                  : 'border-amber-200 bg-amber-50 text-amber-900'
+              }`}>
+                <p className="text-xs font-semibold uppercase tracking-wide opacity-70">権限サマリー</p>
+                <p className="mt-2 font-medium">
+                  現在のプロジェクト権限は「{roleMeta?.label ?? '未設定'}」です。
+                </p>
+                <p className={`mt-1 text-xs ${canAdminProject ? 'text-blue-700' : 'text-amber-700'}`}>
+                  {canAdminProject
+                    ? 'このセクションから権限、ラベル、テンプレートをまとめて管理できます。'
+                    : roleSummary}
+                </p>
+              </div>
+
+              <div className="space-y-8">
+                <ProjectSettings projectId={activeProjectId} />
+                <LabelSettings projectId={activeProjectId} />
+                <TemplateSettings projectId={activeProjectId} />
+              </div>
+            </section>
           )}
         </div>
-
-        {activeProjectId && (
-          <div
-            aria-label="settings-project-assets"
-            className="mt-8 grid gap-6 xl:grid-cols-[minmax(18rem,0.95fr)_minmax(0,1.35fr)]"
-          >
-            <LabelSettings projectId={activeProjectId} />
-            <TemplateSettings projectId={activeProjectId} />
-          </div>
-        )}
       </div>
     </div>
   )

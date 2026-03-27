@@ -320,7 +320,7 @@ function CompleteSprintDialog({
             <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
             <p className="text-sm text-amber-800">
               <strong>{incompleteIssues.length}件</strong>の未完了イシューがあります。
-              {carryoverMode === 'prompt' ? '移動先を選んでください。' : 'Automation ルールに従って移動します。'}
+              {carryoverMode === 'prompt' ? '移動先を選んでください。' : '自動化ルールに従って移動します。'}
             </p>
           </div>
           {carryoverMode === 'prompt' ? (

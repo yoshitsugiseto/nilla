@@ -231,7 +231,7 @@ export function WorkspaceSettings({ workspaceId }: Props) {
             <label htmlFor="workspace-carryover-mode" className="block text-sm font-medium text-gray-800 mb-1">
               スプリント完了時の未完了イシュー
             </label>
-            <p className="text-xs text-gray-500 mb-2">完了時の carry over 先を workspace の共通ルールとして決めます。</p>
+            <p className="text-xs text-gray-500 mb-2">完了時の carry over 先をワークスペースの共通ルールとして決めます。</p>
             <select
               id="workspace-carryover-mode"
               value={automationSettings?.sprint_carryover_mode ?? 'prompt'}
@@ -244,7 +244,7 @@ export function WorkspaceSettings({ workspaceId }: Props) {
               <option value="next_sprint">次の未完了 sprint に送る</option>
             </select>
             {!isAdmin && (
-              <p className="mt-2 text-xs text-gray-400">Automation 設定の変更は workspace 管理者のみ可能です。</p>
+              <p className="mt-2 text-xs text-gray-400">Automation 設定の変更はワークスペース管理者のみ可能です。</p>
             )}
           </div>
         </div>
