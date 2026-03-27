@@ -161,7 +161,7 @@ export default function App() {
       )}
 
       {pendingOpenIssueId && activeProjectId && (
-        <Modal title={pendingOpenIssueTitle ?? 'Issue Detail'} onClose={() => { setPendingOpenIssueId(null); setPendingOpenIssueTitle(null) }} size="lg">
+        <Modal title={pendingOpenIssueTitle ?? 'イシュー詳細'} onClose={() => { setPendingOpenIssueId(null); setPendingOpenIssueTitle(null) }} size="lg">
           <Suspense fallback={<ContentFallback />}>
             <IssueDetail
               issueId={pendingOpenIssueId}

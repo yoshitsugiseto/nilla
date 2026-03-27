@@ -454,7 +454,7 @@ describe('SprintPage', () => {
 
     expect(await screen.findByLabelText('アクティブスプリントサマリー')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '対象 issue を見る' }))
+    await user.click(screen.getByRole('button', { name: '対象イシューを見る' }))
     expect(onOpenSearch).toHaveBeenCalledWith('', {
       status: '',
       type: '',

@@ -647,7 +647,7 @@ export function SprintPage({
                     onClick={() => openSprintSearch(activeSprint.id)}
                     className="text-xs font-medium text-blue-700 hover:text-blue-800"
                   >
-                    対象 issue を見る
+                    対象イシューを見る
                   </button>
                   {activeSprint.end_date && nowMs && (() => {
                     const deadline = deadlineLabel(activeSprint.end_date, nowMs)
@@ -669,7 +669,7 @@ export function SprintPage({
                       onClick={() => openSprintSearch(activeSprint.id, { status: 'done' })}
                       className="mt-3 text-xs font-medium text-blue-700 hover:text-blue-800"
                     >
-                      完了 issue を見る
+                      完了イシューを見る
                     </button>
                   </div>
                   <div className="rounded-xl border border-blue-100 bg-white p-4">

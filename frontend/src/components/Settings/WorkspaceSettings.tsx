@@ -245,7 +245,7 @@ export function WorkspaceSettings({ workspaceId }: Props) {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-sm font-medium text-gray-800">レビュー待ちを通知</p>
-              <p className="text-xs text-gray-500 mt-1">Issue が `in_review` に変わったときに担当者へ通知します。</p>
+              <p className="text-xs text-gray-500 mt-1">イシューが `in_review` に変わったときに担当者へ通知します。</p>
             </div>
             <input
               aria-label="レビュー待ちを通知"

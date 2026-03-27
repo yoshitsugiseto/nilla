@@ -642,7 +642,7 @@ export function BacklogPage() {
       )}
 
       {creating && canEditProject && (
-        <Modal title={`${QUICK_CREATE_OPTIONS.find(option => option.type === createType)?.label ?? 'Issue'}を作成`} onClose={() => setCreating(false)}>
+        <Modal title={`${QUICK_CREATE_OPTIONS.find(option => option.type === createType)?.label ?? 'イシュー'}を作成`} onClose={() => setCreating(false)}>
           <IssueForm projectId={activeProjectId} defaultType={createType} onClose={() => setCreating(false)} />
         </Modal>
       )}
@@ -653,7 +653,7 @@ export function BacklogPage() {
         const issue = issues.find(i => i.id === detailId)
         return (
           <DetailPanel
-            title={issue ? `#${issue.number} ${issue.title}` : 'Issue Detail'}
+            title={issue ? `#${issue.number} ${issue.title}` : 'イシュー詳細'}
             onClose={() => setDetailId(null)}
           >
             <IssueDetail issueId={detailId} projectId={activeProjectId} onClose={() => setDetailId(null)} />

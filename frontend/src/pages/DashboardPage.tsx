@@ -209,7 +209,7 @@ export function DashboardPage({
                 onClick={() => openSearch({ sprint_id: activeSprint.id })}
                 className="mt-3 text-xs font-medium text-blue-700 hover:text-blue-800"
               >
-                対象 issue を見る
+                対象イシューを見る
               </button>
             </>
           ) : (
@@ -273,12 +273,12 @@ export function DashboardPage({
             <p className={`mt-1 text-2xl font-bold ${openRiskSnapshot.overdueCount > 0 ? 'text-red-600' : 'text-gray-900'}`}>
               {openRiskSnapshot.overdueCount}件
             </p>
-            <p className="mt-1 text-sm text-gray-500">未完了 issue のみ</p>
+            <p className="mt-1 text-sm text-gray-500">未完了イシューのみ</p>
             <button
               onClick={() => openSearch({ due_state: 'overdue' })}
               className="mt-3 text-xs font-medium text-red-700 hover:text-red-800"
             >
-              対象 issue を見る
+              対象イシューを見る
             </button>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4">
@@ -349,7 +349,7 @@ export function DashboardPage({
         const issue = issues.find(i => i.id === detailId)
         return (
           <DetailPanel
-            title={issue ? `#${issue.number} ${issue.title}` : 'Issue詳細'}
+            title={issue ? `#${issue.number} ${issue.title}` : 'イシュー詳細'}
             onClose={() => setDetailId(null)}
           >
             <IssueDetail issueId={detailId} projectId={activeProjectId} />

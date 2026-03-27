@@ -373,7 +373,7 @@ describe('DashboardPage', () => {
 
     await waitFor(() => expect(mockGetIssues).toHaveBeenCalledWith('project-1'))
 
-    await user.click(screen.getByRole('button', { name: '対象 issue を見る' }))
+    await user.click(screen.getByRole('button', { name: '対象イシューを見る' }))
     expect(onOpenSearch).toHaveBeenCalledWith('', {
       status: '',
       type: '',

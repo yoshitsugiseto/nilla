@@ -266,7 +266,7 @@ export function BoardPage() {
       </div>
 
       {creating && canEditProject && (
-        <Modal title={`${QUICK_CREATE_OPTIONS.find(option => option.type === createType)?.label ?? 'Issue'}を作成`} onClose={() => setCreating(false)}>
+        <Modal title={`${QUICK_CREATE_OPTIONS.find(option => option.type === createType)?.label ?? 'イシュー'}を作成`} onClose={() => setCreating(false)}>
           <IssueForm
             projectId={activeProjectId}
             sprintId={currentSprint?.id}

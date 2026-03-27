@@ -687,7 +687,7 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
         const issue = issues.find(i => i.id === detailId)
         return (
           <Modal
-            title={issue ? `#${issue.number} ${issue.title}` : 'Issue詳細'}
+            title={issue ? `#${issue.number} ${issue.title}` : 'イシュー詳細'}
             onClose={() => setDetailId(null)}
             size="lg"
           >
