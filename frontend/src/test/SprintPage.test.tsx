@@ -224,14 +224,14 @@ describe('SprintPage', () => {
     renderSprintPage()
 
     await waitFor(() => expect(mockGetSprints).toHaveBeenCalledWith('project-1'))
-    expect(await screen.findByRole('button', { name: 'Sprintを作成' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'スプリントを作成' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Sprintを作成' }))
+    await user.click(screen.getByRole('button', { name: 'スプリントを作成' }))
     await user.type(screen.getByLabelText('スプリント名 *'), 'Sprint Beta')
     await user.type(screen.getByLabelText('ゴール'), 'Stabilize test coverage')
     await user.type(screen.getByLabelText('開始日 *'), '2026-04-01')
     await user.type(screen.getByLabelText('終了日 *'), '2026-04-14')
-    await user.click(screen.getAllByRole('button', { name: 'Sprintを作成' })[1])
+    await user.click(screen.getAllByRole('button', { name: 'スプリントを作成' })[1])
 
     await waitFor(() =>
       expect(mockCreateSprint).toHaveBeenCalledWith('project-1', {
@@ -302,7 +302,7 @@ describe('SprintPage', () => {
 
     await waitFor(() => expect(mockGetSprints).toHaveBeenCalled())
     expect(await screen.findByText('Sprint Alpha')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Sprintを作成' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'スプリントを作成' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '開始' })).not.toBeInTheDocument()
     expect(screen.queryByTitle('Edit sprint')).not.toBeInTheDocument()
   })
@@ -320,7 +320,7 @@ describe('SprintPage', () => {
 
     await waitFor(() => expect(mockGetSprints).toHaveBeenCalled())
     expect(await screen.findByText('スプリントはまだありません。作成が必要な場合はプロジェクト管理者に依頼してください。')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Sprintを作成' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'スプリントを作成' })).not.toBeInTheDocument()
   })
 
   test('surfaces active sprint risk signals for overdue and unassigned work', async () => {

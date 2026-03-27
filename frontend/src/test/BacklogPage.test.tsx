@@ -230,9 +230,9 @@ describe('BacklogPage', () => {
 
     await waitFor(() => expect(mockGetIssues).toHaveBeenCalledWith('project-1'))
     expect(await screen.findByText('Backlog task')).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: 'Issueを作成' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'イシューを作成' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Issueを作成' }))
+    await user.click(screen.getByRole('button', { name: 'イシューを作成' }))
     expect(screen.getByText('IssueForm:project-1:task')).toBeInTheDocument()
 
     await user.click(screen.getByText('Backlog task'))
@@ -463,7 +463,7 @@ describe('BacklogPage', () => {
 
     await waitFor(() => expect(mockGetIssues).toHaveBeenCalled())
     expect(await screen.findByText('Backlog task')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Issueを作成' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'イシューを作成' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '一括操作' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'イシューを編集' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'イシューを削除' })).not.toBeInTheDocument()

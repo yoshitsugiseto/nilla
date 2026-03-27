@@ -490,7 +490,7 @@ export function BacklogPage() {
       <div className="p-6 max-w-6xl">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold text-gray-900">Backlog</h1>
+          <h1 className="text-xl font-bold text-gray-900">バックログ</h1>
           <ProjectRoleBadge role={role} />
         </div>
         <div className="flex items-center gap-2">
@@ -512,7 +512,7 @@ export function BacklogPage() {
               }}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
             >
-              <Plus size={16} /> Issueを作成
+              <Plus size={16} /> イシューを作成
             </button>
           )}
         </div>
@@ -591,7 +591,7 @@ export function BacklogPage() {
           <p className="text-sm font-medium text-gray-800">まだイシューがありません</p>
           <p className="mt-1 text-sm text-gray-500">
             {canEditProject
-              ? 'まずはタスクかストーリーを1件作成すると、Backlog と Board の流れをすぐ確認できます。'
+              ? 'まずはタスクかストーリーを1件作成すると、バックログとボードの流れをすぐ確認できます。'
               : 'イシューが作成されるとここに一覧表示されます。必要ならプロジェクト管理者に作成を依頼してください。'}
           </p>
         </div>
@@ -624,7 +624,7 @@ export function BacklogPage() {
             ))}
 
             <SprintGroup
-              label="Backlog"
+              label="バックログ"
               droppableId="backlog"
               issues={backlog}
               allIssues={issues}

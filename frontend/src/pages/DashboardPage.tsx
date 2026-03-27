@@ -119,7 +119,7 @@ export function DashboardPage({
     <div className="flex-1 overflow-auto">
       <div className="p-6 max-w-6xl space-y-6">
       <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-        <BarChart3 size={20} /> Dashboard
+        <BarChart3 size={20} /> ダッシュボード
         <ProjectRoleBadge role={role} />
       </h1>
 
@@ -128,14 +128,14 @@ export function DashboardPage({
           <h2 className="text-sm font-semibold text-blue-900">はじめての使い方</h2>
           <p className="mt-1 text-sm text-blue-800">
             {issues.length === 0 && sprints.length === 0
-              ? '最初は「イシューを作る」「スプリントを作る」「Boardで進捗を見る」の順で始めると分かりやすいです。'
+              ? '最初は「イシューを作る」「スプリントを作る」「ボードで進捗を見る」の順で始めると分かりやすいです。'
               : issues.length === 0
-                ? 'スプリントの準備はできています。次は Backlog でイシューを作ると進行を始められます。'
-                : 'イシューはあります。次は Sprints でスプリントを作ると Board が使いやすくなります。'}
+                ? 'スプリントの準備はできています。次はバックログでイシューを作ると進行を始められます。'
+                : 'イシューはあります。次はスプリントで計画を作るとボードが使いやすくなります。'}
           </p>
           <div className="mt-3 grid gap-3 md:grid-cols-3">
             <div className="rounded-xl bg-white p-4">
-              <p className="text-xs font-medium text-gray-500">1. Backlog</p>
+              <p className="text-xs font-medium text-gray-500">1. バックログ</p>
               <p className="mt-1 text-sm text-gray-700">
                 {role === 'viewer'
                   ? '作成されたイシュー一覧を確認できます。'
@@ -143,7 +143,7 @@ export function DashboardPage({
               </p>
             </div>
             <div className="rounded-xl bg-white p-4">
-              <p className="text-xs font-medium text-gray-500">2. Sprints</p>
+              <p className="text-xs font-medium text-gray-500">2. スプリント</p>
               <p className="mt-1 text-sm text-gray-700">
                 {role === 'viewer'
                   ? '進行中スプリントの状況を確認できます。'
@@ -151,7 +151,7 @@ export function DashboardPage({
               </p>
             </div>
             <div className="rounded-xl bg-white p-4">
-              <p className="text-xs font-medium text-gray-500">3. Board</p>
+              <p className="text-xs font-medium text-gray-500">3. ボード</p>
               <p className="mt-1 text-sm text-gray-700">
                 進行中・レビュー待ち・完了の流れを見ながら、毎日の更新を進めます。
               </p>
@@ -257,16 +257,16 @@ export function DashboardPage({
         </div>
         <div className="grid gap-4 md:grid-cols-4">
           <div className="rounded-xl border border-gray-200 bg-white p-4">
-            <p className="text-xs text-gray-500">14日 throughput</p>
+            <p className="text-xs text-gray-500">14日完了件数</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">{throughput14d.issueCount}件</p>
             <p className="mt-1 text-sm text-gray-500">{throughput14d.pointCount}pt 完了</p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4">
-            <p className="text-xs text-gray-500">平均 cycle time</p>
+            <p className="text-xs text-gray-500">平均完了日数</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
               {avgCycle30d != null ? `${avgCycle30d}日` : '—'}
             </p>
-            <p className="mt-1 text-sm text-gray-500">作業開始から完了まで。activity がないものは近似</p>
+            <p className="mt-1 text-sm text-gray-500">作業開始から完了まで。履歴がないものは近似です</p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4">
             <p className="text-xs text-gray-500">期限超過</p>
@@ -309,7 +309,7 @@ export function DashboardPage({
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-gray-700">最近のスプリント傾向</h2>
-            <p className="text-xs text-gray-400">完了済み sprint ごとの throughput を見られます</p>
+            <p className="text-xs text-gray-400">完了済みスプリントごとの完了件数を見られます</p>
           </div>
         </div>
         <VelocityChart projectId={activeProjectId} />

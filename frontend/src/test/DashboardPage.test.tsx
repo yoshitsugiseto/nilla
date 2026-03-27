@@ -118,9 +118,9 @@ describe('DashboardPage', () => {
 
     await waitFor(() => expect(mockGetIssues).toHaveBeenCalledWith('project-1'))
     expect(await screen.findByLabelText('はじめての使い方')).toBeInTheDocument()
-    expect(screen.getByText('1. Backlog')).toBeInTheDocument()
-    expect(screen.getByText('2. Sprints')).toBeInTheDocument()
-    expect(screen.getByText('3. Board')).toBeInTheDocument()
+    expect(screen.getByText('1. バックログ')).toBeInTheDocument()
+    expect(screen.getByText('2. スプリント')).toBeInTheDocument()
+    expect(screen.getByText('3. ボード')).toBeInTheDocument()
   })
 
   test('distinguishes projects with no high-priority issues from completed ones', async () => {

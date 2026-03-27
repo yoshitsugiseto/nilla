@@ -48,7 +48,7 @@ export function SettingsPage() {
             <div className="mb-5 border-b border-gray-200 pb-4">
               <h2 className="text-base font-semibold text-gray-900">ワークスペース</h2>
               <p className="mt-1 text-sm text-gray-500">
-                一般設定、Automation、メンバー管理をワークスペース単位でまとめています。
+                一般設定、自動化、メンバー管理をワークスペース単位でまとめています。
               </p>
             </div>
             <WorkspaceSettings workspaceId={activeWorkspaceId} />

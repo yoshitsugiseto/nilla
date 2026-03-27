@@ -8,10 +8,10 @@ test('selecting a project shows navigation items', async ({ page }) => {
 
   await page.getByRole('button', { name: /Test Project/ }).click()
 
-  await expect(page.getByRole('button', { name: 'Dashboard', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Board', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Backlog', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Sprints', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'ダッシュボード', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'ボード', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'バックログ', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'スプリント', exact: true })).toBeVisible()
 })
 
 test('clicking Board nav renders main content', async ({ page }) => {
@@ -20,7 +20,7 @@ test('clicking Board nav renders main content', async ({ page }) => {
   await withProject(page)
   await page.goto('/')
 
-  await page.getByRole('button', { name: 'Board', exact: true }).click()
+  await page.getByRole('button', { name: 'ボード', exact: true }).click()
 
   await expect(page.locator('main')).toBeVisible()
 })

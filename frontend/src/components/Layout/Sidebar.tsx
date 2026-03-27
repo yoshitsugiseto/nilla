@@ -95,24 +95,24 @@ export function Sidebar({
   }
 
   const navItems: { id: Page; icon: React.ReactNode; label: string }[] = [
-    { id: 'dashboard', icon: <LayoutDashboard size={16} />, label: 'Dashboard' },
-    { id: 'board', icon: <Trello size={16} />, label: 'Board' },
-    { id: 'backlog', icon: <List size={16} />, label: 'Backlog' },
-    { id: 'sprints', icon: <Zap size={16} />, label: 'Sprints' },
-    { id: 'settings', icon: <Settings size={16} />, label: 'Settings' },
+    { id: 'dashboard', icon: <LayoutDashboard size={16} />, label: 'ダッシュボード' },
+    { id: 'board', icon: <Trello size={16} />, label: 'ボード' },
+    { id: 'backlog', icon: <List size={16} />, label: 'バックログ' },
+    { id: 'sprints', icon: <Zap size={16} />, label: 'スプリント' },
+    { id: 'settings', icon: <Settings size={16} />, label: '設定' },
   ]
 
   return (
     <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">
       <div className="px-4 py-4 border-b border-gray-200">
         <h1 className="text-lg font-bold text-blue-600 tracking-tight">Nilla</h1>
-        <p className="text-xs text-gray-400">Sprint Manager</p>
+        <p className="text-xs text-gray-400">スプリント管理</p>
       </div>
 
       {/* Workspace selector */}
       <div className="px-3 py-3 border-b border-gray-200">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Workspace</span>
+          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">ワークスペース</span>
           <button onClick={() => setCreatingWorkspace(true)} aria-label="ワークスペースを作成" className="text-gray-400 hover:text-blue-600">
             <Plus size={14} />
           </button>
@@ -155,7 +155,7 @@ export function Sidebar({
             </button>
           ))}
           {projects.length === 0 && (
-            <p className="text-xs text-gray-400 px-2 py-1">No projects yet</p>
+            <p className="text-xs text-gray-400 px-2 py-1">プロジェクトはまだありません</p>
           )}
         </div>
       </div>

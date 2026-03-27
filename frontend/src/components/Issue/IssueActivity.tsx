@@ -101,7 +101,7 @@ function resolveMemberName(value: string | null, memberNames: Record<string, str
 }
 
 function resolveSprintName(value: string | null, sprintNames: Record<string, string>) {
-  if (!value) return 'Backlog'
+  if (!value) return 'バックログ'
   return sprintNames[value] ?? value
 }
 

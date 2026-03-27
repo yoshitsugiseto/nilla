@@ -458,7 +458,7 @@ export function IssueDetail({ issueId, projectId }: Props) {
               tab === 'activity' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <Clock size={14} /> アクティビティ
+            <Clock size={14} /> 更新履歴
           </button>
         </div>
 
@@ -542,7 +542,7 @@ export function IssueDetail({ issueId, projectId }: Props) {
               aria-label="スプリント"
               className="w-full border border-gray-200 rounded px-2 py-1 text-sm"
             >
-              <option value="">Backlog</option>
+              <option value="">バックログ</option>
               {sprintOptions.map(sprint => (
                 <option key={sprint.id} value={sprint.id}>
                   {sprint.name}

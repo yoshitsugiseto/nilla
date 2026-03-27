@@ -144,10 +144,10 @@ export function IssueBulkActionBar({
         className="rounded border border-gray-200 px-2 py-1 text-sm"
       >
         <option value={BULK_SELECT_PLACEHOLDER}>ステータス変更...</option>
-        <option value="todo">Todo</option>
-        <option value="in_progress">In Progress</option>
-        <option value="in_review">In Review</option>
-        <option value="done">Done</option>
+        <option value="todo">未着手</option>
+        <option value="in_progress">進行中</option>
+        <option value="in_review">レビュー中</option>
+        <option value="done">完了</option>
       </select>
       <select
         defaultValue={BULK_SELECT_PLACEHOLDER}
@@ -159,7 +159,7 @@ export function IssueBulkActionBar({
         className="rounded border border-gray-200 px-2 py-1 text-sm"
       >
         <option value={BULK_SELECT_PLACEHOLDER}>スプリント変更...</option>
-        <option value="backlog">Backlog</option>
+        <option value="backlog">バックログ</option>
         {sprints
           .filter(sprint => sprint.status !== 'completed')
           .map(sprint => (

@@ -8,7 +8,7 @@ test('completing a sprint shows the report modal', async ({ page }) => {
   await withProject(page)
   await page.goto('/')
 
-  await page.getByRole('button', { name: 'Sprints', exact: true }).click()
+  await page.getByRole('button', { name: 'スプリント', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Sprint Active' })).toBeVisible()
 
   await page.getByRole('button', { name: '完了', exact: true }).click()

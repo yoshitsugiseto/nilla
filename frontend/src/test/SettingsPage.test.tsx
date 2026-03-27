@@ -56,7 +56,7 @@ describe('SettingsPage', () => {
     expect(screen.getByText('権限サマリー')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'ワークスペース' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'プロジェクト' })).toBeInTheDocument()
-    expect(screen.getByText('一般設定、Automation、メンバー管理をワークスペース単位でまとめています。')).toBeInTheDocument()
+    expect(screen.getByText('一般設定、自動化、メンバー管理をワークスペース単位でまとめています。')).toBeInTheDocument()
     expect(screen.getByText('プロジェクト権限、プロジェクトラベル、イシューテンプレートをプロジェクト単位で管理します。')).toBeInTheDocument()
   })
 })

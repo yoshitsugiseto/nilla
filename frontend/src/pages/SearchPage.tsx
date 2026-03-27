@@ -507,7 +507,7 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
                 </select>
               </div>
               <div>
-                <label htmlFor={sprintId} className="block text-xs text-gray-500 mb-1">Sprint</label>
+                <label htmlFor={sprintId} className="block text-xs text-gray-500 mb-1">スプリント</label>
                 <select
                   id={sprintId}
                   value={filters.sprint_id}
@@ -515,7 +515,7 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
                   className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
                 >
                   <option value="">すべて</option>
-                  <option value="backlog">Backlog</option>
+                  <option value="backlog">バックログ</option>
                   {sprints.map(sprint => (
                     <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
                   ))}

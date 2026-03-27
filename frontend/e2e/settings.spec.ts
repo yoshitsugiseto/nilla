@@ -7,7 +7,7 @@ test('settings page shows recent automation executions', async ({ page }) => {
   await withProject(page)
   await page.goto('/')
 
-  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  await page.getByRole('button', { name: '設定', exact: true }).click()
 
   await expect(page.getByRole('heading', { name: '設定' })).toBeVisible()
   await expect(page.getByText('最近の自動化実行')).toBeVisible()

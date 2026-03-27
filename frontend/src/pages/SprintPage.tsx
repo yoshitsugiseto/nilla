@@ -286,7 +286,7 @@ function SprintForm({
         <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600">キャンセル</button>
         <button type="submit" disabled={mutation.isPending}
           className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
-          {mutation.isPending ? '保存中...' : sprint ? '保存' : 'Sprintを作成'}
+          {mutation.isPending ? '保存中...' : sprint ? '保存' : 'スプリントを作成'}
         </button>
       </div>
     </form>
@@ -332,7 +332,7 @@ function CompleteSprintDialog({
                 onChange={e => setNextSprintId(e.target.value)}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
               >
-                <option value="">Backlog（未アサイン）</option>
+                <option value="">バックログ（未割り当て）</option>
                 {otherSprints.filter(s => s.id !== sprint.id && s.status !== 'completed').map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
@@ -341,10 +341,10 @@ function CompleteSprintDialog({
           ) : (
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
               {carryoverMode === 'backlog'
-                ? '未完了イシューは Backlog に戻されます。'
+                ? '未完了イシューはバックログに戻されます。'
                 : nextAvailableSprint
                   ? `未完了イシューは「${nextAvailableSprint.name}」へ自動で移動します。`
-                  : '移動可能な次 sprint がないため、未完了イシューは Backlog に戻されます。'}
+                  : '移動可能な次のスプリントがないため、未完了イシューはバックログに戻されます。'}
             </div>
           )}
           <div className="text-xs text-gray-500 space-y-1 max-h-32 overflow-y-auto">
@@ -420,7 +420,7 @@ function SprintCard({
             <button
               onClick={() => setEditing(true)}
               className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-gray-50 text-gray-600 hover:bg-gray-100"
-              title="Edit sprint"
+              title="スプリントを編集"
             >
               <Pencil size={14} />
             </button>
@@ -611,7 +611,7 @@ export function SprintPage({
     <div className="p-6 max-w-6xl">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold text-gray-900">Sprints</h1>
+          <h1 className="text-xl font-bold text-gray-900">スプリント</h1>
           <ProjectRoleBadge role={role} />
         </div>
         <div className="flex items-center gap-2">
@@ -622,7 +622,7 @@ export function SprintPage({
           {canEditProject && (
             <button onClick={() => setCreating(true)}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
-              <Plus size={16} /> Sprintを作成
+              <Plus size={16} /> スプリントを作成
             </button>
           )}
         </div>
@@ -684,11 +684,11 @@ export function SprintPage({
                     </button>
                   </div>
                   <div className="rounded-xl border border-blue-100 bg-white p-4">
-                    <p className="text-xs text-gray-500">平均 cycle time</p>
+                    <p className="text-xs text-gray-500">平均完了日数</p>
                     <p className="mt-1 text-2xl font-bold text-gray-900">
                       {activeSprintSnapshot.avgCycleDays != null ? `${activeSprintSnapshot.avgCycleDays}日` : '—'}
                     </p>
-                    <p className="mt-1 text-sm text-gray-500">作業開始から完了まで。activity がないものは近似</p>
+                    <p className="mt-1 text-sm text-gray-500">作業開始から完了まで。履歴がないものは近似です</p>
                     <button
                       onClick={() => openSprintSearch(activeSprint.id, { status: 'done' })}
                       className="mt-3 text-xs font-medium text-blue-700 hover:text-blue-800"
@@ -834,7 +834,7 @@ export function SprintPage({
       )}
 
       {creating && canEditProject && (
-        <Modal title="Sprintを作成" onClose={() => setCreating(false)}>
+        <Modal title="スプリントを作成" onClose={() => setCreating(false)}>
           <SprintForm projectId={activeProjectId} onClose={() => setCreating(false)} />
         </Modal>
       )}

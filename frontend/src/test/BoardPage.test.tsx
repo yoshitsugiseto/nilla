@@ -151,6 +151,6 @@ describe('BoardPage', () => {
     renderBoardPage()
 
     expect(await screen.findByText('スプリントがまだありません')).toBeInTheDocument()
-    expect(screen.getByText('最初の流れは「Sprints でスプリント作成 → Board で進捗確認」です。編集権限がない場合はプロジェクト管理者に作成を依頼してください。')).toBeInTheDocument()
+    expect(screen.getByText('最初の流れは「スプリントを作成 → ボードで進捗確認」です。編集権限がない場合はプロジェクト管理者に作成を依頼してください。')).toBeInTheDocument()
   })
 })

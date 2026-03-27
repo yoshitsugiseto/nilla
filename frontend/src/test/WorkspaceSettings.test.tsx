@@ -222,7 +222,7 @@ describe('WorkspaceSettings', () => {
 
     const { invalidateQueriesSpy } = renderWorkspaceSettings()
 
-    await screen.findByText('Automation')
+    await screen.findByText('自動化')
     await user.click(screen.getByLabelText('レビュー待ちを通知'))
 
     await waitFor(() =>

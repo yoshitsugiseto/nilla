@@ -225,12 +225,12 @@ export function WorkspaceSettings({ workspaceId }: Props) {
       </section>
 
       <section className="mb-8">
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Automation</h2>
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">自動化</h2>
         <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-sm font-medium text-gray-800">担当変更を通知</p>
-              <p className="text-xs text-gray-500 mt-1">担当者が変わったときに新しい assignee へ通知します。</p>
+              <p className="text-xs text-gray-500 mt-1">担当者が変わったときに新しい担当者へ通知します。</p>
             </div>
             <input
               aria-label="担当変更を通知"
@@ -245,7 +245,7 @@ export function WorkspaceSettings({ workspaceId }: Props) {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-sm font-medium text-gray-800">レビュー待ちを通知</p>
-              <p className="text-xs text-gray-500 mt-1">イシューが `in_review` に変わったときに担当者へ通知します。</p>
+              <p className="text-xs text-gray-500 mt-1">イシューがレビュー中 (`in_review`) に変わったときに担当者へ通知します。</p>
             </div>
             <input
               aria-label="レビュー待ちを通知"
@@ -276,7 +276,7 @@ export function WorkspaceSettings({ workspaceId }: Props) {
             <label htmlFor="workspace-carryover-mode" className="block text-sm font-medium text-gray-800 mb-1">
               スプリント完了時の未完了イシュー
             </label>
-            <p className="text-xs text-gray-500 mb-2">完了時の carry over 先をワークスペースの共通ルールとして決めます。</p>
+            <p className="text-xs text-gray-500 mb-2">完了時の繰り越し先をワークスペースの共通ルールとして決めます。</p>
             <select
               id="workspace-carryover-mode"
               value={automationSettings?.sprint_carryover_mode ?? 'prompt'}
@@ -285,8 +285,8 @@ export function WorkspaceSettings({ workspaceId }: Props) {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             >
               <option value="prompt">毎回選ぶ</option>
-              <option value="backlog">常に Backlog に戻す</option>
-              <option value="next_sprint">次の未完了 sprint に送る</option>
+              <option value="backlog">常にバックログに戻す</option>
+              <option value="next_sprint">次の未完了スプリントに送る</option>
             </select>
             {!isAdmin && (
               <p className="mt-2 text-xs text-gray-400">自動化設定の変更はワークスペース管理者のみ可能です。</p>

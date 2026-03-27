@@ -67,11 +67,11 @@ export function BoardPage() {
     return (
       <div className="flex-1 overflow-auto">
         <div className="p-6 max-w-6xl">
-          <h1 className="text-xl font-bold text-gray-900 mb-6">Board</h1>
+          <h1 className="text-xl font-bold text-gray-900 mb-6">ボード</h1>
           <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6">
             <p className="text-base font-medium text-gray-800">スプリントがまだありません</p>
             <p className="mt-2 text-sm text-gray-500">
-              最初の流れは「Sprints でスプリント作成 → Board で進捗確認」です。編集権限がない場合はプロジェクト管理者に作成を依頼してください。
+              最初の流れは「スプリントを作成 → ボードで進捗確認」です。編集権限がない場合はプロジェクト管理者に作成を依頼してください。
             </p>
           </div>
         </div>
@@ -215,7 +215,7 @@ export function BoardPage() {
                   }}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
                 >
-                  <Plus size={16} /> Issueを作成
+                  <Plus size={16} /> イシューを作成
                 </button>
               </>
             )}
