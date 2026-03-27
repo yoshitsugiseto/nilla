@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::middleware::UserId,
+    automation::{get_next_carryover_sprint_id, get_project_automation_settings},
     db::{check_project_access, check_project_permission, ProjectPermission},
     error::{AppError, Result},
     models::sprint::{CreateSprint, Sprint, SprintRow, SprintStatus, UpdateSprint},
@@ -286,7 +287,16 @@ pub async fn complete_sprint(
         ));
     }
 
-    let next_sprint_id = body.and_then(|b| b.next_sprint_id.clone());
+    let automation_settings = get_project_automation_settings(&pool, &project_id).await?;
+    let requested_next_sprint_id = body.and_then(|b| b.next_sprint_id.clone());
+    let next_sprint_id = if let Some(next_sprint_id) = requested_next_sprint_id {
+        Some(next_sprint_id)
+    } else if automation_settings.sprint_carryover_mode == "next_sprint" {
+        get_next_carryover_sprint_id(&pool, &project_id, &id).await?
+    } else {
+        None
+    };
+
     if let Some(ref next_sprint_id) = next_sprint_id {
         validate_next_sprint_target(&pool, &id, &project_id, next_sprint_id).await?;
     }

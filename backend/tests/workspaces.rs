@@ -223,6 +223,49 @@ async fn test_owner_can_add_member_with_specific_role() {
 }
 
 #[tokio::test]
+async fn test_workspace_automation_defaults_are_returned() {
+    let app = common::setup_app().await;
+    let ws_id = common::create_workspace(&app).await;
+
+    let (status, json) = common::send(
+        &app,
+        common::get(&format!("/api/workspaces/{ws_id}/automation")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["workspace_id"], ws_id);
+    assert_eq!(json["notify_on_assignee_change"], true);
+    assert_eq!(json["notify_on_review_ready"], true);
+    assert_eq!(json["notify_on_overdue_transition"], true);
+    assert_eq!(json["sprint_carryover_mode"], "prompt");
+}
+
+#[tokio::test]
+async fn test_workspace_admin_can_update_automation_settings() {
+    let app = common::setup_app().await;
+    let ws_id = common::create_workspace(&app).await;
+
+    let (status, json) = common::send(
+        &app,
+        common::patch(
+            &format!("/api/workspaces/{ws_id}/automation"),
+            json!({
+                "notify_on_assignee_change": false,
+                "notify_on_review_ready": false,
+                "notify_on_overdue_transition": false,
+                "sprint_carryover_mode": "next_sprint"
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["notify_on_assignee_change"], false);
+    assert_eq!(json["notify_on_review_ready"], false);
+    assert_eq!(json["notify_on_overdue_transition"], false);
+    assert_eq!(json["sprint_carryover_mode"], "next_sprint");
+}
+
+#[tokio::test]
 async fn test_owner_can_remove_member() {
     let (app, pool) = common::setup_app_with_pool().await;
     common::insert_user_b(&pool).await;
@@ -472,7 +515,11 @@ async fn test_project_viewer_can_read_but_cannot_create_issue() {
     .await;
 
     let token_b = common::token_for(common::TEST_USER_B_ID);
-    let (status, _) = common::send(&app, common::get_as(&format!("/api/projects/{pid}"), &token_b)).await;
+    let (status, _) = common::send(
+        &app,
+        common::get_as(&format!("/api/projects/{pid}"), &token_b),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
 
     let (status, _) = common::send(

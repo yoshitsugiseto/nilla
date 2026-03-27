@@ -118,6 +118,11 @@ pub fn router() -> Router<AppState> {
             get(workspaces::get_workspace).put(workspaces::update_workspace),
         )
         .route(
+            "/api/workspaces/{id}/automation",
+            get(workspaces::get_workspace_automation)
+                .patch(workspaces::update_workspace_automation),
+        )
+        .route(
             "/api/workspaces/{id}/members",
             get(workspaces::list_members).post(workspaces::add_member),
         )

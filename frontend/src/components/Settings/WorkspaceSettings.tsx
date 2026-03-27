@@ -3,9 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Trash2, Crown, Shield, User as UserIcon, Eye, Pencil, Check, X, UserPlus } from 'lucide-react'
 import {
   getWorkspaceMembers,
+  getWorkspaceAutomationSettings,
   addWorkspaceMember,
   removeWorkspaceMember,
   updateMemberRole,
+  updateWorkspaceAutomationSettings,
   updateWorkspace,
   getUsers,
 } from '../../api/workspaces'
@@ -13,6 +15,7 @@ import { Avatar } from '../common/Avatar'
 import { useToast } from '../common/useToast'
 import { useAuthStore } from '../../store/auth'
 import { useAppStore } from '../../store'
+import type { SprintCarryoverMode } from '../../types'
 
 type Role = 'owner' | 'admin' | 'member' | 'viewer'
 
@@ -54,6 +57,11 @@ export function WorkspaceSettings({ workspaceId }: Props) {
   const { data: allUsers = [] } = useQuery({
     queryKey: ['users'],
     queryFn: getUsers,
+  })
+  const { data: automationSettings } = useQuery({
+    queryKey: ['workspace-automation', workspaceId],
+    queryFn: () => getWorkspaceAutomationSettings(workspaceId),
+    enabled: !!workspaceId,
   })
 
   const memberIds = new Set(members.map(m => m.user_id))
@@ -108,6 +116,19 @@ export function WorkspaceSettings({ workspaceId }: Props) {
     },
     onError: () => showToast('削除に失敗しました', 'error'),
   })
+  const automationMutation = useMutation({
+    mutationFn: (data: {
+      notify_on_assignee_change?: boolean
+      notify_on_review_ready?: boolean
+      notify_on_overdue_transition?: boolean
+      sprint_carryover_mode?: SprintCarryoverMode
+    }) => updateWorkspaceAutomationSettings(workspaceId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['workspace-automation', workspaceId] })
+      showToast('Automation 設定を更新しました', 'success')
+    },
+    onError: () => showToast('Automation 設定の更新に失敗しました', 'error'),
+  })
 
   const workspace = qc.getQueryData<{ id: string; name: string }[]>(['workspaces'])
     ?.find(w => w.id === workspaceId)
@@ -155,6 +176,77 @@ export function WorkspaceSettings({ workspaceId }: Props) {
               )}
             </div>
           )}
+        </div>
+      </section>
+
+      <section className="mb-8">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Automation</h2>
+        <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-800">担当変更を通知</p>
+              <p className="text-xs text-gray-500 mt-1">担当者が変わったときに新しい assignee へ通知します。</p>
+            </div>
+            <input
+              aria-label="担当変更を通知"
+              type="checkbox"
+              checked={automationSettings?.notify_on_assignee_change ?? true}
+              disabled={!isAdmin || automationMutation.isPending || !automationSettings}
+              onChange={e => automationMutation.mutate({ notify_on_assignee_change: e.target.checked })}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+            />
+          </div>
+
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-800">レビュー待ちを通知</p>
+              <p className="text-xs text-gray-500 mt-1">Issue が `in_review` に変わったときに担当者へ通知します。</p>
+            </div>
+            <input
+              aria-label="レビュー待ちを通知"
+              type="checkbox"
+              checked={automationSettings?.notify_on_review_ready ?? true}
+              disabled={!isAdmin || automationMutation.isPending || !automationSettings}
+              onChange={e => automationMutation.mutate({ notify_on_review_ready: e.target.checked })}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+            />
+          </div>
+
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-800">期限超過を通知</p>
+              <p className="text-xs text-gray-500 mt-1">期限切れに遷移したタイミングで担当者へ通知します。</p>
+            </div>
+            <input
+              aria-label="期限超過を通知"
+              type="checkbox"
+              checked={automationSettings?.notify_on_overdue_transition ?? true}
+              disabled={!isAdmin || automationMutation.isPending || !automationSettings}
+              onChange={e => automationMutation.mutate({ notify_on_overdue_transition: e.target.checked })}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="workspace-carryover-mode" className="block text-sm font-medium text-gray-800 mb-1">
+              スプリント完了時の未完了イシュー
+            </label>
+            <p className="text-xs text-gray-500 mb-2">完了時の carry over 先を workspace の共通ルールとして決めます。</p>
+            <select
+              id="workspace-carryover-mode"
+              value={automationSettings?.sprint_carryover_mode ?? 'prompt'}
+              disabled={!isAdmin || automationMutation.isPending || !automationSettings}
+              onChange={e => automationMutation.mutate({ sprint_carryover_mode: e.target.value as SprintCarryoverMode })}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              <option value="prompt">毎回選ぶ</option>
+              <option value="backlog">常に Backlog に戻す</option>
+              <option value="next_sprint">次の未完了 sprint に送る</option>
+            </select>
+            {!isAdmin && (
+              <p className="mt-2 text-xs text-gray-400">Automation 設定の変更は workspace 管理者のみ可能です。</p>
+            )}
+          </div>
         </div>
       </section>
 
@@ -230,6 +322,7 @@ export function WorkspaceSettings({ workspaceId }: Props) {
             ) : (
               <div className="flex items-center gap-2">
                 <select
+                  aria-label="追加するユーザー"
                   value={addUserId}
                   onChange={e => setAddUserId(e.target.value)}
                   className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -242,6 +335,7 @@ export function WorkspaceSettings({ workspaceId }: Props) {
                   ))}
                 </select>
                 <select
+                  aria-label="追加時ロール"
                   value={addRole}
                   onChange={e => setAddRole(e.target.value as Role)}
                   className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"

@@ -41,6 +41,15 @@ async fn add_workspace_member(
     .unwrap();
 }
 
+async fn count_notifications(pool: &SqlitePool, user_id: &str, notif_type: &str) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND type = ?")
+        .bind(user_id)
+        .bind(notif_type)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
 #[tokio::test]
 async fn create_issue_success() {
     let app = common::setup_app().await;
@@ -510,7 +519,11 @@ async fn viewer_can_get_issue_detail_but_cannot_update_issue() {
     let iid = common::create_issue(&app, &pid, "Viewer readable").await;
     let viewer_token = common::token_for(common::TEST_USER_B_ID);
 
-    let (status, json) = common::send(&app, common::get_as(&format!("/api/issues/{iid}"), &viewer_token)).await;
+    let (status, json) = common::send(
+        &app,
+        common::get_as(&format!("/api/issues/{iid}"), &viewer_token),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["title"], "Viewer readable");
 
@@ -899,13 +912,56 @@ async fn bulk_update_can_change_priority_and_labels() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let items = json.as_array().unwrap();
+    assert_eq!(json["updated_count"], 1);
+    assert_eq!(json["skipped_ids"], json!([]));
+    let items = json["items"].as_array().unwrap();
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["priority"], "high");
     let labels = items[0]["labels"].as_array().unwrap();
     assert_eq!(labels.len(), 2);
     assert!(labels.iter().any(|label| label == "Frontend"));
     assert!(labels.iter().any(|label| label == "Backend"));
+}
+
+#[tokio::test]
+async fn bulk_update_tracks_due_date_and_skipped_ids_in_result() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "PI").await;
+    let iid = common::create_issue(&app, &pid, "Issue").await;
+
+    let (status, json) = common::send(
+        &app,
+        common::patch(
+            &format!("/api/projects/{pid}/issues/bulk"),
+            json!({
+                "issue_ids": [iid, "missing-id"],
+                "status": "done",
+                "due_date": "2026-03-10"
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["updated_count"], 1);
+    assert_eq!(json["skipped_ids"], json!(["missing-id"]));
+    let items = json["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["status"], "done");
+    assert_eq!(items[0]["due_date"], "2026-03-10");
+
+    let (status, activity_json) =
+        common::send(&app, common::get(&format!("/api/issues/{iid}/activity"))).await;
+    assert_eq!(status, StatusCode::OK);
+    let activity = activity_json.as_array().unwrap();
+    assert_eq!(activity.len(), 2);
+    assert!(activity.iter().any(|entry| {
+        entry["field"] == "status" && entry["old_value"] == "todo" && entry["new_value"] == "done"
+    }));
+    assert!(activity.iter().any(|entry| {
+        entry["field"] == "due_date"
+            && entry["old_value"].is_null()
+            && entry["new_value"] == "2026-03-10"
+    }));
 }
 
 #[tokio::test]
@@ -1011,4 +1067,138 @@ async fn add_and_list_comments() {
     let (_, comments) =
         common::send(&app, common::get(&format!("/api/issues/{iid}/comments"))).await;
     assert_eq!(comments.as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn update_issue_status_to_in_review_creates_review_ready_notification() {
+    let (app, pool) = common::setup_app_with_pool().await;
+    common::insert_user_b(&pool).await;
+
+    let ws_id = common::create_workspace(&app).await;
+    let pid = common::create_project_in(&app, "P", "PI", &ws_id).await;
+    add_workspace_member(
+        &pool,
+        &ws_id,
+        common::TEST_USER_B_ID,
+        "Reviewer",
+        "reviewer@example.com",
+        "member",
+    )
+    .await;
+
+    let (_, issue) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({
+                "title": "Needs review",
+                "assignee_id": common::TEST_USER_B_ID
+            }),
+        ),
+    )
+    .await;
+    let issue_id = issue["id"].as_str().unwrap();
+
+    let (status, json) = common::send(
+        &app,
+        common::patch(
+            &format!("/api/issues/{issue_id}/status"),
+            json!({ "status": "in_review" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    assert_eq!(
+        count_notifications(&pool, common::TEST_USER_B_ID, "review_ready").await,
+        1
+    );
+}
+
+#[tokio::test]
+async fn update_issue_assignment_respects_workspace_automation_toggle() {
+    let (app, pool) = common::setup_app_with_pool().await;
+    common::insert_user_b(&pool).await;
+
+    let ws_id = common::create_workspace(&app).await;
+    let pid = common::create_project_in(&app, "P", "PI", &ws_id).await;
+    add_workspace_member(
+        &pool,
+        &ws_id,
+        common::TEST_USER_B_ID,
+        "Bob",
+        "bob@example.com",
+        "member",
+    )
+    .await;
+
+    common::send(
+        &app,
+        common::patch(
+            &format!("/api/workspaces/{ws_id}/automation"),
+            json!({ "notify_on_assignee_change": false }),
+        ),
+    )
+    .await;
+
+    let issue_id = common::create_issue(&app, &pid, "Assignment toggle").await;
+
+    let (status, json) = common::send(
+        &app,
+        common::put(
+            &format!("/api/issues/{issue_id}"),
+            json!({ "assignee_id": common::TEST_USER_B_ID }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    assert_eq!(
+        count_notifications(&pool, common::TEST_USER_B_ID, "assigned").await,
+        0
+    );
+}
+
+#[tokio::test]
+async fn update_issue_due_date_past_today_creates_overdue_notification() {
+    let (app, pool) = common::setup_app_with_pool().await;
+    common::insert_user_b(&pool).await;
+
+    let ws_id = common::create_workspace(&app).await;
+    let pid = common::create_project_in(&app, "P", "PI", &ws_id).await;
+    add_workspace_member(
+        &pool,
+        &ws_id,
+        common::TEST_USER_B_ID,
+        "Bob",
+        "bob@example.com",
+        "member",
+    )
+    .await;
+
+    let (_, issue) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({
+                "title": "Overdue soon",
+                "assignee_id": common::TEST_USER_B_ID
+            }),
+        ),
+    )
+    .await;
+    let issue_id = issue["id"].as_str().unwrap();
+
+    let overdue_date = (chrono::Utc::now().date_naive() - chrono::Duration::days(1)).to_string();
+    let (status, json) = common::send(
+        &app,
+        common::put(
+            &format!("/api/issues/{issue_id}"),
+            json!({ "due_date": overdue_date }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    assert_eq!(
+        count_notifications(&pool, common::TEST_USER_B_ID, "overdue").await,
+        1
+    );
 }

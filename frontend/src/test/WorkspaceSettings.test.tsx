@@ -5,21 +5,25 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { WorkspaceSettings } from '../components/Settings/WorkspaceSettings'
 import { useAuthStore } from '../store/auth'
 import { useAppStore } from '../store'
-import type { User, WorkspaceMember } from '../types'
+import type { User, WorkspaceAutomationSettings, WorkspaceMember } from '../types'
 
 const {
   mockGetWorkspaceMembers,
+  mockGetWorkspaceAutomationSettings,
   mockAddWorkspaceMember,
   mockRemoveWorkspaceMember,
   mockUpdateMemberRole,
+  mockUpdateWorkspaceAutomationSettings,
   mockUpdateWorkspace,
   mockGetUsers,
   mockShowToast,
 } = vi.hoisted(() => ({
   mockGetWorkspaceMembers: vi.fn(),
+  mockGetWorkspaceAutomationSettings: vi.fn(),
   mockAddWorkspaceMember: vi.fn(),
   mockRemoveWorkspaceMember: vi.fn(),
   mockUpdateMemberRole: vi.fn(),
+  mockUpdateWorkspaceAutomationSettings: vi.fn(),
   mockUpdateWorkspace: vi.fn(),
   mockGetUsers: vi.fn(),
   mockShowToast: vi.fn(),
@@ -27,9 +31,11 @@ const {
 
 vi.mock('../api/workspaces', () => ({
   getWorkspaceMembers: mockGetWorkspaceMembers,
+  getWorkspaceAutomationSettings: mockGetWorkspaceAutomationSettings,
   addWorkspaceMember: mockAddWorkspaceMember,
   removeWorkspaceMember: mockRemoveWorkspaceMember,
   updateMemberRole: mockUpdateMemberRole,
+  updateWorkspaceAutomationSettings: mockUpdateWorkspaceAutomationSettings,
   updateWorkspace: mockUpdateWorkspace,
   getUsers: mockGetUsers,
 }))
@@ -71,6 +77,19 @@ function makeUser(overrides: Partial<User> = {}): User {
   }
 }
 
+function makeAutomationSettings(
+  overrides: Partial<WorkspaceAutomationSettings> = {}
+): WorkspaceAutomationSettings {
+  return {
+    workspace_id: 'workspace-1',
+    notify_on_assignee_change: true,
+    notify_on_review_ready: true,
+    notify_on_overdue_transition: true,
+    sprint_carryover_mode: 'prompt',
+    ...overrides,
+  }
+}
+
 function renderWorkspaceSettings() {
   const queryClient = createQueryClient()
   const invalidateQueriesSpy = vi.spyOn(queryClient, 'invalidateQueries')
@@ -87,9 +106,11 @@ function renderWorkspaceSettings() {
 describe('WorkspaceSettings', () => {
   beforeEach(() => {
     mockGetWorkspaceMembers.mockReset()
+    mockGetWorkspaceAutomationSettings.mockReset()
     mockAddWorkspaceMember.mockReset()
     mockRemoveWorkspaceMember.mockReset()
     mockUpdateMemberRole.mockReset()
+    mockUpdateWorkspaceAutomationSettings.mockReset()
     mockUpdateWorkspace.mockReset()
     mockGetUsers.mockReset()
     mockShowToast.mockReset()
@@ -114,6 +135,7 @@ describe('WorkspaceSettings', () => {
       searchPresets: [],
       boardFilters: {},
     })
+    mockGetWorkspaceAutomationSettings.mockResolvedValue(makeAutomationSettings())
   })
 
   afterEach(() => {
@@ -130,7 +152,7 @@ describe('WorkspaceSettings', () => {
     const { invalidateQueriesSpy } = renderWorkspaceSettings()
 
     await screen.findByText('Alice')
-    await user.selectOptions(screen.getAllByRole('combobox')[0], 'user-2')
+    await user.selectOptions(screen.getByLabelText('追加するユーザー'), 'user-2')
     await user.click(screen.getByRole('button', { name: '追加' }))
 
     await waitFor(() =>
@@ -164,5 +186,26 @@ describe('WorkspaceSettings', () => {
     )
     expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['workspace-members', 'workspace-1'] })
     expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['project-members', 'project-1'] })
+  })
+
+  test('updating automation settings calls the workspace automation API', async () => {
+    const user = userEvent.setup()
+    mockGetWorkspaceMembers.mockResolvedValue([makeMember()])
+    mockGetUsers.mockResolvedValue([])
+    mockUpdateWorkspaceAutomationSettings.mockResolvedValue(
+      makeAutomationSettings({ notify_on_review_ready: false })
+    )
+
+    const { invalidateQueriesSpy } = renderWorkspaceSettings()
+
+    await screen.findByText('Automation')
+    await user.click(screen.getByLabelText('レビュー待ちを通知'))
+
+    await waitFor(() =>
+      expect(mockUpdateWorkspaceAutomationSettings).toHaveBeenCalledWith('workspace-1', {
+        notify_on_review_ready: false,
+      })
+    )
+    expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['workspace-automation', 'workspace-1'] })
   })
 })

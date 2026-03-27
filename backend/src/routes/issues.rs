@@ -3,19 +3,21 @@ use axum::{
     http::HeaderMap,
     Extension, Json,
 };
-use chrono::NaiveDateTime;
+use chrono::{NaiveDate, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::{
     auth::middleware::UserId,
+    automation::get_project_automation_settings,
     db::{check_project_access, check_project_permission, ProjectPermission},
     error::{AppError, Result},
     models::issue::{
-        BulkUpdateIssues, CreateIssue, CreateIssueLink, Issue, IssueFilters, IssueLink,
-        IssuePriority, IssueRow, IssueType, UpdateIssue, UpdateIssueSprint, UpdateIssueStatus,
+        BulkUpdateIssues, BulkUpdateResult, CreateIssue, CreateIssueLink, Issue, IssueFilters,
+        IssueLink, IssuePriority, IssueRow, IssueType, UpdateIssue, UpdateIssueSprint,
+        UpdateIssueStatus,
     },
     realtime::RealtimeHub,
 };
@@ -144,6 +146,96 @@ async fn get_project_id_for_issue(pool: &SqlitePool, issue_id: &str) -> Result<S
         .fetch_optional(pool)
         .await?
         .ok_or(AppError::NotFound)
+}
+
+async fn get_user_name(pool: &SqlitePool, user_id: &str) -> String {
+    sqlx::query_scalar("SELECT name FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None)
+        .unwrap_or_else(|| "Unknown".to_string())
+}
+
+fn issue_is_overdue(due_date: Option<NaiveDate>, status: &str, today: NaiveDate) -> bool {
+    status != "done" && due_date.map(|value| value < today).unwrap_or(false)
+}
+
+async fn notify_assignee_change(
+    pool: &SqlitePool,
+    realtime: &RealtimeHub,
+    actor_user_id: &str,
+    actor_name: &str,
+    enabled: bool,
+    issue_id: &str,
+    issue_title: &str,
+    assignee_id: Option<&str>,
+) {
+    if !enabled {
+        return;
+    }
+
+    let Some(assignee_id) = assignee_id else {
+        return;
+    };
+    if assignee_id == actor_user_id {
+        return;
+    }
+
+    let msg = format!("{} が「{}」にアサインしました", actor_name, issue_title);
+    create_notification(pool, realtime, assignee_id, issue_id, "assigned", &msg).await;
+}
+
+async fn notify_review_ready(
+    pool: &SqlitePool,
+    realtime: &RealtimeHub,
+    actor_user_id: &str,
+    actor_name: &str,
+    enabled: bool,
+    issue_id: &str,
+    issue_title: &str,
+    assignee_id: Option<&str>,
+) {
+    if !enabled {
+        return;
+    }
+
+    let Some(assignee_id) = assignee_id else {
+        return;
+    };
+    if assignee_id == actor_user_id {
+        return;
+    }
+
+    let msg = format!(
+        "{} が「{}」をレビュー待ちにしました",
+        actor_name, issue_title
+    );
+    create_notification(pool, realtime, assignee_id, issue_id, "review_ready", &msg).await;
+}
+
+async fn notify_overdue(
+    pool: &SqlitePool,
+    realtime: &RealtimeHub,
+    actor_user_id: &str,
+    enabled: bool,
+    issue_id: &str,
+    issue_title: &str,
+    assignee_id: Option<&str>,
+) {
+    if !enabled {
+        return;
+    }
+
+    let Some(assignee_id) = assignee_id else {
+        return;
+    };
+    if assignee_id == actor_user_id {
+        return;
+    }
+
+    let msg = format!("「{}」が期限超過になりました", issue_title);
+    create_notification(pool, realtime, assignee_id, issue_id, "overdue", &msg).await;
 }
 
 async fn ensure_sprint_belongs_to_project(
@@ -434,6 +526,7 @@ pub async fn update_issue(
 ) -> Result<Json<Issue>> {
     let project_id = get_project_id_for_issue(&pool, &id).await?;
     check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
+    let automation_settings = get_project_automation_settings(&pool, &project_id).await?;
 
     if let Some(ref title) = body.title {
         if title.trim().is_empty() {
@@ -530,6 +623,9 @@ pub async fn update_issue(
     } else {
         current.due_date
     };
+    let today = Utc::now().date_naive();
+    let became_overdue = !issue_is_overdue(current.due_date, &current.status, today)
+        && issue_is_overdue(due_date, &new_status, today);
 
     let mut tx = pool.begin().await?;
 
@@ -575,26 +671,51 @@ pub async fn update_issue(
     let issue = Issue::from(row);
     broadcast_issue_event_scoped(&pool, &realtime, "issue.updated", &issue).await;
 
-    // Notify new assignee (if changed and not self-assign)
     let assignee_changed = new_assignee_id_from_body.is_some()
         && new_assignee_id_from_body
             .as_ref()
             .and_then(|value| value.as_deref())
             != current.assignee_id.as_deref();
+    let status_moved_to_review = new_status == "in_review" && current.status != "in_review";
+    let actor_name = get_user_name(&pool, &user_id.0).await;
+
     if assignee_changed {
-        if let Some(ref new_assignee) = assignee_id {
-            if new_assignee != &user_id.0 {
-                let assigner_name: String =
-                    sqlx::query_scalar("SELECT name FROM users WHERE id = ?")
-                        .bind(&user_id.0)
-                        .fetch_optional(&pool)
-                        .await
-                        .unwrap_or(None)
-                        .unwrap_or_else(|| "Unknown".to_string());
-                let msg = format!("{} が「{}」にアサインしました", assigner_name, title);
-                create_notification(&pool, &realtime, new_assignee, &id, "assigned", &msg).await;
-            }
-        }
+        notify_assignee_change(
+            &pool,
+            &realtime,
+            &user_id.0,
+            &actor_name,
+            automation_settings.notify_on_assignee_change,
+            &id,
+            &title,
+            assignee_id.as_deref(),
+        )
+        .await;
+    }
+    if status_moved_to_review {
+        notify_review_ready(
+            &pool,
+            &realtime,
+            &user_id.0,
+            &actor_name,
+            automation_settings.notify_on_review_ready,
+            &id,
+            &title,
+            assignee_id.as_deref(),
+        )
+        .await;
+    }
+    if became_overdue {
+        notify_overdue(
+            &pool,
+            &realtime,
+            &user_id.0,
+            automation_settings.notify_on_overdue_transition,
+            &id,
+            &title,
+            assignee_id.as_deref(),
+        )
+        .await;
     }
 
     Ok(Json(issue))
@@ -653,6 +774,7 @@ pub async fn update_issue_status(
 
     let project_id = get_project_id_for_issue(&pool, &id).await?;
     check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
+    let automation_settings = get_project_automation_settings(&pool, &project_id).await?;
 
     let current = sqlx::query_as::<_, IssueRow>(&build_issue_select_sql("WHERE i.id = ?", ""))
         .bind(&id)
@@ -661,6 +783,9 @@ pub async fn update_issue_status(
         .ok_or(AppError::NotFound)?;
 
     let old_status = current.status.clone();
+    let today = Utc::now().date_naive();
+    let became_overdue = !issue_is_overdue(current.due_date, &old_status, today)
+        && issue_is_overdue(current.due_date, status_str, today);
 
     let mut tx = pool.begin().await?;
 
@@ -690,6 +815,34 @@ pub async fn update_issue_status(
 
     let issue = Issue::from(row);
     broadcast_issue_event_scoped(&pool, &realtime, "issue.updated", &issue).await;
+    let actor_name = get_user_name(&pool, &user_id.0).await;
+
+    if status_str == "in_review" && old_status != "in_review" {
+        notify_review_ready(
+            &pool,
+            &realtime,
+            &user_id.0,
+            &actor_name,
+            automation_settings.notify_on_review_ready,
+            &id,
+            &issue.title,
+            issue.assignee_id.as_deref(),
+        )
+        .await;
+    }
+    if became_overdue {
+        notify_overdue(
+            &pool,
+            &realtime,
+            &user_id.0,
+            automation_settings.notify_on_overdue_transition,
+            &id,
+            &issue.title,
+            issue.assignee_id.as_deref(),
+        )
+        .await;
+    }
+
     Ok(Json(issue))
 }
 
@@ -1117,17 +1270,37 @@ pub async fn bulk_update_issues(
     Extension(user_id): Extension<UserId>,
     Path(project_id): Path<String>,
     Json(body): Json<BulkUpdateIssues>,
-) -> Result<Json<Vec<Issue>>> {
+) -> Result<Json<BulkUpdateResult>> {
     check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Editor).await?;
+    let automation_settings = get_project_automation_settings(&pool, &project_id).await?;
 
-    if body.issue_ids.is_empty() {
+    let mut seen = HashSet::new();
+    let issue_ids = body
+        .issue_ids
+        .iter()
+        .filter(|issue_id| seen.insert((*issue_id).clone()))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    if issue_ids.is_empty() {
         return Err(AppError::BadRequest(
             "issue_ids cannot be empty".to_string(),
         ));
     }
-    if body.issue_ids.len() > 100 {
+    if issue_ids.len() > 100 {
         return Err(AppError::BadRequest(
             "Cannot update more than 100 issues at once".to_string(),
+        ));
+    }
+    if body.status.is_none()
+        && body.sprint_id.is_none()
+        && body.assignee_id.is_none()
+        && body.priority.is_none()
+        && body.labels.is_none()
+        && body.due_date.is_none()
+    {
+        return Err(AppError::BadRequest(
+            "At least one field must be provided".to_string(),
         ));
     }
     if body
@@ -1145,63 +1318,150 @@ pub async fn bulk_update_issues(
         }
     }
 
-    let mut tx = pool.begin().await?;
+    let placeholders = issue_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+    let existing_sql = build_issue_select_sql(
+        &format!("WHERE i.id IN ({placeholders}) AND i.project_id = ?"),
+        "",
+    );
+    let mut existing_query = sqlx::query_as::<_, IssueRow>(&existing_sql);
+    for issue_id in &issue_ids {
+        existing_query = existing_query.bind(issue_id);
+    }
+    existing_query = existing_query.bind(&project_id);
+    let current_rows = existing_query.fetch_all(&pool).await?;
+    let current_by_id = current_rows
+        .into_iter()
+        .map(|row| (row.id.clone(), row))
+        .collect::<HashMap<_, _>>();
 
-    for issue_id in &body.issue_ids {
-        if let Some(ref status) = body.status {
-            // Validation is handled by serde deserialization of IssueStatus enum
-            sqlx::query("UPDATE issues SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=?")
-                .bind(status.as_str())
-                .bind(issue_id)
-                .bind(&project_id)
-                .execute(&mut *tx)
-                .await?;
+    let mut tx = pool.begin().await?;
+    let mut updated_ids = Vec::new();
+    let mut skipped_ids = Vec::new();
+    let today = Utc::now().date_naive();
+
+    for issue_id in &issue_ids {
+        let Some(current) = current_by_id.get(issue_id) else {
+            skipped_ids.push(issue_id.clone());
+            continue;
+        };
+
+        let next_status = body
+            .status
+            .map(|status| status.as_str().to_string())
+            .unwrap_or_else(|| current.status.clone());
+        let next_sprint_id = match body.sprint_id.as_deref() {
+            Some("backlog") => None,
+            Some(value) => Some(value.to_string()),
+            None => current.sprint_id.clone(),
+        };
+        let next_assignee_id = match body.assignee_id.as_deref() {
+            Some("") => None,
+            Some(value) => Some(value.to_string()),
+            None => current.assignee_id.clone(),
+        };
+        let next_priority = body
+            .priority
+            .map(|priority| priority.as_str().to_string())
+            .unwrap_or_else(|| current.priority.clone());
+        let next_labels_json = match body.labels.as_ref() {
+            Some(labels) => {
+                serde_json::to_string(labels).map_err(|e| AppError::Internal(e.into()))?
+            }
+            None => current.labels.clone().unwrap_or_else(|| "[]".to_string()),
+        };
+        let next_due_date = match body.due_date {
+            Some(value) => value,
+            None => current.due_date,
+        };
+
+        let update_result = sqlx::query(
+            "UPDATE issues SET status=?, sprint_id=?, assignee_id=?, priority=?, labels=?, due_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=?",
+        )
+        .bind(&next_status)
+        .bind(&next_sprint_id)
+        .bind(&next_assignee_id)
+        .bind(&next_priority)
+        .bind(&next_labels_json)
+        .bind(next_due_date)
+        .bind(issue_id)
+        .bind(&project_id)
+        .execute(&mut *tx)
+        .await?;
+
+        if update_result.rows_affected() == 0 {
+            skipped_ids.push(issue_id.clone());
+            continue;
         }
-        if let Some(ref sprint_id) = body.sprint_id {
-            let sid: Option<&str> = if sprint_id == "backlog" {
-                None
-            } else {
-                Some(sprint_id)
-            };
-            sqlx::query("UPDATE issues SET sprint_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=?")
-                .bind(sid)
-                .bind(issue_id)
-                .bind(&project_id)
-                .execute(&mut *tx)
-                .await?;
-        }
-        if let Some(ref assignee_id) = body.assignee_id {
-            let aid: Option<&str> = if assignee_id.is_empty() {
-                None
-            } else {
-                Some(assignee_id)
-            };
-            sqlx::query("UPDATE issues SET assignee_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=?")
-                .bind(aid)
-                .bind(issue_id)
-                .bind(&project_id)
-                .execute(&mut *tx)
-                .await?;
-        }
-        if let Some(priority) = body.priority {
+
+        updated_ids.push(issue_id.clone());
+
+        if body.status.is_some() && next_status != current.status {
             sqlx::query(
-                "UPDATE issues SET priority=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=?",
+                "INSERT INTO activity_logs (id, issue_id, field, old_value, new_value) VALUES (?, ?, 'status', ?, ?)",
             )
-            .bind(priority.as_str())
+            .bind(Uuid::new_v4().to_string())
             .bind(issue_id)
-            .bind(&project_id)
+            .bind(&current.status)
+            .bind(&next_status)
             .execute(&mut *tx)
             .await?;
         }
-        if let Some(ref labels) = body.labels {
-            let labels_json =
-                serde_json::to_string(labels).map_err(|e| AppError::Internal(e.into()))?;
+        if body.sprint_id.is_some() && next_sprint_id != current.sprint_id {
             sqlx::query(
-                "UPDATE issues SET labels=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=?",
+                "INSERT INTO activity_logs (id, issue_id, field, old_value, new_value) VALUES (?, ?, 'sprint_id', ?, ?)",
             )
-            .bind(labels_json)
+            .bind(Uuid::new_v4().to_string())
             .bind(issue_id)
-            .bind(&project_id)
+            .bind(&current.sprint_id)
+            .bind(&next_sprint_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+        if body.assignee_id.is_some() && next_assignee_id != current.assignee_id {
+            sqlx::query(
+                "INSERT INTO activity_logs (id, issue_id, field, old_value, new_value) VALUES (?, ?, 'assignee_id', ?, ?)",
+            )
+            .bind(Uuid::new_v4().to_string())
+            .bind(issue_id)
+            .bind(&current.assignee_id)
+            .bind(&next_assignee_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+        if body.priority.is_some() && next_priority != current.priority {
+            sqlx::query(
+                "INSERT INTO activity_logs (id, issue_id, field, old_value, new_value) VALUES (?, ?, 'priority', ?, ?)",
+            )
+            .bind(Uuid::new_v4().to_string())
+            .bind(issue_id)
+            .bind(&current.priority)
+            .bind(&next_priority)
+            .execute(&mut *tx)
+            .await?;
+        }
+        if body.labels.is_some()
+            && current.labels.clone().unwrap_or_else(|| "[]".to_string()) != next_labels_json
+        {
+            sqlx::query(
+                "INSERT INTO activity_logs (id, issue_id, field, old_value, new_value) VALUES (?, ?, 'labels', ?, ?)",
+            )
+            .bind(Uuid::new_v4().to_string())
+            .bind(issue_id)
+            .bind(current.labels.clone().unwrap_or_else(|| "[]".to_string()))
+            .bind(&next_labels_json)
+            .execute(&mut *tx)
+            .await?;
+        }
+        if body.due_date.is_some() && next_due_date != current.due_date {
+            let old_due_date = current.due_date.map(|value| value.to_string());
+            let new_due_date = next_due_date.map(|value| value.to_string());
+            sqlx::query(
+                "INSERT INTO activity_logs (id, issue_id, field, old_value, new_value) VALUES (?, ?, 'due_date', ?, ?)",
+            )
+            .bind(Uuid::new_v4().to_string())
+            .bind(issue_id)
+            .bind(old_due_date)
+            .bind(new_due_date)
             .execute(&mut *tx)
             .await?;
         }
@@ -1217,20 +1477,85 @@ pub async fn bulk_update_issues(
     )
     .await;
 
-    let placeholders = body
-        .issue_ids
-        .iter()
-        .map(|_| "?")
-        .collect::<Vec<_>>()
-        .join(", ");
-    let sql = build_issue_select_sql(
-        &format!("WHERE i.id IN ({placeholders})"),
-        "ORDER BY i.position ASC",
-    );
-    let mut q = sqlx::query_as::<_, IssueRow>(&sql);
-    for id in &body.issue_ids {
-        q = q.bind(id);
+    let items = if updated_ids.is_empty() {
+        Vec::new()
+    } else {
+        let placeholders = updated_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = build_issue_select_sql(
+            &format!("WHERE i.id IN ({placeholders})"),
+            "ORDER BY i.position ASC",
+        );
+        let mut q = sqlx::query_as::<_, IssueRow>(&sql);
+        for id in &updated_ids {
+            q = q.bind(id);
+        }
+        q.fetch_all(&pool)
+            .await?
+            .into_iter()
+            .map(Issue::from)
+            .collect()
+    };
+
+    let actor_name = get_user_name(&pool, &user_id.0).await;
+    for item in &items {
+        let Some(current) = current_by_id.get(&item.id) else {
+            continue;
+        };
+
+        if body.assignee_id.is_some() && item.assignee_id != current.assignee_id {
+            notify_assignee_change(
+                &pool,
+                &realtime,
+                &user_id.0,
+                &actor_name,
+                automation_settings.notify_on_assignee_change,
+                &item.id,
+                &item.title,
+                item.assignee_id.as_deref(),
+            )
+            .await;
+        }
+
+        if body.status.is_some()
+            && item.status.as_str() == "in_review"
+            && current.status != "in_review"
+        {
+            notify_review_ready(
+                &pool,
+                &realtime,
+                &user_id.0,
+                &actor_name,
+                automation_settings.notify_on_review_ready,
+                &item.id,
+                &item.title,
+                item.assignee_id.as_deref(),
+            )
+            .await;
+        }
+
+        let became_overdue = !issue_is_overdue(current.due_date, &current.status, today)
+            && issue_is_overdue(item.due_date, item.status.as_str(), today);
+        if became_overdue {
+            notify_overdue(
+                &pool,
+                &realtime,
+                &user_id.0,
+                automation_settings.notify_on_overdue_transition,
+                &item.id,
+                &item.title,
+                item.assignee_id.as_deref(),
+            )
+            .await;
+        }
     }
-    let rows = q.fetch_all(&pool).await?;
-    Ok(Json(rows.into_iter().map(Issue::from).collect()))
+
+    Ok(Json(BulkUpdateResult {
+        items,
+        updated_count: updated_ids.len(),
+        skipped_ids,
+    }))
 }

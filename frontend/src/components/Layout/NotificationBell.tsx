@@ -37,6 +37,18 @@ function notificationMeta(type: string) {
         icon: <UserRoundPlus size={12} className="text-emerald-600" />,
         badgeClassName: 'bg-emerald-100 text-emerald-700',
       }
+    case 'review_ready':
+      return {
+        label: 'レビュー待ち',
+        icon: <Bell size={12} className="text-indigo-600" />,
+        badgeClassName: 'bg-indigo-100 text-indigo-700',
+      }
+    case 'overdue':
+      return {
+        label: '期限超過',
+        icon: <Bell size={12} className="text-amber-600" />,
+        badgeClassName: 'bg-amber-100 text-amber-700',
+      }
     default:
       return {
         label: type,
@@ -51,6 +63,10 @@ function notificationPriority(type: string): number {
     case 'mention':
       return 0
     case 'assigned':
+      return 1
+    case 'review_ready':
+      return 1
+    case 'overdue':
       return 1
     case 'comment':
       return 2

@@ -404,6 +404,50 @@ async fn complete_sprint_rejects_completed_next_sprint() {
 }
 
 #[tokio::test]
+async fn complete_sprint_uses_next_available_sprint_when_workspace_rule_is_next_sprint() {
+    let app = common::setup_app().await;
+    let ws_id = common::create_workspace(&app).await;
+    let pid = common::create_project_in(&app, "P", "SP", &ws_id).await;
+    let current_sid = common::create_sprint(&app, &pid, "Sprint 1").await;
+    let next_sid = common::create_sprint(&app, &pid, "Sprint 2").await;
+
+    common::send(
+        &app,
+        common::patch(
+            &format!("/api/workspaces/{ws_id}/automation"),
+            json!({ "sprint_carryover_mode": "next_sprint" }),
+        ),
+    )
+    .await;
+
+    let (_, issue) = common::send(
+        &app,
+        common::post(
+            &format!("/api/projects/{pid}/issues"),
+            json!({ "title": "Carry me", "sprint_id": current_sid }),
+        ),
+    )
+    .await;
+    let issue_id = issue["id"].as_str().unwrap().to_string();
+
+    common::send(
+        &app,
+        common::post(&format!("/api/sprints/{current_sid}/start"), json!({})),
+    )
+    .await;
+
+    let (status, json) = common::send(
+        &app,
+        common::post(&format!("/api/sprints/{current_sid}/complete"), json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{json}");
+
+    let (_, issue) = common::send(&app, common::get(&format!("/api/issues/{issue_id}"))).await;
+    assert_eq!(issue["sprint_id"], next_sid);
+}
+
+#[tokio::test]
 async fn delete_sprint_unassigns_issues() {
     let app = common::setup_app().await;
     let pid = common::create_project(&app, "P", "SP").await;

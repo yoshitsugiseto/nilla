@@ -50,6 +50,23 @@ pub struct UpdateWorkspace {
     pub name: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct WorkspaceAutomationSettings {
+    pub workspace_id: String,
+    pub notify_on_assignee_change: bool,
+    pub notify_on_review_ready: bool,
+    pub notify_on_overdue_transition: bool,
+    pub sprint_carryover_mode: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateWorkspaceAutomationSettings {
+    pub notify_on_assignee_change: Option<bool>,
+    pub notify_on_review_ready: Option<bool>,
+    pub notify_on_overdue_transition: Option<bool>,
+    pub sprint_carryover_mode: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct UpdateMemberRole {
     pub role: String,

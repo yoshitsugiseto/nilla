@@ -24,6 +24,16 @@ export interface WorkspaceMember {
   joined_at: string
 }
 
+export type SprintCarryoverMode = 'prompt' | 'backlog' | 'next_sprint'
+
+export interface WorkspaceAutomationSettings {
+  workspace_id: string
+  notify_on_assignee_change: boolean
+  notify_on_review_ready: boolean
+  notify_on_overdue_transition: boolean
+  sprint_carryover_mode: SprintCarryoverMode
+}
+
 export type ProjectRole = 'admin' | 'editor' | 'viewer'
 
 export interface ProjectMember {
@@ -236,6 +246,13 @@ export interface BulkUpdatePayload {
   assignee_id?: string
   priority?: IssuePriority
   labels?: string[]
+  due_date?: string | null
+}
+
+export interface BulkUpdateResult {
+  items: Issue[]
+  updated_count: number
+  skipped_ids: string[]
 }
 
 export interface SearchPreset {

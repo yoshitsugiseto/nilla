@@ -7,16 +7,29 @@ use sqlx::SqlitePool;
 
 use crate::{
     auth::middleware::UserId,
+    automation::get_workspace_automation_settings,
     db::{check_project_access, check_project_permission, ProjectPermission},
     error::{AppError, Result},
     models::workspace::{
         AddMember, CreateWorkspace, ProjectMember, UpdateMemberRole, UpdateProjectMemberRole,
-        UpdateWorkspace, UserInfo, Workspace, WorkspaceMember,
+        UpdateWorkspace, UpdateWorkspaceAutomationSettings, UserInfo, Workspace,
+        WorkspaceAutomationSettings, WorkspaceMember,
     },
 };
 
 const INVALID_WORKSPACE_ROLE_ERROR: &str = "role must be one of: owner, admin, member, viewer";
 const INVALID_PROJECT_ROLE_ERROR: &str = "role must be one of: admin, editor, viewer";
+const INVALID_SPRINT_CARRYOVER_MODE_ERROR: &str =
+    "sprint_carryover_mode must be one of: prompt, backlog, next_sprint";
+
+fn validate_sprint_carryover_mode(mode: &str) -> Result<()> {
+    match mode {
+        "prompt" | "backlog" | "next_sprint" => Ok(()),
+        _ => Err(AppError::BadRequest(
+            INVALID_SPRINT_CARRYOVER_MODE_ERROR.to_string(),
+        )),
+    }
+}
 
 async fn check_workspace_access(
     pool: &SqlitePool,
@@ -102,6 +115,15 @@ pub async fn create_workspace(
     .execute(&pool)
     .await?;
 
+    sqlx::query(
+        "INSERT INTO workspace_automation_settings (workspace_id, created_at, updated_at) VALUES (?, ?, ?)",
+    )
+    .bind(&id)
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await?;
+
     let workspace = sqlx::query_as::<_, Workspace>(
         "SELECT id, name, created_by, created_at, updated_at FROM workspaces WHERE id = ?",
     )
@@ -170,6 +192,60 @@ pub async fn update_workspace(
     .await?;
 
     Ok(Json(workspace))
+}
+
+pub async fn get_workspace_automation(
+    State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
+    Path(id): Path<String>,
+) -> Result<Json<WorkspaceAutomationSettings>> {
+    check_workspace_access(&pool, &user_id.0, &id).await?;
+    Ok(Json(get_workspace_automation_settings(&pool, &id).await?))
+}
+
+pub async fn update_workspace_automation(
+    State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
+    Path(id): Path<String>,
+    Json(body): Json<UpdateWorkspaceAutomationSettings>,
+) -> Result<Json<WorkspaceAutomationSettings>> {
+    check_workspace_admin(&pool, &user_id.0, &id).await?;
+
+    if let Some(ref mode) = body.sprint_carryover_mode {
+        validate_sprint_carryover_mode(mode)?;
+    }
+
+    let current = get_workspace_automation_settings(&pool, &id).await?;
+    let now = Utc::now().to_rfc3339();
+    let settings = sqlx::query_as::<_, WorkspaceAutomationSettings>(
+        "UPDATE workspace_automation_settings
+         SET notify_on_assignee_change = ?,
+             notify_on_review_ready = ?,
+             notify_on_overdue_transition = ?,
+             sprint_carryover_mode = ?,
+             updated_at = ?
+         WHERE workspace_id = ?
+         RETURNING workspace_id, notify_on_assignee_change, notify_on_review_ready, notify_on_overdue_transition, sprint_carryover_mode",
+    )
+    .bind(
+        body.notify_on_assignee_change
+            .unwrap_or(current.notify_on_assignee_change),
+    )
+    .bind(body.notify_on_review_ready.unwrap_or(current.notify_on_review_ready))
+    .bind(
+        body.notify_on_overdue_transition
+            .unwrap_or(current.notify_on_overdue_transition),
+    )
+    .bind(
+        body.sprint_carryover_mode
+            .unwrap_or(current.sprint_carryover_mode),
+    )
+    .bind(&now)
+    .bind(&id)
+    .fetch_one(&pool)
+    .await?;
+
+    Ok(Json(settings))
 }
 
 pub async fn list_members(
@@ -405,10 +481,11 @@ pub async fn update_project_member_role(
         return Err(AppError::BadRequest(INVALID_PROJECT_ROLE_ERROR.to_string()));
     }
 
-    let workspace_id: Option<String> = sqlx::query_scalar("SELECT workspace_id FROM projects WHERE id = ?")
-        .bind(&project_id)
-        .fetch_optional(&pool)
-        .await?;
+    let workspace_id: Option<String> =
+        sqlx::query_scalar("SELECT workspace_id FROM projects WHERE id = ?")
+            .bind(&project_id)
+            .fetch_optional(&pool)
+            .await?;
     let workspace_id = workspace_id.ok_or(AppError::NotFound)?;
 
     let is_workspace_member: bool = sqlx::query_scalar(

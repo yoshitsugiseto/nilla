@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Play, CheckCircle, BarChart2, AlertCircle, History, Pencil, Trophy, TrendingUp } from 'lucide-react'
 import { getSprints, createSprint, updateSprint, startSprint, completeSprint } from '../api/sprints'
 import { getIssues } from '../api/issues'
+import { getWorkspaceAutomationSettings } from '../api/workspaces'
 import { useAppStore } from '../store'
 import { Modal } from '../components/common/Modal'
 import { BurndownChart } from '../components/Board/BurndownChart'
@@ -12,7 +13,8 @@ import { useCurrentTime } from '../hooks/useCurrentTime'
 import { useProjectPermissions } from '../hooks/useProjectPermissions'
 import { extractErrorMessage } from '../api/client'
 import { deadlineLabel } from '../utils/date'
-import type { Issue, Sprint, IssueType } from '../types'
+import { buildActiveSprintSnapshot } from '../utils/reporting'
+import type { Issue, Sprint, IssueType, SprintCarryoverMode } from '../types'
 
 interface SprintReportData {
   sprint: Sprint
@@ -286,17 +288,20 @@ function CompleteSprintDialog({
   sprint,
   incompleteIssues,
   otherSprints,
+  carryoverMode,
   onConfirm,
   onClose,
 }: {
   sprint: Sprint
   incompleteIssues: Issue[]
   otherSprints: Sprint[]
+  carryoverMode: SprintCarryoverMode
   onConfirm: (nextSprintId: string | null) => void
   onClose: () => void
 }) {
   const nextSprintIdField = useId()
   const [nextSprintId, setNextSprintId] = useState<string>('')
+  const nextAvailableSprint = otherSprints.find(s => s.id !== sprint.id && s.status !== 'completed')
 
   return (
     <div className="space-y-4">
@@ -305,23 +310,34 @@ function CompleteSprintDialog({
           <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
             <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
             <p className="text-sm text-amber-800">
-              <strong>{incompleteIssues.length}件</strong>の未完了イシューがあります。移動先を選んでください。
+              <strong>{incompleteIssues.length}件</strong>の未完了イシューがあります。
+              {carryoverMode === 'prompt' ? '移動先を選んでください。' : 'Automation ルールに従って移動します。'}
             </p>
           </div>
-          <div>
-            <label htmlFor={nextSprintIdField} className="block text-sm font-medium text-gray-700 mb-1">未完了イシューの移動先</label>
-            <select
-              id={nextSprintIdField}
-              value={nextSprintId}
-              onChange={e => setNextSprintId(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="">Backlog（未アサイン）</option>
-              {otherSprints.filter(s => s.id !== sprint.id && s.status !== 'completed').map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </div>
+          {carryoverMode === 'prompt' ? (
+            <div>
+              <label htmlFor={nextSprintIdField} className="block text-sm font-medium text-gray-700 mb-1">未完了イシューの移動先</label>
+              <select
+                id={nextSprintIdField}
+                value={nextSprintId}
+                onChange={e => setNextSprintId(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="">Backlog（未アサイン）</option>
+                {otherSprints.filter(s => s.id !== sprint.id && s.status !== 'completed').map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
+              {carryoverMode === 'backlog'
+                ? '未完了イシューは Backlog に戻されます。'
+                : nextAvailableSprint
+                  ? `未完了イシューは「${nextAvailableSprint.name}」へ自動で移動します。`
+                  : '移動可能な次 sprint がないため、未完了イシューは Backlog に戻されます。'}
+            </div>
+          )}
           <div className="text-xs text-gray-500 space-y-1 max-h-32 overflow-y-auto">
             {incompleteIssues.map(i => (
               <div key={i.id} className="flex items-center gap-2">
@@ -454,7 +470,7 @@ function SprintCard({
 }
 
 export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void }) {
-  const { activeProjectId } = useAppStore()
+  const { activeProjectId, activeWorkspaceId } = useAppStore()
   const qc = useQueryClient()
   const showToast = useToast()
   const nowMs = useCurrentTime()
@@ -473,6 +489,11 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
     queryKey: ['issues', activeProjectId],
     queryFn: () => getIssues(activeProjectId!),
     enabled: !!activeProjectId,
+  })
+  const { data: automationSettings } = useQuery({
+    queryKey: ['workspace-automation', activeWorkspaceId],
+    queryFn: () => getWorkspaceAutomationSettings(activeWorkspaceId!),
+    enabled: !!activeWorkspaceId,
   })
 
   const startMutation = useMutation({
@@ -536,6 +557,8 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
   const sprintRiskSignals = sprints
     .map(sprint => buildSprintRiskSignal(sprint, issues, nowMs))
     .filter((signal): signal is SprintRiskSignal => signal !== null)
+  const activeSprint = sprints.find(sprint => sprint.status === 'active')
+  const activeSprintSnapshot = buildActiveSprintSnapshot(activeSprint, issues, nowMs)
 
   if (!activeProjectId) {
     return <div className="flex-1 flex items-center justify-center text-gray-400">← プロジェクトを選択してください</div>
@@ -567,6 +590,65 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
         <div role="status" aria-label="読み込み中" className="text-gray-400 text-center py-12">読み込み中...</div>
       ) : (
         <div className="space-y-4">
+          {activeSprint && activeSprintSnapshot && (
+            <section
+              aria-label="アクティブスプリントサマリー"
+              className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4"
+            >
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-blue-900">アクティブスプリントの見通し</h2>
+                  <p className="text-xs text-blue-800">{activeSprint.name} の進み具合とペースをまとめています。</p>
+                </div>
+                {activeSprint.end_date && nowMs && (() => {
+                  const deadline = deadlineLabel(activeSprint.end_date, nowMs)
+                  return <span className={`text-xs font-medium ${deadline.className}`}>{deadline.text}</span>
+                })()}
+              </div>
+              <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-xl border border-blue-100 bg-white p-4">
+                    <p className="text-xs text-gray-500">完了状況</p>
+                    <p className="mt-1 text-2xl font-bold text-gray-900">
+                      {activeSprintSnapshot.doneIssues}/{activeSprintSnapshot.totalIssues}
+                    </p>
+                    <p className="mt-1 text-sm text-gray-500">
+                      {activeSprintSnapshot.donePoints}/{activeSprintSnapshot.totalPoints}pt
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-blue-100 bg-white p-4">
+                    <p className="text-xs text-gray-500">残り作業</p>
+                    <p className="mt-1 text-2xl font-bold text-gray-900">{activeSprintSnapshot.remainingIssues}件</p>
+                    <p className="mt-1 text-sm text-gray-500">{activeSprintSnapshot.remainingPoints}pt 残り</p>
+                  </div>
+                  <div className="rounded-xl border border-blue-100 bg-white p-4">
+                    <p className="text-xs text-gray-500">平均 cycle time</p>
+                    <p className="mt-1 text-2xl font-bold text-gray-900">
+                      {activeSprintSnapshot.avgCycleDays != null ? `${activeSprintSnapshot.avgCycleDays}日` : '—'}
+                    </p>
+                    <p className="mt-1 text-sm text-gray-500">この sprint で完了した issue ベース</p>
+                  </div>
+                  <div className="rounded-xl border border-blue-100 bg-white p-4">
+                    <p className="text-xs text-gray-500">リスク</p>
+                    <p className="mt-1 text-2xl font-bold text-gray-900">
+                      {activeSprintSnapshot.overdueCount + activeSprintSnapshot.unassignedCount + activeSprintSnapshot.reviewCount}件
+                    </p>
+                    <p className="mt-1 text-sm text-gray-500">
+                      期限超過 {activeSprintSnapshot.overdueCount} / 未アサイン {activeSprintSnapshot.unassignedCount} / レビュー待ち {activeSprintSnapshot.reviewCount}
+                    </p>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-blue-100 bg-white p-4">
+                  <div className="mb-2">
+                    <h3 className="text-sm font-semibold text-gray-700">バーンダウントレンド</h3>
+                    <p className="text-xs text-gray-400">理想線とのズレをすぐ見られます</p>
+                  </div>
+                  <BurndownChart sprint={activeSprint} />
+                </div>
+              </div>
+            </section>
+          )}
+
           {sprintRiskSignals.length > 0 && (
             <section
               aria-label="スプリント危険信号"
@@ -667,6 +749,7 @@ export function SprintPage({ onNavigate }: { onNavigate: (page: string) => void 
               sprint={sprint}
               incompleteIssues={incompleteIssues}
               otherSprints={sprints}
+              carryoverMode={automationSettings?.sprint_carryover_mode ?? 'prompt'}
               onConfirm={nextSprintId => completeMutation.mutate({ id: completing, nextSprintId })}
               onClose={() => setCompleting(null)}
             />

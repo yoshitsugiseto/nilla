@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { SprintPage } from '../pages/SprintPage'
 import { useAppStore } from '../store'
 import { useAuthStore } from '../store/auth'
-import type { Issue, ProjectMember, Sprint } from '../types'
+import type { Issue, ProjectMember, Sprint, WorkspaceAutomationSettings } from '../types'
 
 const {
   mockGetSprints,
@@ -15,6 +15,7 @@ const {
   mockCompleteSprint,
   mockGetIssues,
   mockGetProjectMembers,
+  mockGetWorkspaceAutomationSettings,
   mockShowToast,
   mockExtractErrorMessage,
 } = vi.hoisted(() => ({
@@ -25,6 +26,7 @@ const {
   mockCompleteSprint: vi.fn(),
   mockGetIssues: vi.fn(),
   mockGetProjectMembers: vi.fn(),
+  mockGetWorkspaceAutomationSettings: vi.fn(),
   mockShowToast: vi.fn(),
   mockExtractErrorMessage: vi.fn(),
 }))
@@ -43,6 +45,7 @@ vi.mock('../api/issues', () => ({
 
 vi.mock('../api/workspaces', () => ({
   getProjectMembers: mockGetProjectMembers,
+  getWorkspaceAutomationSettings: mockGetWorkspaceAutomationSettings,
 }))
 
 vi.mock('../components/common/useToast', () => ({
@@ -124,6 +127,19 @@ function makeMember(overrides: Partial<ProjectMember> = {}): ProjectMember {
   }
 }
 
+function makeAutomationSettings(
+  overrides: Partial<WorkspaceAutomationSettings> = {}
+): WorkspaceAutomationSettings {
+  return {
+    workspace_id: 'workspace-1',
+    notify_on_assignee_change: true,
+    notify_on_review_ready: true,
+    notify_on_overdue_transition: true,
+    sprint_carryover_mode: 'prompt',
+    ...overrides,
+  }
+}
+
 function renderSprintPage() {
   const queryClient = createQueryClient()
   useAppStore.setState({
@@ -157,6 +173,7 @@ describe('SprintPage', () => {
     mockCompleteSprint.mockReset()
     mockGetIssues.mockReset()
     mockGetProjectMembers.mockReset()
+    mockGetWorkspaceAutomationSettings.mockReset()
     mockShowToast.mockReset()
     mockExtractErrorMessage.mockReset()
     mockExtractErrorMessage.mockReturnValue('抽出済みエラー')
@@ -179,6 +196,7 @@ describe('SprintPage', () => {
     mockCompleteSprint.mockResolvedValue(makeSprint({ status: 'completed' }))
     mockGetIssues.mockResolvedValue([])
     mockGetProjectMembers.mockResolvedValue([makeMember()])
+    mockGetWorkspaceAutomationSettings.mockResolvedValue(makeAutomationSettings())
   })
 
   afterEach(() => {
@@ -329,5 +347,73 @@ describe('SprintPage', () => {
     expect(screen.getByText('期限超過 1件')).toBeInTheDocument()
     expect(screen.getByText('未アサイン 1件')).toBeInTheDocument()
     expect(screen.getByText('レビュー待ち 1件')).toBeInTheDocument()
+  })
+
+  test('shows active sprint reporting snapshot with burndown trend', async () => {
+    mockGetSprints.mockResolvedValue([
+      makeSprint({ id: 'sprint-active', name: 'Sprint Active', status: 'active', end_date: '2026-03-28' }),
+    ])
+    mockGetIssues.mockResolvedValue([
+      makeIssue({
+        id: 'issue-1',
+        sprint_id: 'sprint-active',
+        title: 'Done task',
+        status: 'done',
+        points: 5,
+        assignee_id: 'member-1',
+        created_at: '2026-03-01T00:00:00Z',
+        updated_at: '2026-03-04T00:00:00Z',
+      }),
+      makeIssue({
+        id: 'issue-2',
+        sprint_id: 'sprint-active',
+        title: 'Open task',
+        status: 'todo',
+        points: 3,
+        assignee_id: null,
+        due_date: '2026-03-01',
+        created_at: '2026-03-02T00:00:00Z',
+        updated_at: '2026-03-05T00:00:00Z',
+      }),
+    ])
+
+    renderSprintPage()
+
+    expect(await screen.findByLabelText('アクティブスプリントサマリー')).toBeInTheDocument()
+    expect(screen.getByText('アクティブスプリントの見通し')).toBeInTheDocument()
+    expect(screen.getByText('1/2')).toBeInTheDocument()
+    expect(screen.getByText('5/8pt')).toBeInTheDocument()
+    expect(screen.getByText('3日')).toBeInTheDocument()
+    expect(screen.getByText('バーンダウントレンド')).toBeInTheDocument()
+    expect(screen.getByText('BurndownChart')).toBeInTheDocument()
+  })
+
+  test('uses workspace automation for sprint carryover when mode is next_sprint', async () => {
+    const user = userEvent.setup()
+
+    mockGetWorkspaceAutomationSettings.mockResolvedValue(
+      makeAutomationSettings({ sprint_carryover_mode: 'next_sprint' })
+    )
+    mockGetSprints.mockResolvedValue([
+      makeSprint({ id: 'sprint-active', name: 'Sprint Active', status: 'active' }),
+      makeSprint({ id: 'sprint-next', name: 'Sprint Next', status: 'planning' }),
+    ])
+    mockGetIssues.mockResolvedValue([
+      makeIssue({ id: 'issue-1', sprint_id: 'sprint-active', title: 'Carry over issue', status: 'todo', points: 3 }),
+    ])
+
+    renderSprintPage()
+
+    expect(await screen.findByRole('button', { name: '完了' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '完了' }))
+
+    expect(screen.queryByLabelText('未完了イシューの移動先')).not.toBeInTheDocument()
+    expect(screen.getByText('未完了イシューは「Sprint Next」へ自動で移動します。')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'スプリントを完了' }))
+
+    await waitFor(() => expect(mockCompleteSprint).toHaveBeenCalled())
+    expect(mockCompleteSprint.mock.calls[0]?.[0]).toBe('sprint-active')
+    expect(mockCompleteSprint.mock.calls[0]?.[1]).toBeNull()
   })
 })
