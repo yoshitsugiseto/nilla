@@ -655,7 +655,7 @@ export function SprintPage({
                   })()}
                 </div>
               </div>
-              <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
+              <div className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-xl border border-blue-100 bg-white p-4">
                     <p className="text-xs text-gray-500">完了状況</p>
@@ -726,12 +726,14 @@ export function SprintPage({
                     </div>
                   </div>
                 </div>
-                <div className="rounded-xl border border-blue-100 bg-white p-4">
-                  <div className="mb-2">
-                    <h3 className="text-sm font-semibold text-gray-700">バーンダウントレンド</h3>
-                    <p className="text-xs text-gray-400">理想線とのズレをすぐ見られます</p>
+                <div className="mx-auto w-full max-w-3xl">
+                  <div className="rounded-xl border border-blue-100 bg-white p-4">
+                    <div className="mb-2 text-center">
+                      <h3 className="text-sm font-semibold text-gray-700">バーンダウントレンド</h3>
+                      <p className="text-xs text-gray-400">理想線とのズレをすぐ見られます</p>
+                    </div>
+                    <BurndownChart sprint={activeSprint} />
                   </div>
-                  <BurndownChart sprint={activeSprint} />
                 </div>
               </div>
             </section>
