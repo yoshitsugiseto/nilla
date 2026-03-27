@@ -5,11 +5,12 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { WorkspaceSettings } from '../components/Settings/WorkspaceSettings'
 import { useAuthStore } from '../store/auth'
 import { useAppStore } from '../store'
-import type { User, WorkspaceAutomationSettings, WorkspaceMember } from '../types'
+import type { User, WorkspaceAutomationLog, WorkspaceAutomationSettings, WorkspaceMember } from '../types'
 
 const {
   mockGetWorkspaceMembers,
   mockGetWorkspaceAutomationSettings,
+  mockGetWorkspaceAutomationLogs,
   mockAddWorkspaceMember,
   mockRemoveWorkspaceMember,
   mockUpdateMemberRole,
@@ -20,6 +21,7 @@ const {
 } = vi.hoisted(() => ({
   mockGetWorkspaceMembers: vi.fn(),
   mockGetWorkspaceAutomationSettings: vi.fn(),
+  mockGetWorkspaceAutomationLogs: vi.fn(),
   mockAddWorkspaceMember: vi.fn(),
   mockRemoveWorkspaceMember: vi.fn(),
   mockUpdateMemberRole: vi.fn(),
@@ -32,6 +34,7 @@ const {
 vi.mock('../api/workspaces', () => ({
   getWorkspaceMembers: mockGetWorkspaceMembers,
   getWorkspaceAutomationSettings: mockGetWorkspaceAutomationSettings,
+  getWorkspaceAutomationLogs: mockGetWorkspaceAutomationLogs,
   addWorkspaceMember: mockAddWorkspaceMember,
   removeWorkspaceMember: mockRemoveWorkspaceMember,
   updateMemberRole: mockUpdateMemberRole,
@@ -90,6 +93,25 @@ function makeAutomationSettings(
   }
 }
 
+function makeAutomationLog(
+  overrides: Partial<WorkspaceAutomationLog> = {}
+): WorkspaceAutomationLog {
+  return {
+    id: 'log-1',
+    workspace_id: 'workspace-1',
+    project_id: 'project-1',
+    issue_id: 'issue-1',
+    issue_title: 'Needs review',
+    rule_type: 'review_ready',
+    status: 'sent',
+    target_user_id: 'user-2',
+    target_user_name: 'Bob',
+    message: 'Alice が「Needs review」をレビュー待ちにしました',
+    created_at: '2026-03-27T09:30:00Z',
+    ...overrides,
+  }
+}
+
 function renderWorkspaceSettings() {
   const queryClient = createQueryClient()
   const invalidateQueriesSpy = vi.spyOn(queryClient, 'invalidateQueries')
@@ -107,6 +129,7 @@ describe('WorkspaceSettings', () => {
   beforeEach(() => {
     mockGetWorkspaceMembers.mockReset()
     mockGetWorkspaceAutomationSettings.mockReset()
+    mockGetWorkspaceAutomationLogs.mockReset()
     mockAddWorkspaceMember.mockReset()
     mockRemoveWorkspaceMember.mockReset()
     mockUpdateMemberRole.mockReset()
@@ -136,6 +159,7 @@ describe('WorkspaceSettings', () => {
       boardFilters: {},
     })
     mockGetWorkspaceAutomationSettings.mockResolvedValue(makeAutomationSettings())
+    mockGetWorkspaceAutomationLogs.mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -207,5 +231,48 @@ describe('WorkspaceSettings', () => {
       })
     )
     expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['workspace-automation', 'workspace-1'] })
+  })
+
+  test('renders recent automation execution logs', async () => {
+    const user = userEvent.setup()
+    mockGetWorkspaceMembers.mockResolvedValue([makeMember()])
+    mockGetUsers.mockResolvedValue([])
+    mockGetWorkspaceAutomationLogs.mockResolvedValue([
+      makeAutomationLog(),
+      makeAutomationLog({
+        id: 'log-2',
+        rule_type: 'sprint_carryover',
+        status: 'applied',
+        issue_title: 'Carry over issue',
+        target_user_id: null,
+        target_user_name: null,
+        message: '未完了イシューを Sprint Beta へ移動しました',
+      }),
+      makeAutomationLog({
+        id: 'log-3',
+        rule_type: 'review_ready',
+        status: 'skipped',
+        issue_title: 'Needs owner',
+        target_user_id: null,
+        target_user_name: null,
+        message: '担当者がいないためレビュー待ち通知を送信しませんでした',
+      }),
+    ])
+
+    renderWorkspaceSettings()
+
+    expect(await screen.findByText('最近の自動化実行')).toBeInTheDocument()
+    expect(await screen.findByText('Needs review')).toBeInTheDocument()
+    expect(screen.getByText('Carry over issue')).toBeInTheDocument()
+    expect(screen.getAllByText('送信').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('適用').length).toBeGreaterThan(0)
+
+    await user.selectOptions(screen.getByLabelText('自動化ルール絞り込み'), 'review_ready')
+    expect(screen.getByText('Needs review')).toBeInTheDocument()
+    expect(screen.queryByText('Carry over issue')).not.toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('自動化結果絞り込み'), 'skipped')
+    expect(screen.getByText('Needs owner')).toBeInTheDocument()
+    expect(screen.queryByText('Needs review')).not.toBeInTheDocument()
   })
 })

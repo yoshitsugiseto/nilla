@@ -153,6 +153,9 @@ export function NotificationBell() {
       const issue = await getIssue(issueId)
       if (action === 'assign_to_me') {
         if (!user) return
+        if (issue.assignee_id === user.id) {
+          throw new Error('already_assigned')
+        }
         await updateIssue(issueId, { assignee_id: user.id })
         return
       }
@@ -185,6 +188,10 @@ export function NotificationBell() {
     onError: (error: Error, variables) => {
       if (error.message === 'already_max_priority') {
         showToast('すでに最優先です', 'info')
+        return
+      }
+      if (error.message === 'already_assigned') {
+        showToast('すでに自分が担当です', 'info')
         return
       }
       if (error.message === 'already_started') {
@@ -314,14 +321,16 @@ export function NotificationBell() {
                       <div className="mt-2 flex flex-wrap gap-2">
                         <button
                           onClick={() => quickActionMutation.mutate({ issueId: n.issue_id!, action: 'assign_to_me' })}
-                          className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-200"
+                          disabled={quickActionMutation.isPending}
+                          className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           担当する
                         </button>
                         {(n.type === 'assigned' || n.type === 'review_ready') && (
                           <button
                             onClick={() => quickActionMutation.mutate({ issueId: n.issue_id!, action: 'start_work' })}
-                            className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-medium text-blue-700 hover:bg-blue-200"
+                            disabled={quickActionMutation.isPending}
+                            className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-medium text-blue-700 hover:bg-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             着手する
                           </button>
@@ -329,7 +338,8 @@ export function NotificationBell() {
                         {n.type === 'overdue' && (
                           <button
                             onClick={() => quickActionMutation.mutate({ issueId: n.issue_id!, action: 'promote_priority' })}
-                            className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-200"
+                            disabled={quickActionMutation.isPending}
+                            className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             優先度を上げる
                           </button>

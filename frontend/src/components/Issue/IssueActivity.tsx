@@ -232,6 +232,24 @@ function badgeLabel(items: ActivityItem[]) {
   return isSystemOnly ? '自動化' : items.length > 1 ? 'まとめて更新' : '変更'
 }
 
+function timelineCounts(items: TimelineItem[]) {
+  return items.reduce(
+    (acc, item) => {
+      if (item.kind === 'comment') {
+        acc.comments += 1
+        return acc
+      }
+
+      item.items.forEach(entry => {
+        if (SYSTEM_FIELDS.has(entry.field)) acc.automation += 1
+        else acc.changes += 1
+      })
+      return acc
+    },
+    { comments: 0, changes: 0, automation: 0 },
+  )
+}
+
 export function IssueActivity({ issueId, projectId }: Props) {
   const [activeFilter, setActiveFilter] = useState<ActivityFilter>('all')
   const { data: activity = [], isError: activityError } = useQuery({
@@ -291,6 +309,14 @@ export function IssueActivity({ issueId, projectId }: Props) {
     groups[key].push(item)
     return groups
   }, {})
+  const counts = timelineCounts(rawTimeline)
+  const filterSummary = activeFilter === 'comments'
+    ? `${counts.comments}件のコメント`
+    : activeFilter === 'changes'
+      ? `${counts.changes}件の変更`
+      : activeFilter === 'automation'
+        ? `${counts.automation}件の自動化`
+        : `${counts.comments + counts.changes + counts.automation}件の履歴`
 
   return (
     <div className="space-y-4">
@@ -314,11 +340,14 @@ export function IssueActivity({ issueId, projectId }: Props) {
           </button>
         ))}
       </div>
+      <p className="text-xs text-gray-400">{filterSummary}</p>
       {(activityError || commentsError) && (
         <p className="text-sm text-red-400">タイムラインの取得に失敗しました</p>
       )}
       {!activityError && !commentsError && timeline.length === 0 && (
-        <p className="text-sm text-gray-400">タイムラインなし</p>
+        <p className="text-sm text-gray-400">
+          {activeFilter === 'all' ? 'タイムラインなし' : 'この条件に一致する履歴はありません'}
+        </p>
       )}
       {Object.entries(groupedTimeline).map(([date, items]) => (
         <div key={date}>

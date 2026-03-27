@@ -302,6 +302,41 @@ describe('NotificationBell', () => {
     await waitFor(() => expect(mockUseToast).toHaveBeenCalledWith('すでに進行中です', 'info'))
   })
 
+  test('shows info toast when assigning to self again', async () => {
+    const user = userEvent.setup()
+    const queryClient = createQueryClient()
+
+    mockGetNotifications.mockResolvedValue([
+      {
+        id: 'notif-1',
+        user_id: 'user-1',
+        issue_id: 'issue-1',
+        type: 'assigned',
+        message: 'Issue assigned',
+        read: false,
+        created_at: '2026-03-26T03:00:00Z',
+      },
+    ])
+    mockGetIssue.mockResolvedValue({
+      id: 'issue-1',
+      project_id: 'project-1',
+      title: 'Issue from notification',
+      priority: 'high',
+      status: 'todo',
+      assignee_id: 'user-1',
+    })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NotificationBell />
+      </QueryClientProvider>
+    )
+
+    await user.click(screen.getByRole('button', { name: '通知' }))
+    await user.click(screen.getByRole('button', { name: '担当する' }))
+    await waitFor(() => expect(mockUseToast).toHaveBeenCalledWith('すでに自分が担当です', 'info'))
+  })
+
   test('shows localized notification badges', async () => {
     const user = userEvent.setup()
     const queryClient = createQueryClient()

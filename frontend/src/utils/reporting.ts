@@ -33,11 +33,21 @@ function getCycleDurationFromActivity(
   issue: Issue,
   activity: ActivityLog[] | undefined,
 ): number | null {
-  const statusChanges = (activity ?? []).filter(item => item.field === 'status')
-  const startedAt = statusChanges.find(item =>
-    item.new_value === 'in_progress' || item.new_value === 'in_review'
-  )?.created_at ?? issue.created_at
-  const completedAt = statusChanges.find(item => item.new_value === 'done')?.created_at ?? issue.updated_at
+  const statusChanges = (activity ?? [])
+    .filter(item => item.field === 'status')
+    .slice()
+    .sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime())
+  const finalDone = statusChanges
+    .filter(item => item.new_value === 'done')
+    .at(-1)
+  const completedAt = finalDone?.created_at ?? issue.updated_at
+  const startedAt = statusChanges
+    .filter(item =>
+      (item.new_value === 'in_progress' || item.new_value === 'in_review')
+      && new Date(item.created_at).getTime() <= new Date(completedAt).getTime()
+    )
+    .at(-1)
+    ?.created_at ?? issue.created_at
 
   return safeDayDiff(startedAt, completedAt)
 }

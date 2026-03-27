@@ -347,6 +347,7 @@ describe('BacklogPage', () => {
     expect(await screen.findByText('一括更新結果')).toBeInTheDocument()
     expect(screen.getByText('missing-id')).toBeInTheDocument()
     expect(screen.getByText('見つからないか対象外')).toBeInTheDocument()
+    expect(screen.getByText('見つからないか対象外 1件')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'スキップ分を再選択' }))
     expect(screen.getByText('1件選択中')).toBeInTheDocument()
   })

@@ -78,6 +78,9 @@ export function WorkspaceSettings({ workspaceId }: Props) {
   const [nameInput, setNameInput] = useState('')
   const [addUserId, setAddUserId] = useState('')
   const [addRole, setAddRole] = useState<Role>('member')
+  const [logRuleFilter, setLogRuleFilter] = useState<'all' | WorkspaceAutomationLog['rule_type']>('all')
+  const [logStatusFilter, setLogStatusFilter] = useState<'all' | WorkspaceAutomationLog['status']>('all')
+  const [showAllLogs, setShowAllLogs] = useState(false)
 
   const { data: members = [], isLoading: membersLoading } = useQuery({
     queryKey: ['workspace-members', workspaceId],
@@ -102,6 +105,12 @@ export function WorkspaceSettings({ workspaceId }: Props) {
 
   const memberIds = new Set(members.map(m => m.user_id))
   const addableUsers = allUsers.filter(u => !memberIds.has(u.id))
+  const filteredAutomationLogs = automationLogs.filter(log => {
+    const ruleMatches = logRuleFilter === 'all' || log.rule_type === logRuleFilter
+    const statusMatches = logStatusFilter === 'all' || log.status === logStatusFilter
+    return ruleMatches && statusMatches
+  })
+  const visibleAutomationLogs = showAllLogs ? filteredAutomationLogs : filteredAutomationLogs.slice(0, 8)
 
   const myRole = members.find(m => m.user_id === user?.id)?.role as Role | undefined
   const isAdmin = myRole === 'owner' || myRole === 'admin'
@@ -291,16 +300,48 @@ export function WorkspaceSettings({ workspaceId }: Props) {
                 <p className="mt-1 text-xs text-gray-500">直近の通知送信やスプリント移動の結果を確認できます。</p>
               </div>
               <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
-                {automationLogs.length}件
+                {filteredAutomationLogs.length}件
               </span>
             </div>
-            {automationLogs.length === 0 ? (
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <select
+                aria-label="自動化ルール絞り込み"
+                value={logRuleFilter}
+                onChange={event => {
+                  setLogRuleFilter(event.target.value as 'all' | WorkspaceAutomationLog['rule_type'])
+                  setShowAllLogs(false)
+                }}
+                className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600"
+              >
+                <option value="all">すべてのルール</option>
+                <option value="assignee_change">担当変更</option>
+                <option value="review_ready">レビュー待ち</option>
+                <option value="overdue">期限超過</option>
+                <option value="sprint_carryover">スプリント移動</option>
+              </select>
+              <select
+                aria-label="自動化結果絞り込み"
+                value={logStatusFilter}
+                onChange={event => {
+                  setLogStatusFilter(event.target.value as 'all' | WorkspaceAutomationLog['status'])
+                  setShowAllLogs(false)
+                }}
+                className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600"
+              >
+                <option value="all">すべての結果</option>
+                <option value="sent">送信</option>
+                <option value="applied">適用</option>
+                <option value="skipped">スキップ</option>
+                <option value="disabled">無効</option>
+              </select>
+            </div>
+            {filteredAutomationLogs.length === 0 ? (
               <p className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-xs text-gray-400">
-                まだ自動化実行ログはありません
+                条件に一致する自動化実行ログはありません
               </p>
             ) : (
               <div className="space-y-2">
-                {automationLogs.map(log => {
+                {visibleAutomationLogs.map(log => {
                   const statusMeta = automationStatusLabel(log.status)
                   return (
                     <div
@@ -341,6 +382,22 @@ export function WorkspaceSettings({ workspaceId }: Props) {
                     </div>
                   )
                 })}
+                {filteredAutomationLogs.length > visibleAutomationLogs.length && (
+                  <button
+                    onClick={() => setShowAllLogs(true)}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                  >
+                    さらに表示
+                  </button>
+                )}
+                {showAllLogs && filteredAutomationLogs.length > 8 && (
+                  <button
+                    onClick={() => setShowAllLogs(false)}
+                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-500 hover:bg-gray-100"
+                  >
+                    折りたたむ
+                  </button>
+                )}
               </div>
             )}
           </div>

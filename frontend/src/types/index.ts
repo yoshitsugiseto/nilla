@@ -34,6 +34,20 @@ export interface WorkspaceAutomationSettings {
   sprint_carryover_mode: SprintCarryoverMode
 }
 
+export interface WorkspaceAutomationLog {
+  id: string
+  workspace_id: string
+  project_id: string
+  issue_id: string | null
+  issue_title: string | null
+  rule_type: string
+  status: string
+  target_user_id: string | null
+  target_user_name: string | null
+  message: string
+  created_at: string
+}
+
 export type ProjectRole = 'admin' | 'editor' | 'viewer'
 
 export interface ProjectMember {
