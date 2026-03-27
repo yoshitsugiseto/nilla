@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { SearchPage } from '../pages/SearchPage'
@@ -11,17 +11,38 @@ import type { Issue, IssueSearchFilters, WorkspaceMember } from '../types'
 const {
   mockGetIssuesPaged,
   mockGetProjectMembers,
+  mockGetSprints,
+  mockGetLabels,
+  mockBulkUpdateIssues,
+  mockShowToast,
 } = vi.hoisted(() => ({
   mockGetIssuesPaged: vi.fn(),
   mockGetProjectMembers: vi.fn(),
+  mockGetSprints: vi.fn(),
+  mockGetLabels: vi.fn(),
+  mockBulkUpdateIssues: vi.fn(),
+  mockShowToast: vi.fn(),
 }))
 
 vi.mock('../api/issues', () => ({
   getIssuesPaged: mockGetIssuesPaged,
+  bulkUpdateIssues: mockBulkUpdateIssues,
+}))
+
+vi.mock('../api/sprints', () => ({
+  getSprints: mockGetSprints,
+}))
+
+vi.mock('../api/labels', () => ({
+  getLabels: mockGetLabels,
 }))
 
 vi.mock('../api/workspaces', () => ({
   getProjectMembers: mockGetProjectMembers,
+}))
+
+vi.mock('../components/common/useToast', () => ({
+  useToast: () => mockShowToast,
 }))
 
 vi.mock('../components/Issue/IssueDetail', () => ({
@@ -67,7 +88,7 @@ function makeIssue(overrides: Partial<Issue> = {}): Issue {
 function makeMember(overrides: Partial<WorkspaceMember> = {}): WorkspaceMember {
   return {
     workspace_id: 'workspace-1',
-    user_id: 'member-1',
+    user_id: 'user-1',
     name: 'Alice',
     email: 'alice@example.com',
     avatar_url: null,
@@ -118,6 +139,10 @@ describe('SearchPage', () => {
     localStorage.clear()
     mockGetIssuesPaged.mockReset()
     mockGetProjectMembers.mockReset()
+    mockGetSprints.mockReset()
+    mockGetLabels.mockReset()
+    mockBulkUpdateIssues.mockReset()
+    mockShowToast.mockReset()
     useAuthStore.setState({
       accessToken: 'access-123',
       user: {
@@ -134,6 +159,33 @@ describe('SearchPage', () => {
       total: 41,
     })
     mockGetProjectMembers.mockResolvedValue([makeMember()])
+    mockGetSprints.mockResolvedValue([
+      {
+        id: 'sprint-1',
+        project_id: 'project-1',
+        name: 'Sprint Alpha',
+        goal: 'Ship search',
+        status: 'planning',
+        start_date: '2026-03-01',
+        end_date: '2026-03-14',
+        created_at: '2026-03-01T00:00:00Z',
+        updated_at: '2026-03-01T00:00:00Z',
+      },
+    ])
+    mockGetLabels.mockResolvedValue([
+      {
+        id: 'label-1',
+        project_id: 'project-1',
+        name: 'Frontend',
+        color: '#3b82f6',
+        created_at: '2026-03-01T00:00:00Z',
+      },
+    ])
+    mockBulkUpdateIssues.mockResolvedValue({
+      items: [],
+      updated_count: 1,
+      skipped_ids: [],
+    })
   })
 
   afterEach(() => {
@@ -283,5 +335,29 @@ describe('SearchPage', () => {
       })
     )
     expect(screen.getByText('フィルター結果')).toBeInTheDocument()
+  })
+
+  test('bulk updates visible search results', async () => {
+    const user = userEvent.setup()
+
+    renderSearchPage('bug')
+
+    await waitFor(() => expect(mockGetIssuesPaged).toHaveBeenCalled())
+    await user.click(await screen.findByRole('button', { name: '一括操作' }))
+    await user.click(screen.getByRole('button', { name: '表示中を全選択' }))
+
+    const bulkBar = screen.getByText('1件選択中').closest('div')
+    if (!bulkBar) {
+      throw new Error('bulk action bar not found')
+    }
+
+    await user.selectOptions(within(bulkBar).getAllByRole('combobox')[2], '__unassigned__')
+    await waitFor(() =>
+      expect(mockBulkUpdateIssues).toHaveBeenLastCalledWith('project-1', {
+        issue_ids: ['issue-1'],
+        assignee_id: '',
+      })
+    )
+    expect(mockShowToast).toHaveBeenCalledWith('1件更新しました', 'success')
   })
 })

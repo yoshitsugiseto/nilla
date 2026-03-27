@@ -3,6 +3,7 @@ import { getIssues } from '../api/issues'
 import { getSprints } from '../api/sprints'
 import { useAppStore } from '../store'
 import { TypeIcon, PriorityBadge } from '../components/common/Badge'
+import { VelocityChart } from '../components/Board/VelocityChart'
 import { DetailPanel } from '../components/common/DetailPanel'
 import { IssueDetail } from '../components/Issue/IssueDetail'
 import { useState } from 'react'
@@ -11,6 +12,11 @@ import { CheckCircle2, AlertCircle, Clock, BarChart3 } from 'lucide-react'
 import { useCurrentTime } from '../hooks/useCurrentTime'
 import { useProjectPermissions } from '../hooks/useProjectPermissions'
 import { deadlineLabel } from '../utils/date'
+import {
+  buildAverageCycleSnapshot,
+  buildOpenRiskSnapshot,
+  buildThroughputSnapshot,
+} from '../utils/reporting'
 
 const STATUS_COLORS: Record<string, string> = {
   todo: 'bg-gray-200',
@@ -61,6 +67,9 @@ export function DashboardPage() {
     .filter(i => (i.priority === 'critical' || i.priority === 'high') && i.status !== 'done')
     .slice(0, 5)
   const hasHighPriorityIssues = issues.some(i => i.priority === 'critical' || i.priority === 'high')
+  const throughput14d = buildThroughputSnapshot(issues, nowMs, 14)
+  const avgCycle30d = buildAverageCycleSnapshot(issues, nowMs, 30)
+  const openRiskSnapshot = buildOpenRiskSnapshot(issues, nowMs)
 
   const recentIssues = [...issues]
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
@@ -196,6 +205,51 @@ export function DashboardPage() {
           )}
         </div>
       </div>
+
+      <section aria-label="デリバリースナップショット" className="space-y-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-gray-700">デリバリースナップショット</h2>
+          <span className="text-xs text-gray-400">直近の完了速度と滞留を確認できます</span>
+        </div>
+        <div className="grid gap-4 md:grid-cols-4">
+          <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <p className="text-xs text-gray-500">14日 throughput</p>
+            <p className="mt-1 text-2xl font-bold text-gray-900">{throughput14d.issueCount}件</p>
+            <p className="mt-1 text-sm text-gray-500">{throughput14d.pointCount}pt 完了</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <p className="text-xs text-gray-500">平均 cycle time</p>
+            <p className="mt-1 text-2xl font-bold text-gray-900">
+              {avgCycle30d != null ? `${avgCycle30d}日` : '—'}
+            </p>
+            <p className="mt-1 text-sm text-gray-500">直近30日で完了した issue ベース</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <p className="text-xs text-gray-500">期限超過</p>
+            <p className={`mt-1 text-2xl font-bold ${openRiskSnapshot.overdueCount > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+              {openRiskSnapshot.overdueCount}件
+            </p>
+            <p className="mt-1 text-sm text-gray-500">未完了 issue のみ</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <p className="text-xs text-gray-500">レビュー待ち</p>
+            <p className={`mt-1 text-2xl font-bold ${openRiskSnapshot.reviewCount > 0 ? 'text-blue-700' : 'text-gray-900'}`}>
+              {openRiskSnapshot.reviewCount}件
+            </p>
+            <p className="mt-1 text-sm text-gray-500">未アサイン {openRiskSnapshot.unassignedCount}件</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-gray-200 bg-white p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700">最近のスプリント傾向</h2>
+            <p className="text-xs text-gray-400">完了済み sprint ごとの throughput を見られます</p>
+          </div>
+        </div>
+        <VelocityChart projectId={activeProjectId} />
+      </section>
 
       {/* Recently updated */}
       <div className="bg-white border border-gray-200 rounded-xl p-5">

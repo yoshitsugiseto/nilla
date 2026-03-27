@@ -31,6 +31,10 @@ vi.mock('../components/Issue/IssueDetail', () => ({
   IssueDetail: () => <div>IssueDetail</div>,
 }))
 
+vi.mock('../components/Board/VelocityChart', () => ({
+  VelocityChart: ({ projectId }: { projectId: string }) => <div>VelocityChart:{projectId}</div>,
+}))
+
 function createQueryClient() {
   return new QueryClient({
     defaultOptions: {
@@ -153,5 +157,108 @@ describe('DashboardPage', () => {
     expect(emptyState).toHaveClass('text-gray-400')
     expect(emptyState).toHaveClass('italic')
     expect(screen.queryByText('すべて対応済みです')).not.toBeInTheDocument()
+  })
+
+  test('shows delivery snapshots and recent sprint trend widgets', async () => {
+    const queryClient = createQueryClient()
+
+    mockGetIssues.mockResolvedValue([
+      {
+        id: 'issue-done-1',
+        project_id: 'project-1',
+        sprint_id: 'sprint-1',
+        parent_id: null,
+        epic_id: null,
+        epic_title: null,
+        number: 1,
+        title: 'Done one',
+        description: null,
+        type: 'task',
+        status: 'done',
+        priority: 'medium',
+        points: 5,
+        assignee_id: 'user-1',
+        assignee_name: 'Alice',
+        assignee_avatar_url: null,
+        labels: [],
+        position: 0,
+        due_date: null,
+        created_at: '2026-03-15T00:00:00Z',
+        updated_at: '2026-03-18T00:00:00Z',
+      },
+      {
+        id: 'issue-done-2',
+        project_id: 'project-1',
+        sprint_id: 'sprint-1',
+        parent_id: null,
+        epic_id: null,
+        epic_title: null,
+        number: 2,
+        title: 'Done two',
+        description: null,
+        type: 'bug',
+        status: 'done',
+        priority: 'high',
+        points: 8,
+        assignee_id: 'user-1',
+        assignee_name: 'Alice',
+        assignee_avatar_url: null,
+        labels: [],
+        position: 1000,
+        due_date: null,
+        created_at: '2026-03-19T00:00:00Z',
+        updated_at: '2026-03-22T00:00:00Z',
+      },
+      {
+        id: 'issue-open',
+        project_id: 'project-1',
+        sprint_id: 'sprint-1',
+        parent_id: null,
+        epic_id: null,
+        epic_title: null,
+        number: 3,
+        title: 'Needs review',
+        description: null,
+        type: 'story',
+        status: 'in_review',
+        priority: 'critical',
+        points: 3,
+        assignee_id: null,
+        assignee_name: null,
+        assignee_avatar_url: null,
+        labels: [],
+        position: 2000,
+        due_date: '2026-03-01',
+        created_at: '2026-03-10T00:00:00Z',
+        updated_at: '2026-03-23T00:00:00Z',
+      },
+    ])
+    mockGetSprints.mockResolvedValue([
+      {
+        id: 'sprint-1',
+        project_id: 'project-1',
+        name: 'Sprint Alpha',
+        goal: 'Ship reporting',
+        status: 'active',
+        start_date: '2026-03-14',
+        end_date: '2026-03-28',
+        created_at: '2026-03-01T00:00:00Z',
+        updated_at: '2026-03-01T00:00:00Z',
+      },
+    ])
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <DashboardPage />
+      </QueryClientProvider>
+    )
+
+    await waitFor(() => expect(mockGetIssues).toHaveBeenCalledWith('project-1'))
+    expect(await screen.findByLabelText('デリバリースナップショット')).toBeInTheDocument()
+    expect(screen.getByText('13pt 完了')).toBeInTheDocument()
+    expect(screen.getByText('3日')).toBeInTheDocument()
+    expect(screen.getByText('期限超過')).toBeInTheDocument()
+    expect(screen.getByText('レビュー待ち')).toBeInTheDocument()
+    expect(screen.getByText('VelocityChart:project-1')).toBeInTheDocument()
   })
 })

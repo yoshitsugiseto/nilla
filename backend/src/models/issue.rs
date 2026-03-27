@@ -328,6 +328,15 @@ pub struct BulkUpdateIssues {
     pub assignee_id: Option<String>, // "" = clear
     pub priority: Option<IssuePriority>,
     pub labels: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "deserialize_nullable_field")]
+    pub due_date: Option<Option<NaiveDate>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BulkUpdateResult {
+    pub items: Vec<Issue>,
+    pub updated_count: usize,
+    pub skipped_ids: Vec<String>,
 }
 
 fn deserialize_nullable_field<'de, D, T>(

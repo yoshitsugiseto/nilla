@@ -30,6 +30,7 @@ const FIELD_LABELS: Record<string, string> = {
   sprint_id: 'スプリント',
   assignee_id: '担当者',
   priority: '優先度',
+  labels: 'ラベル',
   due_date: '期限日',
 }
 

@@ -198,7 +198,11 @@ describe('BacklogPage', () => {
     mockUpdateIssueSprint.mockResolvedValue(undefined)
     mockDeleteIssue.mockResolvedValue(undefined)
     mockReorderIssues.mockResolvedValue(undefined)
-    mockBulkUpdateIssues.mockResolvedValue([])
+    mockBulkUpdateIssues.mockResolvedValue({
+      items: [],
+      updated_count: 1,
+      skipped_ids: [],
+    })
     mockGetSprints.mockResolvedValue([makeSprint()])
     mockGetProjectMembers.mockResolvedValue([makeMember()])
     mockGetLabels.mockResolvedValue([makeLabel(), makeLabel({ id: 'label-2', name: 'Backend', color: '#10b981' })])
@@ -273,7 +277,7 @@ describe('BacklogPage', () => {
         status: 'done',
       })
     )
-    expect(mockShowToast).toHaveBeenCalledWith('一括更新しました', 'success')
+    expect(mockShowToast).toHaveBeenCalledWith('1件更新しました', 'success')
   })
 
   test('delete flow confirms and removes an issue', async () => {
@@ -362,6 +366,54 @@ describe('BacklogPage', () => {
       expect(mockBulkUpdateIssues).toHaveBeenLastCalledWith('project-1', {
         issue_ids: ['issue-1'],
         labels: ['Frontend', 'Backend'],
+      })
+    )
+  })
+
+  test('bulk due date update submits payload', async () => {
+    const user = userEvent.setup()
+
+    renderBacklogPage()
+
+    await waitFor(() => expect(mockGetIssues).toHaveBeenCalled())
+    await user.click(await screen.findByRole('button', { name: '一括操作' }))
+    await user.click(screen.getByText('Backlog task'))
+
+    const bulkBar = screen.getByText('1件選択中').closest('div')
+    if (!bulkBar) {
+      throw new Error('bulk action bar not found')
+    }
+
+    await user.type(within(bulkBar).getByLabelText('一括期限日'), '2026-03-15')
+    await user.click(within(bulkBar).getByRole('button', { name: '期限日反映' }))
+
+    await waitFor(() =>
+      expect(mockBulkUpdateIssues).toHaveBeenLastCalledWith('project-1', {
+        issue_ids: ['issue-1'],
+        due_date: '2026-03-15',
+      })
+    )
+  })
+
+  test('bulk due date clear submits null payload', async () => {
+    const user = userEvent.setup()
+
+    renderBacklogPage()
+
+    await waitFor(() => expect(mockGetIssues).toHaveBeenCalled())
+    await user.click(await screen.findByRole('button', { name: '一括操作' }))
+    await user.click(screen.getByText('Backlog task'))
+
+    const bulkBar = screen.getByText('1件選択中').closest('div')
+    if (!bulkBar) {
+      throw new Error('bulk action bar not found')
+    }
+
+    await user.click(within(bulkBar).getByRole('button', { name: '期限日クリア' }))
+    await waitFor(() =>
+      expect(mockBulkUpdateIssues).toHaveBeenLastCalledWith('project-1', {
+        issue_ids: ['issue-1'],
+        due_date: null,
       })
     )
   })

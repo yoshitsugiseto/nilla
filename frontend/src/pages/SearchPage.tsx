@@ -1,18 +1,22 @@
-import { useId, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { getIssuesPaged } from '../api/issues'
+import { useEffect, useId, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { bulkUpdateIssues, getIssuesPaged } from '../api/issues'
+import { getLabels } from '../api/labels'
+import { getSprints } from '../api/sprints'
 import { getProjectMembers } from '../api/workspaces'
 import { useAppStore } from '../store'
 import { useAuthStore } from '../store/auth'
 import { TypeIcon, PriorityBadge, StatusBadge } from '../components/common/Badge'
 import { Modal } from '../components/common/Modal'
+import { IssueBulkActionBar, formatBulkUpdateToast } from '../components/Issue/IssueBulkActionBar'
 import { IssueDetail } from '../components/Issue/IssueDetail'
+import { useToast } from '../components/common/useToast'
 import { useCurrentTime } from '../hooks/useCurrentTime'
 import { useProjectPermissions } from '../hooks/useProjectPermissions'
 import { dueDateLabel } from '../utils/date'
 import { ProjectRoleBadge } from '../components/common/ProjectRoleBadge'
-import { Search, ChevronLeft, ChevronRight, SlidersHorizontal, X } from 'lucide-react'
-import type { IssueSearchFilters } from '../types'
+import { Search, ChevronLeft, ChevronRight, SlidersHorizontal, X, CheckSquare, Square } from 'lucide-react'
+import type { BulkUpdatePayload, IssueSearchFilters } from '../types'
 
 const PAGE_SIZE = 20
 const EMPTY_FILTERS: IssueSearchFilters = { status: '', type: '', priority: '', assignee_id: '' }
@@ -32,6 +36,8 @@ interface Props {
 }
 
 export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: Props) {
+  const qc = useQueryClient()
+  const showToast = useToast()
   const { user } = useAuthStore()
   const {
     activeProjectId,
@@ -45,10 +51,12 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
   const priorityId = useId()
   const assigneeId = useId()
   const nowMs = useCurrentTime()
-  const { role } = useProjectPermissions(activeProjectId)
+  const { role, canEditProject } = useProjectPermissions(activeProjectId)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [pageState, setPageState] = useState({ scope: '', page: 0 })
   const [showFilters, setShowFilters] = useState(false)
+  const [bulkMode, setBulkMode] = useState(false)
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const searchScope = JSON.stringify({ query, filters })
   const hasFilters = Object.values(filters).some(Boolean)
   const effectivePage =
@@ -59,7 +67,19 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
   const { data: members = [] } = useQuery({
     queryKey: ['project-members', activeProjectId],
     queryFn: () => getProjectMembers(activeProjectId!),
-    enabled: !!activeProjectId && showFilters,
+    enabled: !!activeProjectId && (showFilters || bulkMode),
+  })
+
+  const { data: sprints = [] } = useQuery({
+    queryKey: ['sprints', activeProjectId],
+    queryFn: () => getSprints(activeProjectId!),
+    enabled: !!activeProjectId && bulkMode,
+  })
+
+  const { data: projectLabels = [] } = useQuery({
+    queryKey: ['labels', activeProjectId],
+    queryFn: () => getLabels(activeProjectId!),
+    enabled: !!activeProjectId && bulkMode,
   })
 
   const { data, isLoading, isError } = useQuery({
@@ -84,10 +104,38 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
   const start = effectivePage * PAGE_SIZE + 1
   const end = Math.min(effectivePage * PAGE_SIZE + issues.length, total)
 
+  useEffect(() => {
+    setBulkSelected(new Set())
+  }, [activeProjectId, effectivePage, searchScope])
+
+  const bulkMutation = useMutation({
+    mutationFn: (payload: Omit<BulkUpdatePayload, 'issue_ids'>) =>
+      bulkUpdateIssues(activeProjectId!, { issue_ids: [...bulkSelected], ...payload }),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['issues', activeProjectId] })
+      setBulkSelected(new Set())
+      setBulkMode(false)
+      const toast = formatBulkUpdateToast(result)
+      showToast(toast.message, toast.type)
+    },
+    onError: () => showToast('一括更新に失敗しました', 'error'),
+  })
+
   const setFilter = (key: keyof IssueSearchFilters, value: string) =>
     onFiltersChange({ ...filters, [key]: value })
 
   const clearFilters = () => onFiltersChange(EMPTY_FILTERS)
+  const toggleBulkSelect = (issueId: string) => {
+    setBulkSelected(previous => {
+      const next = new Set(previous)
+      if (next.has(issueId)) next.delete(issueId)
+      else next.add(issueId)
+      return next
+    })
+  }
+  const selectVisibleIssues = () => {
+    setBulkSelected(new Set(issues.map(issue => issue.id)))
+  }
   const applyQuickFilter = (key: (typeof QUICK_FILTERS)[number]['key']) => {
     const nextFilters = { ...filters }
     switch (key) {
@@ -161,6 +209,19 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {canEditProject && (query.length >= 2 || hasFilters) && total > 0 && (
+              <button
+                onClick={() => {
+                  setBulkMode(value => !value)
+                  setBulkSelected(new Set())
+                }}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+                  bulkMode ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <CheckSquare size={14} /> 一括操作
+              </button>
+            )}
             <button
               onClick={saveCurrentPreset}
               disabled={!canSavePreset}
@@ -242,6 +303,27 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        {canEditProject && bulkMode && bulkSelected.size > 0 && (
+          <IssueBulkActionBar
+            selectedCount={bulkSelected.size}
+            members={members}
+            sprints={sprints}
+            projectLabels={projectLabels}
+            isPending={bulkMutation.isPending}
+            onApply={(payload) => bulkMutation.mutate(payload)}
+            onClearSelection={() => setBulkSelected(new Set())}
+          />
+        )}
+
+        {canEditProject && bulkMode && bulkSelected.size === 0 && issues.length > 0 && (
+          <div className="mb-4 flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+            <span className="text-gray-500">表示中の検索結果をまとめて操作できます</span>
+            <button onClick={selectVisibleIssues} className="text-blue-600 hover:text-blue-700">
+              表示中を全選択
+            </button>
           </div>
         )}
 
@@ -351,9 +433,24 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
           {issues.map(issue => (
             <div
               key={issue.id}
-              onClick={() => setDetailId(issue.id)}
-              className="flex items-center gap-3 py-2.5 px-4 bg-white border border-gray-100 rounded-lg hover:border-blue-200 hover:bg-blue-50/30 cursor-pointer transition-colors"
+              onClick={() => {
+                if (bulkMode) {
+                  toggleBulkSelect(issue.id)
+                  return
+                }
+                setDetailId(issue.id)
+              }}
+              className={`flex items-center gap-3 rounded-lg border py-2.5 px-4 transition-colors ${
+                bulkSelected.has(issue.id)
+                  ? 'border-blue-200 bg-blue-50'
+                  : 'border-gray-100 bg-white hover:border-blue-200 hover:bg-blue-50/30'
+              } cursor-pointer`}
             >
+              {bulkMode && (
+                <span className="shrink-0 text-blue-500">
+                  {bulkSelected.has(issue.id) ? <CheckSquare size={15} /> : <Square size={15} className="text-gray-300" />}
+                </span>
+              )}
               <TypeIcon type={issue.type} />
               <span className="text-xs text-gray-400 font-mono w-14 shrink-0">#{issue.number}</span>
               <span className="flex-1 text-sm text-gray-900 font-medium truncate">{issue.title}</span>

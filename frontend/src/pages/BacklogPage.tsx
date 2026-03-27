@@ -10,6 +10,7 @@ import { useAppStore } from '../store'
 import { Modal } from '../components/common/Modal'
 import { DetailPanel } from '../components/common/DetailPanel'
 import { IssueForm } from '../components/Issue/IssueForm'
+import { IssueBulkActionBar, formatBulkUpdateToast } from '../components/Issue/IssueBulkActionBar'
 import { IssueDetail } from '../components/Issue/IssueDetail'
 import { TypeIcon, PriorityBadge, StatusBadge } from '../components/common/Badge'
 import { Avatar } from '../components/common/Avatar'
@@ -21,8 +22,6 @@ import { useProjectPermissions } from '../hooks/useProjectPermissions'
 import { deadlineLabel, dueDateLabel } from '../utils/date'
 import type { Issue, IssuePriority, IssueStatus, IssueType } from '../types'
 
-const BULK_SELECT_PLACEHOLDER = '__placeholder__'
-const BULK_UNASSIGNED_ASSIGNEE = '__unassigned__'
 const QUICK_CREATE_OPTIONS: { type: IssueType; label: string }[] = [
   { type: 'task', label: 'タスク' },
   { type: 'bug', label: 'バグ' },
@@ -348,7 +347,6 @@ export function BacklogPage() {
   const [filterQuery, setFilterQuery] = useState('')
   const [bulkMode, setBulkMode] = useState(false)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
-  const [bulkLabelInput, setBulkLabelInput] = useState('')
 
   const { data: sprints = [] } = useQuery({
     queryKey: ['sprints', activeProjectId],
@@ -375,14 +373,15 @@ export function BacklogPage() {
       assignee_id?: string
       priority?: IssuePriority
       labels?: string[]
+      due_date?: string | null
     }) =>
       bulkUpdateIssues(activeProjectId!, { issue_ids: [...bulkSelected], ...payload }),
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['issues', activeProjectId] })
       setBulkSelected(new Set())
       setBulkMode(false)
-      setBulkLabelInput('')
-      showToast('一括更新しました', 'success')
+      const toast = formatBulkUpdateToast(result)
+      showToast(toast.message, toast.type)
     },
     onError: () => showToast('一括更新に失敗しました', 'error'),
   })
@@ -399,15 +398,6 @@ export function BacklogPage() {
   const selectVisibleIssues = (ids: string[]) => {
     setBulkSelected(new Set(ids))
   }
-
-  const applyBulkLabels = () => {
-    const labels = bulkLabelInput
-      .split(',')
-      .map(label => label.trim())
-      .filter(Boolean)
-    bulkMutation.mutate({ labels })
-  }
-
   const { data: issues = [], isLoading } = useQuery({
     queryKey: ['issues', activeProjectId],
     queryFn: () => getIssues(activeProjectId!),
@@ -557,94 +547,16 @@ export function BacklogPage() {
         )}
       </div>
 
-	      {canEditProject && bulkMode && bulkSelected.size > 0 && (
-	        <div className="flex items-center gap-3 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
-          <span className="text-blue-700 font-medium shrink-0">{bulkSelected.size}件選択中</span>
-	          <select
-	            defaultValue={BULK_SELECT_PLACEHOLDER}
-	            onChange={e => {
-                if (e.target.value === BULK_SELECT_PLACEHOLDER) return
-                bulkMutation.mutate({ status: e.target.value as IssueStatus })
-                e.target.value = BULK_SELECT_PLACEHOLDER
-              }}
-	            className="border border-gray-200 rounded px-2 py-1 text-sm"
-	          >
-	            <option value={BULK_SELECT_PLACEHOLDER}>ステータス変更...</option>
-            <option value="todo">Todo</option>
-            <option value="in_progress">In Progress</option>
-            <option value="in_review">In Review</option>
-            <option value="done">Done</option>
-          </select>
-	          <select
-	            defaultValue={BULK_SELECT_PLACEHOLDER}
-	            onChange={e => {
-                if (e.target.value === BULK_SELECT_PLACEHOLDER) return
-                bulkMutation.mutate({ sprint_id: e.target.value })
-                e.target.value = BULK_SELECT_PLACEHOLDER
-              }}
-	            className="border border-gray-200 rounded px-2 py-1 text-sm"
-	          >
-	            <option value={BULK_SELECT_PLACEHOLDER}>スプリント変更...</option>
-            <option value="backlog">Backlog</option>
-            {sprints.filter(s => s.status !== 'completed').map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-	          <select
-	            defaultValue={BULK_SELECT_PLACEHOLDER}
-	            onChange={e => {
-                if (e.target.value === BULK_SELECT_PLACEHOLDER) return
-                bulkMutation.mutate({
-                  assignee_id: e.target.value === BULK_UNASSIGNED_ASSIGNEE ? '' : e.target.value,
-                })
-                e.target.value = BULK_SELECT_PLACEHOLDER
-              }}
-	            className="border border-gray-200 rounded px-2 py-1 text-sm"
-	          >
-	            <option value={BULK_SELECT_PLACEHOLDER}>担当者変更...</option>
-	            <option value={BULK_UNASSIGNED_ASSIGNEE}>未割り当て</option>
-            {members.map(m => (
-              <option key={m.user_id} value={m.user_id}>{m.name}</option>
-            ))}
-          </select>
-	          <select
-	            defaultValue={BULK_SELECT_PLACEHOLDER}
-	            onChange={e => {
-                if (e.target.value === BULK_SELECT_PLACEHOLDER) return
-                bulkMutation.mutate({ priority: e.target.value as IssuePriority })
-                e.target.value = BULK_SELECT_PLACEHOLDER
-              }}
-	            className="border border-gray-200 rounded px-2 py-1 text-sm"
-	          >
-	            <option value={BULK_SELECT_PLACEHOLDER}>優先度変更...</option>
-            <option value="critical">Critical</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </select>
-          <input
-            value={bulkLabelInput}
-            onChange={e => setBulkLabelInput(e.target.value)}
-            list="bulk-label-suggestions"
-            placeholder="labels,comma,separated"
-            className="border border-gray-200 rounded px-2 py-1 text-sm min-w-44"
-          />
-          <datalist id="bulk-label-suggestions">
-            {projectLabels.map(label => (
-              <option key={label.id} value={label.name} />
-            ))}
-          </datalist>
-          <button
-            onClick={applyBulkLabels}
-            disabled={bulkMutation.isPending}
-            className="px-2 py-1 text-xs rounded border border-gray-200 text-gray-600 hover:bg-white disabled:opacity-40"
-          >
-            ラベル反映
-          </button>
-          <button onClick={() => setBulkSelected(new Set())} className="ml-auto text-gray-400 hover:text-gray-600">
-            <X size={14} />
-          </button>
-        </div>
+      {canEditProject && bulkMode && bulkSelected.size > 0 && (
+        <IssueBulkActionBar
+          selectedCount={bulkSelected.size}
+          members={members}
+          sprints={sprints}
+          projectLabels={projectLabels}
+          isPending={bulkMutation.isPending}
+          onApply={(payload) => bulkMutation.mutate(payload)}
+          onClearSelection={() => setBulkSelected(new Set())}
+        />
       )}
 
       {canEditProject && bulkMode && bulkSelected.size === 0 && topLevel.length > 0 && (

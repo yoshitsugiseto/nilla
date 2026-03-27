@@ -1,5 +1,14 @@
 import client from './client'
-import type { Issue, CreateIssue, UpdateIssue, Comment, ActivityLog, IssueLink, BulkUpdatePayload } from '../types'
+import type {
+  Issue,
+  CreateIssue,
+  UpdateIssue,
+  Comment,
+  ActivityLog,
+  IssueLink,
+  BulkUpdatePayload,
+  BulkUpdateResult,
+} from '../types'
 
 export interface IssueFilters {
   sprint_id?: string
@@ -61,4 +70,4 @@ export const createIssueLink = (id: string, target_issue_id: string, link_type: 
 export const deleteIssueLink = (linkId: string) => client.delete(`/issue-links/${linkId}`).then(r => r.data)
 
 export const bulkUpdateIssues = (projectId: string, data: BulkUpdatePayload) =>
-  client.patch<Issue[]>(`/projects/${projectId}/issues/bulk`, data).then(r => r.data)
+  client.patch<BulkUpdateResult>(`/projects/${projectId}/issues/bulk`, data).then(r => r.data)
