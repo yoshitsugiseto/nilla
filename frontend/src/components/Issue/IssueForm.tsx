@@ -7,6 +7,7 @@ import { getLabels } from '../../api/labels'
 import type { Issue, IssueType, IssuePriority, UpdateIssue } from '../../types'
 import { useToast } from '../common/useToast'
 import { extractErrorMessage } from '../../api/client'
+import { ISSUE_TYPE_LABELS } from '../../utils/labels'
 
 interface Props {
   projectId: string
@@ -71,23 +72,23 @@ export function IssueForm({ projectId, sprintId, defaultType, parentId, parentPr
   // エピック・親ストーリーの選択状況に応じて選べるタイプを絞り込む
   const allowedTypes: { value: IssueType; label: string }[] = form.parent_id
     ? [
-        { value: 'task',  label: 'Task' },
-        { value: 'bug',   label: 'Bug' },
-        { value: 'spike', label: 'Spike' },
+        { value: 'task',  label: ISSUE_TYPE_LABELS.task },
+        { value: 'bug',   label: ISSUE_TYPE_LABELS.bug },
+        { value: 'spike', label: ISSUE_TYPE_LABELS.spike },
       ]
     : form.epic_id
       ? [
-          { value: 'story', label: 'Story' },
-          { value: 'task',  label: 'Task' },
-          { value: 'bug',   label: 'Bug' },
-          { value: 'spike', label: 'Spike' },
+          { value: 'story', label: ISSUE_TYPE_LABELS.story },
+          { value: 'task',  label: ISSUE_TYPE_LABELS.task },
+          { value: 'bug',   label: ISSUE_TYPE_LABELS.bug },
+          { value: 'spike', label: ISSUE_TYPE_LABELS.spike },
         ]
       : [
-          { value: 'epic',  label: 'Epic' },
-          { value: 'story', label: 'Story' },
-          { value: 'task',  label: 'Task' },
-          { value: 'bug',   label: 'Bug' },
-          { value: 'spike', label: 'Spike' },
+          { value: 'epic',  label: ISSUE_TYPE_LABELS.epic },
+          { value: 'story', label: ISSUE_TYPE_LABELS.story },
+          { value: 'task',  label: ISSUE_TYPE_LABELS.task },
+          { value: 'bug',   label: ISSUE_TYPE_LABELS.bug },
+          { value: 'spike', label: ISSUE_TYPE_LABELS.spike },
         ]
 
   const effectiveType: IssueType = allowedTypes.some(t => t.value === form.type)

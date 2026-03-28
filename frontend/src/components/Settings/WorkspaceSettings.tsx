@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Trash2, Crown, Shield, User as UserIcon, Eye, Pencil, Check, X, UserPlus } from 'lucide-react'
 import {
+  getWorkspace,
   getWorkspaceMembers,
   getWorkspaceAutomationSettings,
   getWorkspaceAutomationLogs,
@@ -92,16 +93,30 @@ export function WorkspaceSettings({ workspaceId }: Props) {
     queryKey: ['users'],
     queryFn: getUsers,
   })
+  const { data: workspace } = useQuery({
+    queryKey: ['workspace', workspaceId],
+    queryFn: () => getWorkspace(workspaceId),
+    enabled: !!workspaceId,
+  })
   const { data: automationSettings } = useQuery({
     queryKey: ['workspace-automation', workspaceId],
     queryFn: () => getWorkspaceAutomationSettings(workspaceId),
     enabled: !!workspaceId,
   })
-  const { data: automationLogs = [] } = useQuery({
+  const {
+    data: automationLogsData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ['workspace-automation-logs', workspaceId],
-    queryFn: () => getWorkspaceAutomationLogs(workspaceId),
+    queryFn: ({ pageParam }) => getWorkspaceAutomationLogs(workspaceId, { limit: 20, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _pages, lastPageParam) =>
+      lastPage.length < 20 ? undefined : lastPageParam + lastPage.length,
     enabled: !!workspaceId,
   })
+  const automationLogs = automationLogsData?.pages.flat() ?? []
 
   const memberIds = new Set(members.map(m => m.user_id))
   const addableUsers = allUsers.filter(u => !memberIds.has(u.id))
@@ -124,6 +139,7 @@ export function WorkspaceSettings({ workspaceId }: Props) {
     mutationFn: (name: string) => updateWorkspace(workspaceId, name),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workspaces'] })
+      qc.invalidateQueries({ queryKey: ['workspace', workspaceId] })
       setEditingName(false)
       showToast('ワークスペース名を更新しました', 'success')
     },
@@ -170,13 +186,10 @@ export function WorkspaceSettings({ workspaceId }: Props) {
     }) => updateWorkspaceAutomationSettings(workspaceId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workspace-automation', workspaceId] })
-      showToast('Automation 設定を更新しました', 'success')
+      showToast('自動化設定を更新しました', 'success')
     },
-    onError: () => showToast('Automation 設定の更新に失敗しました', 'error'),
+    onError: () => showToast('自動化設定の更新に失敗しました', 'error'),
   })
-
-  const workspace = qc.getQueryData<{ id: string; name: string }[]>(['workspaces'])
-    ?.find(w => w.id === workspaceId)
 
   return (
     <>
@@ -382,15 +395,19 @@ export function WorkspaceSettings({ workspaceId }: Props) {
                     </div>
                   )
                 })}
-                {filteredAutomationLogs.length > visibleAutomationLogs.length && (
+                {hasNextPage && (
                   <button
-                    onClick={() => setShowAllLogs(true)}
+                    onClick={() => {
+                      setShowAllLogs(true)
+                      fetchNextPage()
+                    }}
+                    disabled={isFetchingNextPage}
                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50"
                   >
-                    さらに表示
+                    {isFetchingNextPage ? '読み込み中...' : 'さらに表示'}
                   </button>
                 )}
-                {showAllLogs && filteredAutomationLogs.length > 8 && (
+                {showAllLogs && filteredAutomationLogs.length > 8 && !hasNextPage && (
                   <button
                     onClick={() => setShowAllLogs(false)}
                     className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-500 hover:bg-gray-100"

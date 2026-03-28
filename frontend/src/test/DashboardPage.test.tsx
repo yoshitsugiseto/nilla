@@ -307,7 +307,7 @@ describe('DashboardPage', () => {
     expect(screen.getByText('13pt 完了')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByText('2日')).toBeInTheDocument())
     expect(screen.getByText('期限超過')).toBeInTheDocument()
-    expect(screen.getByText('レビュー待ち')).toBeInTheDocument()
+    expect(screen.getAllByText('レビュー待ち').length).toBeGreaterThan(0)
     expect(screen.getByText('VelocityChart:project-1')).toBeInTheDocument()
   })
 

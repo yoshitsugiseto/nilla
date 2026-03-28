@@ -13,6 +13,7 @@ import { useCurrentTime } from '../hooks/useCurrentTime'
 import { useProjectPermissions } from '../hooks/useProjectPermissions'
 import { extractErrorMessage } from '../api/client'
 import { deadlineLabel } from '../utils/date'
+import { issueStatusLabel, issueTypeLabel, sprintStatusLabel } from '../utils/labels'
 import { buildActiveSprintSnapshot } from '../utils/reporting'
 import type { Issue, IssueSearchFilters, Sprint, IssueType, SprintCarryoverMode } from '../types'
 
@@ -43,10 +44,6 @@ interface SprintRiskSignal {
   remaining_points: number
   remaining_issues: number
   days_left: number | null
-}
-
-const TYPE_LABELS: Record<IssueType, string> = {
-  epic: 'Epic', story: 'Story', task: 'Task', bug: 'Bug', spike: 'Spike',
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -154,7 +151,7 @@ function SprintReportModal({
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-          <p className="text-xs text-amber-700 mb-1">Carry over</p>
+          <p className="text-xs text-amber-700 mb-1">繰り越し</p>
           <p className="text-2xl font-bold text-amber-900">{carryOverPct}%</p>
           <p className="text-sm text-amber-800 mt-1">{report.carryOverIssues} 件 / {report.carryOverPts} pt</p>
         </div>
@@ -171,7 +168,7 @@ function SprintReportModal({
               </p>
             </>
           ) : (
-            <p className="text-sm text-slate-500">比較できる完了済み sprint はまだありません</p>
+            <p className="text-sm text-slate-500">比較できる完了済みスプリントはまだありません</p>
           )}
         </div>
       </div>
@@ -184,7 +181,7 @@ function SprintReportModal({
               const p = counts.total > 0 ? Math.round((counts.done / counts.total) * 100) : 0
               return (
                 <div key={type} className="flex items-center gap-3">
-                  <span className="text-xs text-gray-500 w-12 shrink-0">{TYPE_LABELS[type as IssueType] ?? type}</span>
+                  <span className="text-xs text-gray-500 w-12 shrink-0">{issueTypeLabel(type as IssueType)}</span>
                   <div className="flex-1 bg-gray-100 rounded-full h-1.5">
                     <div className="bg-indigo-400 h-1.5 rounded-full transition-all" style={{ width: `${p}%` }} />
                   </div>
@@ -352,7 +349,7 @@ function CompleteSprintDialog({
               <div key={i.id} className="flex items-center gap-2">
                 <span className="font-mono text-gray-400">#{i.number}</span>
                 <span className="truncate">{i.title}</span>
-                <span className="ml-auto shrink-0 text-gray-400">{i.status}</span>
+                <span className="ml-auto shrink-0 text-gray-400">{issueStatusLabel(i.status)}</span>
               </div>
             ))}
           </div>
@@ -401,7 +398,7 @@ function SprintCard({
               sprint.status === 'active' ? 'bg-blue-100 text-blue-700' :
               sprint.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
               'bg-gray-100 text-gray-600'
-            }`}>{sprint.status}</span>
+            }`}>{sprintStatusLabel(sprint.status)}</span>
           </div>
           {sprint.goal && <p className="text-sm text-gray-500 mb-2">{sprint.goal}</p>}
           {(sprint.start_date || sprint.end_date) && (

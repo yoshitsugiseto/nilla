@@ -11,6 +11,7 @@ import { Modal } from '../components/common/Modal'
 import { IssueForm } from '../components/Issue/IssueForm'
 import { ProjectRoleBadge } from '../components/common/ProjectRoleBadge'
 import { useProjectPermissions } from '../hooks/useProjectPermissions'
+import { sprintStatusLabel } from '../utils/labels'
 import type { Issue, Sprint, IssueType } from '../types'
 
 const PRIORITY_ORDER: Record<string, number> = {
@@ -18,9 +19,9 @@ const PRIORITY_ORDER: Record<string, number> = {
 }
 
 const statusLabel: Record<string, { text: string; className: string }> = {
-  active: { text: 'Active', className: 'bg-blue-100 text-blue-700' },
-  planning: { text: 'Planning', className: 'bg-gray-100 text-gray-600' },
-  completed: { text: 'Completed', className: 'bg-emerald-100 text-emerald-700' },
+  active: { text: sprintStatusLabel('active'), className: 'bg-blue-100 text-blue-700' },
+  planning: { text: sprintStatusLabel('planning'), className: 'bg-gray-100 text-gray-600' },
+  completed: { text: sprintStatusLabel('completed'), className: 'bg-emerald-100 text-emerald-700' },
 }
 
 const QUICK_CREATE_OPTIONS: { type: IssueType; label: string }[] = [
@@ -107,7 +108,7 @@ export function BoardPage() {
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-bold text-gray-900">
-                {currentSprint?.name ?? 'No Sprint'}
+                {currentSprint?.name ?? 'スプリント未選択'}
               </h2>
               <ProjectRoleBadge role={role} />
               {currentSprint && (

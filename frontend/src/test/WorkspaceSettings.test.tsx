@@ -8,6 +8,7 @@ import { useAppStore } from '../store'
 import type { User, WorkspaceAutomationLog, WorkspaceAutomationSettings, WorkspaceMember } from '../types'
 
 const {
+  mockGetWorkspace,
   mockGetWorkspaceMembers,
   mockGetWorkspaceAutomationSettings,
   mockGetWorkspaceAutomationLogs,
@@ -19,6 +20,7 @@ const {
   mockGetUsers,
   mockShowToast,
 } = vi.hoisted(() => ({
+  mockGetWorkspace: vi.fn(),
   mockGetWorkspaceMembers: vi.fn(),
   mockGetWorkspaceAutomationSettings: vi.fn(),
   mockGetWorkspaceAutomationLogs: vi.fn(),
@@ -32,6 +34,7 @@ const {
 }))
 
 vi.mock('../api/workspaces', () => ({
+  getWorkspace: mockGetWorkspace,
   getWorkspaceMembers: mockGetWorkspaceMembers,
   getWorkspaceAutomationSettings: mockGetWorkspaceAutomationSettings,
   getWorkspaceAutomationLogs: mockGetWorkspaceAutomationLogs,
@@ -127,6 +130,7 @@ function renderWorkspaceSettings() {
 
 describe('WorkspaceSettings', () => {
   beforeEach(() => {
+    mockGetWorkspace.mockReset()
     mockGetWorkspaceMembers.mockReset()
     mockGetWorkspaceAutomationSettings.mockReset()
     mockGetWorkspaceAutomationLogs.mockReset()
@@ -157,6 +161,13 @@ describe('WorkspaceSettings', () => {
       pendingOpenIssueTitle: null,
       searchPresets: [],
       boardFilters: {},
+    })
+    mockGetWorkspace.mockResolvedValue({
+      id: 'workspace-1',
+      name: 'Workspace Alpha',
+      created_by: 'user-1',
+      created_at: '2026-03-01T00:00:00Z',
+      updated_at: '2026-03-01T00:00:00Z',
     })
     mockGetWorkspaceAutomationSettings.mockResolvedValue(makeAutomationSettings())
     mockGetWorkspaceAutomationLogs.mockResolvedValue([])
@@ -233,6 +244,16 @@ describe('WorkspaceSettings', () => {
     expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['workspace-automation', 'workspace-1'] })
   })
 
+  test('loads the workspace name from the dedicated workspace query', async () => {
+    mockGetWorkspaceMembers.mockResolvedValue([makeMember()])
+    mockGetUsers.mockResolvedValue([])
+
+    renderWorkspaceSettings()
+
+    expect(await screen.findByText('Workspace Alpha')).toBeInTheDocument()
+    expect(mockGetWorkspace).toHaveBeenCalledWith('workspace-1')
+  })
+
   test('renders recent automation execution logs', async () => {
     const user = userEvent.setup()
     mockGetWorkspaceMembers.mockResolvedValue([makeMember()])
@@ -274,5 +295,33 @@ describe('WorkspaceSettings', () => {
     await user.selectOptions(screen.getByLabelText('自動化結果絞り込み'), 'skipped')
     expect(screen.getByText('Needs owner')).toBeInTheDocument()
     expect(screen.queryByText('Needs review')).not.toBeInTheDocument()
+  })
+
+  test('loads additional automation logs when requesting more', async () => {
+    const user = userEvent.setup()
+    mockGetWorkspaceMembers.mockResolvedValue([makeMember()])
+    mockGetUsers.mockResolvedValue([])
+    mockGetWorkspaceAutomationLogs
+      .mockResolvedValueOnce(Array.from({ length: 20 }, (_, index) => makeAutomationLog({
+        id: `log-${index + 1}`,
+        issue_title: `Issue ${index + 1}`,
+      })))
+      .mockResolvedValueOnce([
+        makeAutomationLog({ id: 'log-21', issue_title: 'Issue 21' }),
+        makeAutomationLog({ id: 'log-22', issue_title: 'Issue 22' }),
+      ])
+
+    renderWorkspaceSettings()
+
+    expect(await screen.findByText('Issue 1')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'さらに表示' }))
+
+    await waitFor(() =>
+      expect(mockGetWorkspaceAutomationLogs).toHaveBeenNthCalledWith(2, 'workspace-1', {
+        limit: 20,
+        offset: 20,
+      })
+    )
+    expect(await screen.findByText('Issue 22')).toBeInTheDocument()
   })
 })

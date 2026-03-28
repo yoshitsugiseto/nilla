@@ -17,20 +17,14 @@ import {
   buildOpenRiskSnapshot,
   buildThroughputSnapshot,
 } from '../utils/reporting'
-import type { IssueSearchFilters } from '../types'
+import { ISSUE_STATUS_LABELS } from '../utils/labels'
+import type { IssueSearchFilters, IssueStatus } from '../types'
 
 const STATUS_COLORS: Record<string, string> = {
   todo: 'bg-gray-200',
   in_progress: 'bg-blue-400',
   in_review: 'bg-purple-400',
   done: 'bg-emerald-400',
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  todo: 'Todo',
-  in_progress: 'In Progress',
-  in_review: 'In Review',
-  done: 'Done',
 }
 
 const MAX_CYCLE_ACTIVITY_ISSUES = 20
@@ -71,8 +65,8 @@ export function DashboardPage({
   const donePts = activeIssues.filter(i => i.status === 'done').reduce((s, i) => s + (i.points ?? 0), 0)
   const pct = totalPts > 0 ? Math.round((donePts / totalPts) * 100) : 0
 
-  const byStatus = (s: string) => issues.filter(i => i.status === s)
-  const statuses = ['todo', 'in_progress', 'in_review', 'done']
+  const byStatus = (s: IssueStatus) => issues.filter(i => i.status === s)
+  const statuses: IssueStatus[] = ['todo', 'in_progress', 'in_review', 'done']
 
   const highPriorityOpen = issues
     .filter(i => (i.priority === 'critical' || i.priority === 'high') && i.status !== 'done')
@@ -168,7 +162,7 @@ export function DashboardPage({
             <div key={status} className="bg-white border border-gray-200 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-2">
                 <span className={`w-2 h-2 rounded-full ${STATUS_COLORS[status]}`} />
-                <span className="text-xs text-gray-500">{STATUS_LABELS[status]}</span>
+                <span className="text-xs text-gray-500">{ISSUE_STATUS_LABELS[status]}</span>
               </div>
               <p className="text-3xl font-bold text-gray-900">{count}</p>
             </div>
@@ -338,7 +332,7 @@ export function DashboardPage({
                 <span className="text-xs text-gray-400 font-mono w-14 shrink-0">#{issue.number}</span>
                 <span className="flex-1 text-sm text-gray-900 truncate">{issue.title}</span>
                 <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[issue.status]} text-white`}>
-                  {STATUS_LABELS[issue.status]}
+                  {ISSUE_STATUS_LABELS[issue.status]}
                 </span>
                 <span className="text-xs text-gray-400 shrink-0">
                   {new Date(issue.updated_at).toLocaleDateString('ja-JP')}

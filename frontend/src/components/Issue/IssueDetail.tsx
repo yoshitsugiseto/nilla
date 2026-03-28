@@ -16,6 +16,7 @@ import { useToast } from '../common/useToast'
 import { useCurrentTime } from '../../hooks/useCurrentTime'
 import { useProjectPermissions } from '../../hooks/useProjectPermissions'
 import { dueDateLabel } from '../../utils/date'
+import { ISSUE_PRIORITY_LABELS, ISSUE_STATUS_LABELS } from '../../utils/labels'
 import type { IssueStatus, IssueLinkType, IssuePriority } from '../../types'
 import { Pencil, MessageSquare, Clock, Plus, ListTodo, Paperclip, Link2, X } from 'lucide-react'
 
@@ -34,17 +35,17 @@ const LINK_TYPE_COLORS: Record<IssueLinkType, string> = {
 }
 
 const STATUS_OPTIONS: { value: IssueStatus; label: string }[] = [
-  { value: 'todo', label: 'Todo' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'in_review', label: 'In Review' },
-  { value: 'done', label: 'Done' },
+  { value: 'todo', label: ISSUE_STATUS_LABELS.todo },
+  { value: 'in_progress', label: ISSUE_STATUS_LABELS.in_progress },
+  { value: 'in_review', label: ISSUE_STATUS_LABELS.in_review },
+  { value: 'done', label: ISSUE_STATUS_LABELS.done },
 ]
 
 const PRIORITY_OPTIONS: { value: IssuePriority; label: string }[] = [
-  { value: 'critical', label: '緊急' },
-  { value: 'high', label: '高' },
-  { value: 'medium', label: '中' },
-  { value: 'low', label: '低' },
+  { value: 'critical', label: ISSUE_PRIORITY_LABELS.critical },
+  { value: 'high', label: ISSUE_PRIORITY_LABELS.high },
+  { value: 'medium', label: ISSUE_PRIORITY_LABELS.medium },
+  { value: 'low', label: ISSUE_PRIORITY_LABELS.low },
 ]
 
 interface Props {

@@ -7,6 +7,7 @@ import { useAppStore } from '../store'
 import { BurndownChart } from '../components/Board/BurndownChart'
 import { VelocityChart } from '../components/Board/VelocityChart'
 import { StatusBadge, PriorityBadge, TypeIcon } from '../components/common/Badge'
+import { sprintStatusLabel } from '../utils/labels'
 import type { Sprint, Issue } from '../types'
 
 function CompletedSprintCard({ sprint, issues }: { sprint: Sprint; issues: Issue[] }) {
@@ -24,7 +25,7 @@ function CompletedSprintCard({ sprint, issues }: { sprint: Sprint; issues: Issue
         <div>
           <div className="flex items-center gap-3 mb-1">
             <h3 className="font-semibold text-gray-900">{sprint.name}</h3>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">completed</span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">{sprintStatusLabel('completed')}</span>
           </div>
           {sprint.goal && <p className="text-sm text-gray-500 mb-2">{sprint.goal}</p>}
           {(sprint.start_date || sprint.end_date) && (

@@ -1,8 +1,9 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     Extension, Json,
 };
 use chrono::Utc;
+use serde::Deserialize;
 use sqlx::SqlitePool;
 
 use crate::{
@@ -21,6 +22,12 @@ const INVALID_WORKSPACE_ROLE_ERROR: &str = "role must be one of: owner, admin, m
 const INVALID_PROJECT_ROLE_ERROR: &str = "role must be one of: admin, editor, viewer";
 const INVALID_SPRINT_CARRYOVER_MODE_ERROR: &str =
     "sprint_carryover_mode must be one of: prompt, backlog, next_sprint";
+
+#[derive(Deserialize)]
+pub struct AutomationLogQuery {
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
 
 fn validate_sprint_carryover_mode(mode: &str) -> Result<()> {
     match mode {
@@ -252,9 +259,18 @@ pub async fn list_workspace_automation_logs_route(
     State(pool): State<SqlitePool>,
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
+    Query(query): Query<AutomationLogQuery>,
 ) -> Result<Json<Vec<WorkspaceAutomationLog>>> {
     check_workspace_access(&pool, &user_id.0, &id).await?;
-    Ok(Json(list_workspace_automation_logs(&pool, &id, 20).await?))
+    Ok(Json(
+        list_workspace_automation_logs(
+            &pool,
+            &id,
+            query.limit.unwrap_or(20),
+            query.offset.unwrap_or(0),
+        )
+        .await?,
+    ))
 }
 
 pub async fn list_members(

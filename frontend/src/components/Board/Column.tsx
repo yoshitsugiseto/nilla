@@ -1,12 +1,13 @@
 import { Droppable } from '@hello-pangea/dnd'
 import type { Issue, IssueStatus } from '../../types'
+import { ISSUE_STATUS_LABELS } from '../../utils/labels'
 import { IssueCard } from './IssueCard'
 
 const statusMeta: Record<IssueStatus, { label: string; color: string }> = {
-  todo: { label: 'Todo', color: 'border-gray-300' },
-  in_progress: { label: 'In Progress', color: 'border-blue-400' },
-  in_review: { label: 'In Review', color: 'border-purple-400' },
-  done: { label: 'Done', color: 'border-emerald-400' },
+  todo: { label: ISSUE_STATUS_LABELS.todo, color: 'border-gray-300' },
+  in_progress: { label: ISSUE_STATUS_LABELS.in_progress, color: 'border-blue-400' },
+  in_review: { label: ISSUE_STATUS_LABELS.in_review, color: 'border-purple-400' },
+  done: { label: ISSUE_STATUS_LABELS.done, color: 'border-emerald-400' },
 }
 
 interface Props {

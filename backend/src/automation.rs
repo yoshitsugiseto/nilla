@@ -100,8 +100,10 @@ pub async fn list_workspace_automation_logs(
     pool: &SqlitePool,
     workspace_id: &str,
     limit: i64,
+    offset: i64,
 ) -> Result<Vec<WorkspaceAutomationLog>> {
     let limit = limit.clamp(1, 50);
+    let offset = offset.max(0);
     let sql = format!(
         "SELECT {AUTOMATION_LOG_COLUMNS}
          FROM automation_execution_logs l
@@ -109,12 +111,13 @@ pub async fn list_workspace_automation_logs(
          LEFT JOIN users u ON u.id = l.target_user_id
          WHERE l.workspace_id = ?
          ORDER BY l.created_at DESC
-         LIMIT ?"
+         LIMIT ? OFFSET ?"
     );
 
     sqlx::query_as::<_, WorkspaceAutomationLog>(&sql)
         .bind(workspace_id)
         .bind(limit)
+        .bind(offset)
         .fetch_all(pool)
         .await
         .map_err(Into::into)

@@ -10,12 +10,15 @@ import type {
 } from '../types'
 
 export const getWorkspaces = () => client.get<Workspace[]>('/workspaces').then(r => r.data)
+export const getWorkspace = (id: string) => client.get<Workspace>(`/workspaces/${id}`).then(r => r.data)
 export const createWorkspace = (name: string) => client.post<Workspace>('/workspaces', { name }).then(r => r.data)
 export const updateWorkspace = (id: string, name: string) => client.put<Workspace>(`/workspaces/${id}`, { name }).then(r => r.data)
 export const getWorkspaceAutomationSettings = (workspaceId: string) =>
   client.get<WorkspaceAutomationSettings>(`/workspaces/${workspaceId}/automation`).then(r => r.data)
-export const getWorkspaceAutomationLogs = (workspaceId: string) =>
-  client.get<WorkspaceAutomationLog[]>(`/workspaces/${workspaceId}/automation/logs`).then(r => r.data)
+export const getWorkspaceAutomationLogs = (
+  workspaceId: string,
+  params?: { limit?: number; offset?: number }
+) => client.get<WorkspaceAutomationLog[]>(`/workspaces/${workspaceId}/automation/logs`, { params }).then(r => r.data)
 export const updateWorkspaceAutomationSettings = (
   workspaceId: string,
   data: Partial<WorkspaceAutomationSettings>

@@ -286,7 +286,7 @@ describe('SprintPage', () => {
     expect(await screen.findByText('スプリント完了！')).toBeInTheDocument()
     expect(screen.getByText('1 / 2 件')).toBeInTheDocument()
     expect(screen.getByText('5 / 8 pt')).toBeInTheDocument()
-    expect(screen.getByText('Carry over')).toBeInTheDocument()
+    expect(screen.getByText('繰り越し')).toBeInTheDocument()
     expect(screen.getByText('Sprint Prev')).toBeInTheDocument()
   })
 
