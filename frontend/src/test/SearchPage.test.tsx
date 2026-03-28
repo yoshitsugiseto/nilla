@@ -340,7 +340,7 @@ describe('SearchPage', () => {
     await user.click(screen.getByRole('button', { name: 'フィルター' }))
     await waitFor(() => expect(mockGetSprints).toHaveBeenCalledWith('project-1'))
 
-    await user.selectOptions(screen.getByLabelText('Sprint'), 'sprint-1')
+    await user.selectOptions(screen.getByLabelText('スプリント'), 'sprint-1')
     await user.selectOptions(screen.getByLabelText('期限'), 'overdue')
 
     await waitFor(() =>
