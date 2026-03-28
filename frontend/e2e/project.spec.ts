@@ -33,7 +33,7 @@ test('clicking + opens New Project modal', async ({ page }) => {
 
   await page.getByRole('button', { name: 'プロジェクトを作成' }).click()
   await expect(page.getByText('New Project')).toBeVisible()
-  await expect(page.getByPlaceholder('My Project')).toBeVisible()
+  await expect(page.getByPlaceholder('新しいプロジェクト')).toBeVisible()
 })
 
 test('closing modal with Escape hides the modal', async ({ page }) => {

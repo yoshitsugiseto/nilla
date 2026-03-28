@@ -132,10 +132,11 @@ export async function mockEmptyApi(page: Page) {
 export async function mockProjectApi(page: Page) {
   await mockAuth(page)
   await page.route('**/api/workspaces', route => route.fulfill({ json: [WORKSPACE] }))
+  await page.route('**/api/workspaces/ws-1', route => route.fulfill({ json: WORKSPACE }))
   await page.route('**/api/workspaces/ws-1/automation', route =>
     route.fulfill({ json: WORKSPACE_AUTOMATION })
   )
-  await page.route('**/api/workspaces/ws-1/automation/logs', route =>
+  await page.route(/\/api\/workspaces\/ws-1\/automation\/logs(\?.*)?$/, route =>
     route.fulfill({ json: AUTOMATION_LOGS })
   )
   await page.route('**/api/workspaces/ws-1/members', route =>
@@ -153,6 +154,9 @@ export async function mockProjectApi(page: Page) {
   )
   await page.route('**/api/users', route => route.fulfill({ json: [TEST_USER] }))
   await page.route(/\/api\/projects(\?.*)?$/, route => route.fulfill({ json: [PROJECT] }))
+  await page.route(/\/api\/projects\/proj-1\/search-presets(\?.*)?$/, route =>
+    route.fulfill({ json: [] })
+  )
   await page.route('**/api/projects/proj-1/members', route => route.fulfill({ json: [PROJECT_MEMBER] }))
   await page.route('**/api/projects/proj-1/sprints', route => route.fulfill({ json: [SPRINT] }))
   await page.route('**/api/projects/proj-1/velocity', route => route.fulfill({ json: [] }))

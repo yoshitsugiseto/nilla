@@ -7,16 +7,16 @@ test('shows app title and sidebar on load', async ({ page }) => {
   await page.goto('/')
 
   await expect(page.getByText('Nilla')).toBeVisible()
-  await expect(page.getByText('Sprint Manager')).toBeVisible()
+  await expect(page.getByText('スプリント管理')).toBeVisible()
   await expect(page.getByPlaceholder('イシューを検索...')).toBeVisible()
 })
 
-test('shows "No projects yet" when project list is empty', async ({ page }) => {
+test('shows "プロジェクトはまだありません" when project list is empty', async ({ page }) => {
   await clearStorage(page)
   await mockEmptyApi(page)
   await page.goto('/')
 
-  await expect(page.getByText('No projects yet')).toBeVisible()
+  await expect(page.getByText('プロジェクトはまだありません')).toBeVisible()
 })
 
 test('shows project in sidebar when API returns a project', async ({ page }) => {
