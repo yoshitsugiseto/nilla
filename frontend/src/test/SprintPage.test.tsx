@@ -485,6 +485,32 @@ describe('SprintPage', () => {
     })
   })
 
+  test('hides zero-count drill-down actions in the active sprint summary', async () => {
+    mockGetSprints.mockResolvedValue([
+      makeSprint({ id: 'sprint-active', name: 'Sprint Active', status: 'active' }),
+    ])
+    mockGetIssues.mockResolvedValue([
+      makeIssue({
+        id: 'issue-1',
+        sprint_id: 'sprint-active',
+        title: 'Planned task',
+        status: 'todo',
+        due_date: null,
+        assignee_id: 'member-1',
+      }),
+    ])
+
+    renderSprintPage()
+
+    expect(await screen.findByLabelText('アクティブスプリントサマリー')).toBeInTheDocument()
+
+    expect(screen.queryByRole('button', { name: '完了イシューを見る' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '算出対象を見る' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '期限超過を見る' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '未アサインを見る' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'レビュー待ちを見る' })).not.toBeInTheDocument()
+  })
+
   test('uses workspace automation for sprint carryover when mode is next_sprint', async () => {
     const user = userEvent.setup()
 

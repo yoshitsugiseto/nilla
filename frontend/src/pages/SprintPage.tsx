@@ -665,12 +665,14 @@ export function SprintPage({
                     <p className="mt-1 text-sm text-gray-500">
                       {activeSprintSnapshot.donePoints}/{activeSprintSnapshot.totalPoints}pt
                     </p>
-                    <button
-                      onClick={() => openSprintSearch(activeSprint.id, { status: 'done' })}
-                      className="mt-3 text-xs font-medium text-blue-700 hover:text-blue-800"
-                    >
-                      完了イシューを見る
-                    </button>
+                    {activeSprintSnapshot.doneIssues > 0 && (
+                      <button
+                        onClick={() => openSprintSearch(activeSprint.id, { status: 'done' })}
+                        className="mt-3 text-xs font-medium text-blue-700 hover:text-blue-800"
+                      >
+                        完了イシューを見る
+                      </button>
+                    )}
                   </div>
                   <div className="rounded-xl border border-blue-100 bg-white p-4">
                     <p className="text-xs text-gray-500">残り作業</p>
@@ -689,12 +691,14 @@ export function SprintPage({
                       {activeSprintSnapshot.avgCycleDays != null ? `${activeSprintSnapshot.avgCycleDays}日` : '—'}
                     </p>
                     <p className="mt-1 text-sm text-gray-500">作業開始から完了まで。履歴がないものは近似です</p>
-                    <button
-                      onClick={() => openSprintSearch(activeSprint.id, { status: 'done' })}
-                      className="mt-3 text-xs font-medium text-blue-700 hover:text-blue-800"
-                    >
-                      算出対象を見る
-                    </button>
+                    {activeSprintSnapshot.doneIssues > 0 && (
+                      <button
+                        onClick={() => openSprintSearch(activeSprint.id, { status: 'done' })}
+                        className="mt-3 text-xs font-medium text-blue-700 hover:text-blue-800"
+                      >
+                        算出対象を見る
+                      </button>
+                    )}
                   </div>
                   <div className="rounded-xl border border-blue-100 bg-white p-4">
                     <p className="text-xs text-gray-500">リスク</p>
@@ -705,24 +709,30 @@ export function SprintPage({
                       期限超過 {activeSprintSnapshot.overdueCount} / 未アサイン {activeSprintSnapshot.unassignedCount} / レビュー待ち {activeSprintSnapshot.reviewCount}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-3 text-xs font-medium">
-                      <button
-                        onClick={() => openSprintSearch(activeSprint.id, { due_state: 'overdue' })}
-                        className="text-red-700 hover:text-red-800"
-                      >
-                        期限超過を見る
-                      </button>
-                      <button
-                        onClick={() => openSprintSearch(activeSprint.id, { assignee_id: '__unassigned__' })}
-                        className="text-amber-700 hover:text-amber-800"
-                      >
-                        未アサインを見る
-                      </button>
-                      <button
-                        onClick={() => openSprintSearch(activeSprint.id, { status: 'in_review' })}
-                        className="text-blue-700 hover:text-blue-800"
-                      >
-                        レビュー待ちを見る
-                      </button>
+                      {activeSprintSnapshot.overdueCount > 0 && (
+                        <button
+                          onClick={() => openSprintSearch(activeSprint.id, { due_state: 'overdue' })}
+                          className="text-red-700 hover:text-red-800"
+                        >
+                          期限超過を見る
+                        </button>
+                      )}
+                      {activeSprintSnapshot.unassignedCount > 0 && (
+                        <button
+                          onClick={() => openSprintSearch(activeSprint.id, { assignee_id: '__unassigned__' })}
+                          className="text-amber-700 hover:text-amber-800"
+                        >
+                          未アサインを見る
+                        </button>
+                      )}
+                      {activeSprintSnapshot.reviewCount > 0 && (
+                        <button
+                          onClick={() => openSprintSearch(activeSprint.id, { status: 'in_review' })}
+                          className="text-blue-700 hover:text-blue-800"
+                        >
+                          レビュー待ちを見る
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

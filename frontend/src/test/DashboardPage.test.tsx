@@ -373,7 +373,7 @@ describe('DashboardPage', () => {
 
     await waitFor(() => expect(mockGetIssues).toHaveBeenCalledWith('project-1'))
 
-    await user.click(screen.getByRole('button', { name: '対象イシューを見る' }))
+    await user.click(await screen.findByRole('button', { name: '対象イシューを見る' }))
     expect(onOpenSearch).toHaveBeenCalledWith('', {
       status: '',
       type: '',
@@ -383,7 +383,7 @@ describe('DashboardPage', () => {
       due_state: 'overdue',
     })
 
-    await user.click(screen.getByRole('button', { name: 'レビュー待ちを見る' }))
+    await user.click(await screen.findByRole('button', { name: 'レビュー待ちを見る' }))
     expect(onOpenSearch).toHaveBeenLastCalledWith('', {
       status: 'in_review',
       type: '',
@@ -392,5 +392,47 @@ describe('DashboardPage', () => {
       sprint_id: '',
       due_state: '',
     })
+  })
+
+  test('hides delivery snapshot drill-down actions when matching counts are zero', async () => {
+    const queryClient = createQueryClient()
+
+    mockGetIssues.mockResolvedValue([
+      {
+        id: 'issue-done-1',
+        project_id: 'project-1',
+        sprint_id: 'sprint-1',
+        parent_id: null,
+        epic_id: null,
+        epic_title: null,
+        number: 1,
+        title: 'Done one',
+        description: null,
+        type: 'task',
+        status: 'done',
+        priority: 'medium',
+        points: 5,
+        assignee_id: 'user-1',
+        assignee_name: 'Alice',
+        assignee_avatar_url: null,
+        labels: [],
+        position: 0,
+        due_date: null,
+        created_at: '2026-03-15T00:00:00Z',
+        updated_at: '2026-03-18T00:00:00Z',
+      },
+    ])
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <DashboardPage />
+      </QueryClientProvider>
+    )
+
+    await waitFor(() => expect(mockGetIssues).toHaveBeenCalledWith('project-1'))
+
+    expect(screen.queryByRole('button', { name: '対象イシューを見る' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'レビュー待ちを見る' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '未アサインを見る' })).not.toBeInTheDocument()
   })
 })

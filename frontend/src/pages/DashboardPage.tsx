@@ -274,12 +274,14 @@ export function DashboardPage({
               {openRiskSnapshot.overdueCount}件
             </p>
             <p className="mt-1 text-sm text-gray-500">未完了イシューのみ</p>
-            <button
-              onClick={() => openSearch({ due_state: 'overdue' })}
-              className="mt-3 text-xs font-medium text-red-700 hover:text-red-800"
-            >
-              対象イシューを見る
-            </button>
+            {openRiskSnapshot.overdueCount > 0 && (
+              <button
+                onClick={() => openSearch({ due_state: 'overdue' })}
+                className="mt-3 text-xs font-medium text-red-700 hover:text-red-800"
+              >
+                対象イシューを見る
+              </button>
+            )}
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4">
             <p className="text-xs text-gray-500">レビュー待ち</p>
@@ -288,18 +290,22 @@ export function DashboardPage({
             </p>
             <div className="mt-1 text-sm text-gray-500">未アサイン {openRiskSnapshot.unassignedCount}件</div>
             <div className="mt-3 flex flex-wrap gap-3 text-xs font-medium">
-              <button
-                onClick={() => openSearch({ status: 'in_review' })}
-                className="text-blue-700 hover:text-blue-800"
-              >
-                レビュー待ちを見る
-              </button>
-              <button
-                onClick={() => openSearch({ assignee_id: '__unassigned__' })}
-                className="text-amber-700 hover:text-amber-800"
-              >
-                未アサインを見る
-              </button>
+              {openRiskSnapshot.reviewCount > 0 && (
+                <button
+                  onClick={() => openSearch({ status: 'in_review' })}
+                  className="text-blue-700 hover:text-blue-800"
+                >
+                  レビュー待ちを見る
+                </button>
+              )}
+              {openRiskSnapshot.unassignedCount > 0 && (
+                <button
+                  onClick={() => openSearch({ assignee_id: '__unassigned__' })}
+                  className="text-amber-700 hover:text-amber-800"
+                >
+                  未アサインを見る
+                </button>
+              )}
             </div>
           </div>
         </div>
