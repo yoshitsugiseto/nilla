@@ -39,6 +39,10 @@ vi.mock('../components/Board/VelocityChart', () => ({
   VelocityChart: ({ projectId }: { projectId: string }) => <div>VelocityChart:{projectId}</div>,
 }))
 
+vi.mock('../hooks/useCurrentTime', () => ({
+  useCurrentTime: () => new Date('2026-03-28T00:00:00Z').getTime(),
+}))
+
 function createQueryClient() {
   return new QueryClient({
     defaultOptions: {
