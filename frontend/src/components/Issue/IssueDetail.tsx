@@ -18,7 +18,7 @@ import { useProjectPermissions } from '../../hooks/useProjectPermissions'
 import { dueDateLabel } from '../../utils/date'
 import { ISSUE_PRIORITY_LABELS, ISSUE_STATUS_LABELS } from '../../utils/labels'
 import type { IssueStatus, IssueLinkType, IssuePriority } from '../../types'
-import { Pencil, MessageSquare, Clock, Plus, ListTodo, Paperclip, Link2, X } from 'lucide-react'
+import { Pencil, MessageSquare, Clock, Plus, ListTodo, Paperclip, Link2, X, Loader2 } from 'lucide-react'
 
 const LINK_TYPE_LABELS: Record<IssueLinkType, string> = {
   blocks: 'Blocks',
@@ -68,6 +68,14 @@ export function IssueDetail({ issueId, projectId }: Props) {
   const linkComboRef = useRef<HTMLDivElement>(null)
   const [editing, setEditing] = useState(false)
   const [addingSubtask, setAddingSubtask] = useState(false)
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleValue, setTitleValue] = useState('')
+  const [editingDesc, setEditingDesc] = useState(false)
+  const [descValue, setDescValue] = useState('')
+  const [editingPoints, setEditingPoints] = useState(false)
+  const [pointsValue, setPointsValue] = useState('')
+  const [editingDueDate, setEditingDueDate] = useState(false)
+  const [dueDateValue, setDueDateValue] = useState('')
 
   const { data: issue, isLoading } = useQuery({
     queryKey: ['issue', issueId],
@@ -211,6 +219,30 @@ export function IssueDetail({ issueId, projectId }: Props) {
     onError: () => showToast('エピックの更新に失敗しました', 'error'),
   })
 
+  const titleMutation = useMutation({
+    mutationFn: (title: string) => updateIssue(issueId, { title }),
+    onSuccess: () => { invalidateIssueLists() },
+    onError: (_err, title) => { showToast('タイトルの更新に失敗しました', 'error'); setTitleValue(title); setEditingTitle(true) },
+  })
+
+  const descMutation = useMutation({
+    mutationFn: (description: string | null) => updateIssue(issueId, { description }),
+    onSuccess: () => { invalidateIssueLists() },
+    onError: (_err, description) => { showToast('説明の更新に失敗しました', 'error'); setDescValue(description ?? ''); setEditingDesc(true) },
+  })
+
+  const pointsMutation = useMutation({
+    mutationFn: (points: number | null) => updateIssue(issueId, { points }),
+    onSuccess: () => { invalidateIssueLists() },
+    onError: (_err, points) => { showToast('ポイントの更新に失敗しました', 'error'); setPointsValue(points != null ? String(points) : ''); setEditingPoints(true) },
+  })
+
+  const dueDateMutation = useMutation({
+    mutationFn: (due_date: string | null) => updateIssue(issueId, { due_date }),
+    onSuccess: () => { invalidateIssueLists() },
+    onError: (_err, due_date) => { showToast('期限日の更新に失敗しました', 'error'); setDueDateValue(due_date ?? ''); setEditingDueDate(true) },
+  })
+
   const { data: epicIssues = [] } = useQuery({
     queryKey: ['issues', projectId, 'epics'],
     queryFn: () => getIssues(projectId, { type: 'epic', limit: 1000 }),
@@ -263,18 +295,61 @@ export function IssueDetail({ issueId, projectId }: Props) {
       <div className="flex-1 min-w-0">
         {/* Title row */}
         <div className="flex items-start justify-between gap-3 mb-4">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1 group">
             <TypeIcon type={issue.type} />
             <span className="text-xs text-gray-400 font-mono shrink-0">#{issue.number}</span>
-            <h2 className="text-lg font-semibold text-gray-900 truncate">{issue.title}</h2>
+            {editingTitle && canEditProject ? (
+              <input
+                type="text"
+                value={titleValue}
+                onChange={e => setTitleValue(e.target.value)}
+                onBlur={() => {
+                  if (titleValue.trim() && titleValue !== issue.title) {
+                    titleMutation.mutate(titleValue.trim())
+                  }
+                  setEditingTitle(false)
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    if (titleValue.trim() && titleValue !== issue.title) {
+                      titleMutation.mutate(titleValue.trim())
+                    }
+                    setEditingTitle(false)
+                  } else if (e.key === 'Escape') {
+                    setEditingTitle(false)
+                  }
+                }}
+                autoFocus
+                aria-label="タイトル"
+                className="flex-1 text-lg font-semibold text-gray-900 border border-blue-400 rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              />
+            ) : (
+              <>
+                <h2
+                  onClick={() => { if (canEditProject) { setTitleValue(issue.title); setEditingTitle(true) } }}
+                  onKeyDown={e => { if (canEditProject && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setTitleValue(issue.title); setEditingTitle(true) } }}
+                  tabIndex={canEditProject ? 0 : undefined}
+                  role={canEditProject ? 'button' : undefined}
+                  className={`text-lg font-semibold text-gray-900 truncate ${canEditProject ? 'cursor-pointer hover:bg-gray-100 rounded px-1 -mx-1 focus:outline-none focus:ring-2 focus:ring-blue-300' : ''}`}
+                  title={canEditProject ? 'クリックして編集' : undefined}
+                >
+                  {issue.title}
+                </h2>
+                {titleMutation.isPending ? (
+                  <Loader2 size={14} className="shrink-0 animate-spin text-blue-400" aria-hidden="true" />
+                ) : canEditProject ? (
+                  <Pencil size={12} className="shrink-0 opacity-0 group-hover:opacity-100 text-gray-400 transition-opacity" aria-hidden="true" />
+                ) : null}
+              </>
+            )}
           </div>
           {canEditProject && (
             <button
               onClick={() => setEditing(true)}
               className="shrink-0 flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 px-2 py-1 rounded hover:bg-blue-50"
-              aria-label="イシューを編集"
+              aria-label="詳細編集フォームを開く"
             >
-              <Pencil size={12} aria-hidden="true" /> 編集
+              <Pencil size={12} aria-hidden="true" /> 詳細編集
             </button>
           )}
         </div>
@@ -282,12 +357,55 @@ export function IssueDetail({ issueId, projectId }: Props) {
         {/* Description */}
         <div className="mb-6">
           <p className="text-sm font-medium text-gray-500 mb-1">説明</p>
-          {issue.description ? (
-            <p className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-lg p-3">
-              {issue.description}
-            </p>
+          {editingDesc && canEditProject ? (
+            <div>
+              <textarea
+                value={descValue}
+                onChange={e => setDescValue(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') { e.stopPropagation(); setDescValue(issue.description ?? ''); setEditingDesc(false) }
+                }}
+                rows={5}
+                autoFocus
+                aria-label="説明"
+                placeholder="説明を入力..."
+                className="w-full border border-blue-400 rounded-lg p-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300 resize-y"
+              />
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={() => { descMutation.mutate(descValue.trim() || null); setEditingDesc(false) }}
+                  disabled={descMutation.isPending}
+                  className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-40"
+                >
+                  保存
+                </button>
+                <button
+                  onClick={() => { setDescValue(issue.description ?? ''); setEditingDesc(false) }}
+                  className="px-3 py-1 text-xs text-gray-500 border border-gray-200 rounded hover:bg-gray-50"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
           ) : (
-            <p className="text-sm text-gray-400 italic">説明なし</p>
+            <div
+              onClick={() => { if (canEditProject) { setDescValue(issue.description ?? ''); setEditingDesc(true) } }}
+              onKeyDown={e => { if (canEditProject && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setDescValue(issue.description ?? ''); setEditingDesc(true) } }}
+              tabIndex={canEditProject ? 0 : undefined}
+              role={canEditProject ? 'button' : undefined}
+              aria-label={canEditProject ? '説明を編集' : undefined}
+              className={canEditProject ? 'cursor-pointer group focus:outline-none focus:ring-2 focus:ring-blue-300 rounded-lg' : ''}
+            >
+              {issue.description ? (
+                <p className={`text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-lg p-3 ${canEditProject ? 'group-hover:bg-gray-100' : ''}`}>
+                  {issue.description}
+                </p>
+              ) : (
+                <p className={`text-sm italic rounded-lg ${canEditProject ? 'text-gray-400 bg-gray-50 p-3 group-hover:bg-gray-100' : 'text-gray-400'}`}>
+                  {canEditProject ? 'クリックして説明を追加...' : '説明なし'}
+                </p>
+              )}
+            </div>
           )}
         </div>
 
@@ -553,12 +671,66 @@ export function IssueDetail({ issueId, projectId }: Props) {
           </div>
         )}
 
-        {issue.points != null && (
-          <div>
-            <p className="text-xs text-gray-400 mb-1">ポイント</p>
-            <span className="font-mono font-semibold text-gray-800">{issue.points}</span>
-          </div>
-        )}
+        <div>
+          <p className="text-xs text-gray-400 mb-1">ポイント</p>
+          {canEditProject ? (
+            editingPoints ? (
+              <div>
+                <input
+                  type="number"
+                  min={0}
+                  max={999}
+                  value={pointsValue}
+                  onChange={e => setPointsValue(e.target.value)}
+                  autoFocus
+                  aria-label="ポイント"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      const val = pointsValue === '' ? null : Number(pointsValue)
+                      if (val !== issue.points) pointsMutation.mutate(val)
+                      else setEditingPoints(false)
+                    } else if (e.key === 'Escape') { e.stopPropagation(); setEditingPoints(false) }
+                  }}
+                  className="w-full border border-blue-400 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-300"
+                />
+                <div className="flex gap-2 mt-1.5">
+                  <button
+                    onClick={() => { const val = pointsValue === '' ? null : Number(pointsValue); if (val !== issue.points) pointsMutation.mutate(val); else setEditingPoints(false) }}
+                    disabled={pointsMutation.isPending}
+                    className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-40"
+                  >
+                    保存
+                  </button>
+                  <button
+                    onClick={() => setEditingPoints(false)}
+                    disabled={pointsMutation.isPending}
+                    className="px-3 py-1 text-xs text-gray-500 border border-gray-200 rounded hover:bg-gray-50"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <span
+                onClick={() => { setPointsValue(String(issue.points ?? '')); setEditingPoints(true) }}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPointsValue(String(issue.points ?? '')); setEditingPoints(true) } }}
+                tabIndex={0}
+                role="button"
+                className="group inline-flex items-center gap-1 cursor-pointer hover:bg-gray-100 rounded px-1 -mx-1 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                title="クリックして編集"
+              >
+                <span className="font-mono font-semibold text-gray-800">
+                  {issue.points != null ? issue.points : <span className="text-gray-400 font-normal italic">未設定</span>}
+                </span>
+                <Pencil size={10} className="opacity-0 group-hover:opacity-100 text-gray-400 transition-opacity" aria-hidden="true" />
+              </span>
+            )
+          ) : (
+            <span className={issue.points != null ? 'font-mono font-semibold text-gray-800' : 'text-gray-400 italic text-sm'}>
+              {issue.points != null ? issue.points : '未設定'}
+            </span>
+          )}
+        </div>
 
         <div>
           <p className="text-xs text-gray-400 mb-1">担当者</p>
@@ -587,22 +759,78 @@ export function IssueDetail({ issueId, projectId }: Props) {
           )}
         </div>
 
-        {issue.due_date && nowMs && (
-          <div>
-            <p className="text-xs text-gray-400 mb-1">期限日</p>
-            {(() => {
-              const due = dueDateLabel(issue.due_date, nowMs)
-              return (
-                <span className={`text-sm font-medium ${due.isUrgent ? 'text-red-500' : 'text-gray-700'}`}>
-                  {issue.due_date}
-                  {due.isUrgent && (
-                    <span className="ml-1 text-xs">({due.text === '今日が期限' ? '今日' : due.text})</span>
-                  )}
-                </span>
-              )
-            })()}
-          </div>
-        )}
+        <div>
+          <p className="text-xs text-gray-400 mb-1">期限日</p>
+          {canEditProject ? (
+            editingDueDate ? (
+              <div>
+                <input
+                  type="date"
+                  value={dueDateValue}
+                  onChange={e => setDueDateValue(e.target.value)}
+                  autoFocus
+                  aria-label="期限日"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      const val = dueDateValue || null
+                      if (val !== issue.due_date) dueDateMutation.mutate(val)
+                      else setEditingDueDate(false)
+                    } else if (e.key === 'Escape') { e.stopPropagation(); setEditingDueDate(false) }
+                  }}
+                  className="w-full border border-blue-400 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                />
+                <div className="flex gap-2 mt-1.5">
+                  <button
+                    onClick={() => { const val = dueDateValue || null; if (val !== issue.due_date) dueDateMutation.mutate(val); else setEditingDueDate(false) }}
+                    disabled={dueDateMutation.isPending}
+                    className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-40"
+                  >
+                    保存
+                  </button>
+                  <button
+                    onClick={() => setEditingDueDate(false)}
+                    disabled={dueDateMutation.isPending}
+                    className="px-3 py-1 text-xs text-gray-500 border border-gray-200 rounded hover:bg-gray-50"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <span
+                onClick={() => { setDueDateValue(issue.due_date ?? ''); setEditingDueDate(true) }}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDueDateValue(issue.due_date ?? ''); setEditingDueDate(true) } }}
+                tabIndex={0}
+                role="button"
+                className="group inline-flex items-center gap-1 cursor-pointer hover:bg-gray-100 rounded px-1 -mx-1 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                title="クリックして編集"
+              >
+                {issue.due_date && nowMs ? (() => {
+                  const due = dueDateLabel(issue.due_date, nowMs)
+                  return (
+                    <span className={`text-sm font-medium ${due.isUrgent ? 'text-red-500' : 'text-gray-700'}`}>
+                      {issue.due_date}
+                      {due.isUrgent && <span className="ml-1 text-xs">({due.text === '今日が期限' ? '今日' : due.text})</span>}
+                    </span>
+                  )
+                })() : (
+                  <span className="text-sm text-gray-400 italic">未設定</span>
+                )}
+                <Pencil size={10} className="opacity-0 group-hover:opacity-100 text-gray-400 transition-opacity" aria-hidden="true" />
+              </span>
+            )
+          ) : issue.due_date && nowMs ? (() => {
+            const due = dueDateLabel(issue.due_date, nowMs)
+            return (
+              <span className={`text-sm font-medium ${due.isUrgent ? 'text-red-500' : 'text-gray-700'}`}>
+                {issue.due_date}
+                {due.isUrgent && <span className="ml-1 text-xs">({due.text === '今日が期限' ? '今日' : due.text})</span>}
+              </span>
+            )
+          })() : (
+            <span className="text-sm text-gray-400 italic">未設定</span>
+          )}
+        </div>
 
         {projectLabels.length > 0 && (
           <div>
