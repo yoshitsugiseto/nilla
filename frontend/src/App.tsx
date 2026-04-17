@@ -1,7 +1,7 @@
 import { lazy, Suspense, useRef, useState } from 'react'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { Modal } from './components/common/Modal'
 import { Sidebar } from './components/Layout'
-import type { Page } from './components/Layout'
 import { useAppStore } from './store'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useProjectPermissions } from './hooks/useProjectPermissions'
@@ -37,7 +37,6 @@ const EMPTY_SEARCH_FILTERS: IssueSearchFilters = {
 }
 
 export default function App() {
-  const [page, setPage] = useState<Page>('dashboard')
   const [creatingProject, setCreatingProject] = useState(false)
   const [creatingWorkspace, setCreatingWorkspace] = useState(false)
   const [creatingIssue, setCreatingIssue] = useState(false)
@@ -75,8 +74,6 @@ export default function App() {
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
       <Sidebar
-        page={page}
-        setPage={setPage}
         searching={searching}
         searchInput={searchInput}
         setSearchInput={setSearchInput}
@@ -101,14 +98,18 @@ export default function App() {
                 onFiltersChange={setSearchFilters}
               />
             )
-            : <>
-                {page === 'dashboard' && <DashboardPage onOpenSearch={applySearchPreset} />}
-                {page === 'board' && <BoardPage />}
-                {page === 'backlog' && <BacklogPage />}
-                {page === 'sprints' && <SprintPage onNavigate={p => setPage(p as Page)} onOpenSearch={applySearchPreset} />}
-                {page === 'sprint-history' && <SprintHistoryPage onNavigate={p => setPage(p as Page)} />}
-                {page === 'settings' && <SettingsPage />}
-              </>
+            : (
+              <Routes>
+                <Route path="/" element={<DashboardPage onOpenSearch={applySearchPreset} />} />
+                <Route path="/dashboard" element={<Navigate to="/" replace />} />
+                <Route path="/board" element={<BoardPage />} />
+                <Route path="/backlog" element={<BacklogPage />} />
+                <Route path="/sprints" element={<SprintPage onOpenSearch={applySearchPreset} />} />
+                <Route path="/sprint-history" element={<SprintHistoryPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            )
           }
         </Suspense>
       </main>

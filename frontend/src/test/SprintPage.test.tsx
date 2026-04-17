@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { SprintPage } from '../pages/SprintPage'
@@ -155,15 +156,15 @@ function renderSprintPage(onOpenSearch = vi.fn()) {
       boardFilters: {},
     })
 
-  const onNavigate = vi.fn()
-
   render(
-    <QueryClientProvider client={queryClient}>
-      <SprintPage onNavigate={onNavigate} onOpenSearch={onOpenSearch} />
-    </QueryClientProvider>
+    <MemoryRouter initialEntries={['/sprints']}>
+      <QueryClientProvider client={queryClient}>
+        <SprintPage onOpenSearch={onOpenSearch} />
+      </QueryClientProvider>
+    </MemoryRouter>
   )
 
-  return { onNavigate, onOpenSearch }
+  return { onOpenSearch }
 }
 
 describe('SprintPage', () => {

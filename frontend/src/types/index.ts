@@ -213,11 +213,11 @@ export interface CreateIssue {
 
 export interface UpdateIssue {
   title?: string
-  description?: string
+  description?: string | null
   type?: IssueType
   status?: IssueStatus
   priority?: IssuePriority
-  points?: number
+  points?: number | null
   assignee_id?: string | null
   labels?: string[]
   sprint_id?: string | null

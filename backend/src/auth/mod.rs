@@ -1,6 +1,7 @@
 pub mod jwt;
 pub mod middleware;
 pub mod oauth;
+pub mod password;
 pub mod ws;
 
 use axum::body::Body;
@@ -107,11 +108,13 @@ pub fn public_router() -> Router<AppState> {
         .layer(GovernorLayer::new(governor_conf))
         .layer(axum::middleware::from_fn(rate_limit_response));
 
-    // レート制限なし: refresh cookie / one-time code / WS ticket validation
+    // レート制限なし: refresh cookie / one-time code / WS ticket validation / email auth
     let public_util_router = Router::new()
         .route("/api/auth/token", get(oauth::exchange_token))
         .route("/api/auth/refresh", post(oauth::refresh_token))
         .route("/api/auth/logout", post(oauth::logout))
+        .route("/api/auth/signup", post(password::signup))
+        .route("/api/auth/login", post(password::login))
         .route("/api/ws", get(ws::ws_handler));
 
     Router::new().merge(oauth_router).merge(public_util_router)

@@ -102,6 +102,8 @@ pub async fn create_workspace(
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
+    let mut tx = pool.begin().await?;
+
     sqlx::query(
         "INSERT INTO workspaces (id, name, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
     )
@@ -110,7 +112,7 @@ pub async fn create_workspace(
     .bind(&user_id.0)
     .bind(&now)
     .bind(&now)
-    .execute(&pool)
+    .execute(&mut *tx)
     .await?;
 
     sqlx::query(
@@ -119,7 +121,7 @@ pub async fn create_workspace(
     .bind(&id)
     .bind(&user_id.0)
     .bind(&now)
-    .execute(&pool)
+    .execute(&mut *tx)
     .await?;
 
     sqlx::query(
@@ -128,15 +130,17 @@ pub async fn create_workspace(
     .bind(&id)
     .bind(&now)
     .bind(&now)
-    .execute(&pool)
+    .execute(&mut *tx)
     .await?;
 
     let workspace = sqlx::query_as::<_, Workspace>(
         "SELECT id, name, created_by, created_at, updated_at FROM workspaces WHERE id = ?",
     )
     .bind(&id)
-    .fetch_one(&pool)
+    .fetch_one(&mut *tx)
     .await?;
+
+    tx.commit().await?;
 
     Ok(Json(workspace))
 }
@@ -199,6 +203,143 @@ pub async fn update_workspace(
     .await?;
 
     Ok(Json(workspace))
+}
+
+pub async fn delete_workspace(
+    State(pool): State<SqlitePool>,
+    Extension(user_id): Extension<UserId>,
+    Path(id): Path<String>,
+) -> Result<axum::http::StatusCode> {
+    // Only the workspace owner can delete
+    let is_owner: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM workspace_members WHERE workspace_id = ? AND user_id = ? AND role = 'owner')",
+    )
+    .bind(&id)
+    .bind(&user_id.0)
+    .fetch_one(&pool)
+    .await?;
+
+    if !is_owner {
+        return Err(AppError::Forbidden);
+    }
+
+    let workspace_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workspaces WHERE id = ?)")
+            .bind(&id)
+            .fetch_one(&pool)
+            .await?;
+
+    if !workspace_exists {
+        return Err(AppError::NotFound);
+    }
+
+    let mut tx = pool.begin().await?;
+
+    // Delete leaf-level data for all issues in this workspace's projects
+    sqlx::query(
+        "DELETE FROM notifications WHERE issue_id IN (SELECT i.id FROM issues i JOIN projects p ON i.project_id = p.id WHERE p.workspace_id = ?)",
+    )
+    .bind(&id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "DELETE FROM activity_logs WHERE issue_id IN (SELECT i.id FROM issues i JOIN projects p ON i.project_id = p.id WHERE p.workspace_id = ?)",
+    )
+    .bind(&id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "DELETE FROM comments WHERE issue_id IN (SELECT i.id FROM issues i JOIN projects p ON i.project_id = p.id WHERE p.workspace_id = ?)",
+    )
+    .bind(&id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "DELETE FROM issue_links WHERE source_id IN (SELECT i.id FROM issues i JOIN projects p ON i.project_id = p.id WHERE p.workspace_id = ?) OR target_id IN (SELECT i.id FROM issues i JOIN projects p ON i.project_id = p.id WHERE p.workspace_id = ?)",
+    )
+    .bind(&id)
+    .bind(&id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "DELETE FROM attachments WHERE issue_id IN (SELECT i.id FROM issues i JOIN projects p ON i.project_id = p.id WHERE p.workspace_id = ?)",
+    )
+    .bind(&id)
+    .execute(&mut *tx)
+    .await?;
+
+    // Delete issues, sprints, labels, templates, project members for this workspace's projects
+    sqlx::query(
+        "DELETE FROM issues WHERE project_id IN (SELECT id FROM projects WHERE workspace_id = ?)",
+    )
+    .bind(&id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "DELETE FROM sprints WHERE project_id IN (SELECT id FROM projects WHERE workspace_id = ?)",
+    )
+    .bind(&id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "DELETE FROM labels WHERE project_id IN (SELECT id FROM projects WHERE workspace_id = ?)",
+    )
+    .bind(&id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "DELETE FROM issue_templates WHERE project_id IN (SELECT id FROM projects WHERE workspace_id = ?)",
+    )
+    .bind(&id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "DELETE FROM project_members WHERE project_id IN (SELECT id FROM projects WHERE workspace_id = ?)",
+    )
+    .bind(&id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "DELETE FROM search_presets WHERE project_id IN (SELECT id FROM projects WHERE workspace_id = ?)",
+    )
+    .bind(&id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query("DELETE FROM projects WHERE workspace_id = ?")
+        .bind(&id)
+        .execute(&mut *tx)
+        .await?;
+
+    // Delete workspace-level data (automation_settings and members cascade in migration,
+    // but we delete explicitly for safety)
+    sqlx::query("DELETE FROM workspace_automation_settings WHERE workspace_id = ?")
+        .bind(&id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM workspace_members WHERE workspace_id = ?")
+        .bind(&id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM workspaces WHERE id = ?")
+        .bind(&id)
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+
+    Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
 pub async fn get_workspace_automation(

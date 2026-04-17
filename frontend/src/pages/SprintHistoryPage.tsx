@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { BarChart2, ChevronDown, ChevronRight, ArrowLeft, TrendingUp } from 'lucide-react'
 import { getSprints } from '../api/sprints'
 import { getIssues } from '../api/issues'
@@ -94,8 +95,9 @@ function CompletedSprintCard({ sprint, issues }: { sprint: Sprint; issues: Issue
   )
 }
 
-export function SprintHistoryPage({ onNavigate }: { onNavigate: (page: string) => void }) {
+export function SprintHistoryPage() {
   const { activeProjectId } = useAppStore()
+  const navigate = useNavigate()
 
   const { data: sprints = [], isLoading } = useQuery({
     queryKey: ['sprints', activeProjectId],
@@ -128,7 +130,7 @@ export function SprintHistoryPage({ onNavigate }: { onNavigate: (page: string) =
           <p className="text-sm text-gray-400 mt-1">{completed.length}件の完了済みスプリント</p>
         </div>
         <button
-          onClick={() => onNavigate('sprints')}
+          onClick={() => navigate('/sprints')}
           className="flex items-center gap-2 px-4 py-2 text-gray-600 text-sm rounded-lg border border-gray-200 hover:bg-gray-50"
         >
           <ArrowLeft size={16} /> Sprint一覧

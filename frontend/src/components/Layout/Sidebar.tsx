@@ -1,5 +1,6 @@
 import { useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Trello, List, Zap, Plus, FolderOpen, LayoutDashboard, Search, LogOut, Settings, Keyboard } from 'lucide-react'
 import { useAuthStore } from '../../store/auth'
 import { useAppStore } from '../../store'
@@ -12,9 +13,29 @@ import { NotificationBell } from './NotificationBell'
 
 export type Page = 'dashboard' | 'board' | 'backlog' | 'sprints' | 'sprint-history' | 'settings'
 
+const PAGE_TO_PATH: Record<Page, string> = {
+  dashboard: '/',
+  board: '/board',
+  backlog: '/backlog',
+  sprints: '/sprints',
+  'sprint-history': '/sprint-history',
+  settings: '/settings',
+}
+
+function pathToPage(pathname: string): Page {
+  const map: Record<string, Page> = {
+    '/': 'dashboard',
+    '/dashboard': 'dashboard',
+    '/board': 'board',
+    '/backlog': 'backlog',
+    '/sprints': 'sprints',
+    '/sprint-history': 'sprint-history',
+    '/settings': 'settings',
+  }
+  return map[pathname] ?? 'dashboard'
+}
+
 interface SidebarProps {
-  page: Page
-  setPage: (page: Page) => void
   searching: boolean
   searchInput: string
   setSearchInput: (value: string) => void
@@ -28,8 +49,6 @@ interface SidebarProps {
 }
 
 export function Sidebar({
-  page,
-  setPage,
   searching,
   searchInput,
   setSearchInput,
@@ -44,14 +63,22 @@ export function Sidebar({
   const { activeProjectId, setActiveProject, activeWorkspaceId, setActiveWorkspace } = useAppStore()
   const { user, clearAuth } = useAuthStore()
   const { canEditProject } = useProjectPermissions(activeProjectId)
+  const navigate = useNavigate()
+  const location = useLocation()
+  const page = pathToPage(location.pathname)
+
+  const navigateTo = (p: Page) => {
+    navigate(PAGE_TO_PATH[p])
+    clearSearch()
+  }
 
   useKeyboardShortcuts({
     'n': () => { if (activeProjectId && canEditProject) setCreatingIssue(true) },
     '/': () => { searchInputRef.current?.focus() },
     '?': () => setShowShortcuts(true),
-    'b': () => { setPage('backlog'); clearSearch() },
-    'd': () => { setPage('board'); clearSearch() },
-    's': () => { setPage('sprints'); clearSearch() },
+    'b': () => { navigateTo('backlog') },
+    'd': () => { navigateTo('board') },
+    's': () => { navigateTo('sprints') },
   })
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -190,7 +217,7 @@ export function Sidebar({
           {navItems.map(item => (
             <button
               key={item.id}
-              onClick={() => { setPage(item.id); clearSearch() }}
+              onClick={() => { navigateTo(item.id) }}
               className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${
                 page === item.id && !searching
                   ? 'bg-blue-600 text-white'

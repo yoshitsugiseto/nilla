@@ -68,13 +68,13 @@ pub struct UserResponse {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-fn generate_random_hex(len: usize) -> String {
+pub fn generate_random_hex(len: usize) -> String {
     use rand::Rng;
     let bytes: Vec<u8> = (0..len).map(|_| rand::thread_rng().gen::<u8>()).collect();
     hex::encode(bytes)
 }
 
-fn hash_token(token: &str) -> String {
+pub fn hash_token(token: &str) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(token.as_bytes());
@@ -129,21 +129,14 @@ async fn exchange_oauth_code(
     code: &str,
 ) -> anyhow::Result<Option<(String, String)>> {
     let now = Utc::now().to_rfc3339();
+    // Atomic DELETE ... RETURNING to prevent TOCTOU race (same pattern as ws_tickets)
     let row: Option<(String, String)> = sqlx::query_as(
-        "SELECT access_token, refresh_token FROM oauth_codes WHERE code = ? AND expires_at > ?",
+        "DELETE FROM oauth_codes WHERE code = ? AND expires_at > ? RETURNING access_token, refresh_token",
     )
     .bind(code)
     .bind(&now)
     .fetch_optional(pool)
     .await?;
-
-    if row.is_some() {
-        // Delete the code after retrieval (single-use)
-        sqlx::query("DELETE FROM oauth_codes WHERE code = ?")
-            .bind(code)
-            .execute(pool)
-            .await?;
-    }
 
     Ok(row)
 }

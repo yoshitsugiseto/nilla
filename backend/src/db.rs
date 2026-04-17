@@ -128,3 +128,13 @@ pub async fn create_pool(database_url: &str) -> anyhow::Result<SqlitePool> {
 
     Ok(pool)
 }
+
+/// Returns the workspace_id for the given project_id, or None if not found.
+pub async fn get_workspace_id_for_project(pool: &SqlitePool, project_id: &str) -> Option<String> {
+    sqlx::query_scalar("SELECT workspace_id FROM projects WHERE id = ?")
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+}

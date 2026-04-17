@@ -1,5 +1,6 @@
 import { useId, useState } from 'react'
 import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { Plus, Play, CheckCircle, BarChart2, AlertCircle, History, Pencil, Trophy, TrendingUp } from 'lucide-react'
 import { getSprints, createSprint, updateSprint, startSprint, completeSprint } from '../api/sprints'
 import { getActivity, getIssues } from '../api/issues'
@@ -476,15 +477,14 @@ function SprintCard({
 }
 
 export function SprintPage({
-  onNavigate,
   onOpenSearch,
 }: {
-  onNavigate: (page: string) => void
   onOpenSearch?: (query: string, filters: IssueSearchFilters) => void
 }) {
   const { activeProjectId, activeWorkspaceId } = useAppStore()
   const qc = useQueryClient()
   const showToast = useToast()
+  const navigate = useNavigate()
   const nowMs = useCurrentTime()
   const { role, canEditProject } = useProjectPermissions(activeProjectId)
   const [creating, setCreating] = useState(false)
@@ -612,7 +612,7 @@ export function SprintPage({
           <ProjectRoleBadge role={role} />
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => onNavigate('sprint-history')}
+          <button onClick={() => navigate('/sprint-history')}
             className="flex items-center gap-2 px-4 py-2 text-gray-600 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">
             <History size={16} /> 履歴
           </button>
@@ -868,7 +868,7 @@ export function SprintPage({
           <SprintReportModal
             report={report}
             onClose={() => setReport(null)}
-            onHistory={() => onNavigate('sprint-history')}
+            onHistory={() => navigate('/sprint-history')}
           />
         </Modal>
       )}

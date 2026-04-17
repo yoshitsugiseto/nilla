@@ -19,15 +19,6 @@ use crate::{
     realtime::RealtimeHub,
 };
 
-async fn get_workspace_id_for_project(pool: &SqlitePool, project_id: &str) -> Option<String> {
-    sqlx::query_scalar::<_, String>("SELECT workspace_id FROM projects WHERE id = ?")
-        .bind(project_id)
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten()
-}
-
 async fn get_project_id_for_sprint(pool: &SqlitePool, sprint_id: &str) -> Result<String> {
     sqlx::query_scalar::<_, String>("SELECT project_id FROM sprints WHERE id = ?")
         .bind(sprint_id)
@@ -42,7 +33,7 @@ async fn broadcast_sprint_event(
     event_type: &str,
     sprint: &Sprint,
 ) {
-    if let Some(workspace_id) = get_workspace_id_for_project(pool, &sprint.project_id).await {
+    if let Some(workspace_id) = crate::db::get_workspace_id_for_project(pool, &sprint.project_id).await {
         realtime
             .publish_workspace(
                 &workspace_id,
