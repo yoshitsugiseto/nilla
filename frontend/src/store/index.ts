@@ -8,6 +8,10 @@ interface AppState {
   activeWorkspaceId: string | null
   pendingOpenIssueId: string | null
   pendingOpenIssueTitle: string | null
+  // @deprecated Local search presets are kept for backward compatibility.
+  // The server-side API (api/searchPresets.ts) is the source of truth for
+  // shared presets. These local presets should be migrated to a per-user
+  // server-side endpoint and then removed from the store.
   searchPresets: SearchPreset[]
   boardFilters: {
     assignee_id?: string
@@ -19,8 +23,11 @@ interface AppState {
   setActiveWorkspace: (id: string | null) => void
   setPendingOpenIssueId: (id: string | null) => void
   setPendingOpenIssueTitle: (title: string | null) => void
+  /** @deprecated Use server-side search presets API instead. */
   saveSearchPreset: (projectId: string, name: string, query: string, filters: IssueSearchFilters) => void
+  /** @deprecated Use server-side search presets API instead. */
   renameSearchPreset: (id: string, name: string) => void
+  /** @deprecated Use server-side search presets API instead. */
   deleteSearchPreset: (id: string) => void
   setBoardFilter: (key: string, value: string | undefined) => void
   clearBoardFilters: () => void
@@ -96,7 +103,9 @@ export const useAppStore = create<AppState>()(
       name: 'nilla-app-state',
       partialize: (state) => ({
         activeProjectId: state.activeProjectId,
-        activeSprint: state.activeSprint,
+        // activeSprint is intentionally excluded from persistence.
+        // Sprint status can change server-side, so persisting a stale
+        // snapshot in localStorage would cause incorrect UI state on reload.
         activeWorkspaceId: state.activeWorkspaceId,
         searchPresets: state.searchPresets,
         boardFilters: state.boardFilters,

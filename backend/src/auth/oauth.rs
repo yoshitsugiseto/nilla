@@ -70,7 +70,7 @@ pub struct UserResponse {
 
 pub fn generate_random_hex(len: usize) -> String {
     use rand::Rng;
-    let bytes: Vec<u8> = (0..len).map(|_| rand::thread_rng().gen::<u8>()).collect();
+    let bytes: Vec<u8> = (0..len).map(|_| rand::rngs::OsRng.gen::<u8>()).collect();
     hex::encode(bytes)
 }
 

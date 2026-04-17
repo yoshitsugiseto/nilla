@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # ── Stage 2: Rust build ─────────────────────────────────────────
-FROM rust:1.82-slim-bookworm AS backend
+FROM rust:1.87-slim-bookworm AS backend
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y \

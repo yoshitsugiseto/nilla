@@ -10,6 +10,17 @@ use crate::{
 
 pub const UNASSIGNED_FILTER: &str = "__unassigned__";
 
+// Automation log messages for notification events
+const MSG_ASSIGNEE_CHANGE_DISABLED: &str = "担当変更通知はワークスペース設定で無効です";
+const MSG_ASSIGNEE_CHANGE_NO_ASSIGNEE: &str = "担当者がいないため担当変更通知を送信しませんでした";
+const MSG_ASSIGNEE_CHANGE_SELF: &str = "担当者本人への担当変更通知はスキップしました";
+const MSG_REVIEW_READY_DISABLED: &str = "レビュー待ち通知はワークスペース設定で無効です";
+const MSG_REVIEW_READY_NO_ASSIGNEE: &str = "担当者がいないためレビュー待ち通知を送信しませんでした";
+const MSG_REVIEW_READY_SELF: &str = "担当者本人へのレビュー待ち通知はスキップしました";
+const MSG_OVERDUE_DISABLED: &str = "期限超過通知はワークスペース設定で無効です";
+const MSG_OVERDUE_NO_ASSIGNEE: &str = "担当者がいないため期限超過通知を送信しませんでした";
+const MSG_OVERDUE_SELF: &str = "担当者本人への期限超過通知はスキップしました";
+
 pub const ISSUE_COLUMNS: &str =
     "i.id, i.project_id, i.sprint_id, i.parent_id, i.epic_id, e.title as epic_title, i.number, i.title, i.description, i.type, i.status, i.priority, i.points, i.assignee_id, u.name as assignee_name, u.avatar_url as assignee_avatar_url, i.labels, i.position, i.due_date, i.created_at, i.updated_at";
 pub const ISSUE_FROM: &str =
@@ -128,12 +139,21 @@ pub async fn get_project_id_for_issue(pool: &SqlitePool, issue_id: &str) -> Resu
 }
 
 pub async fn get_user_name(pool: &SqlitePool, user_id: &str) -> String {
-    sqlx::query_scalar("SELECT name FROM users WHERE id = ?")
+    match sqlx::query_scalar("SELECT name FROM users WHERE id = ?")
         .bind(user_id)
         .fetch_optional(pool)
         .await
-        .unwrap_or(None)
-        .unwrap_or_else(|| "Unknown".to_string())
+    {
+        Ok(Some(name)) => name,
+        Ok(None) => {
+            tracing::warn!("User not found for id={user_id}, returning fallback name");
+            "Unknown".to_string()
+        }
+        Err(e) => {
+            tracing::warn!("Failed to fetch user name for id={user_id}: {e}");
+            "Unknown".to_string()
+        }
+    }
 }
 
 pub fn issue_is_overdue(due_date: Option<NaiveDate>, status: &str, today: NaiveDate) -> bool {
@@ -179,7 +199,7 @@ pub async fn notify_assignee_change(
             "assignee_change",
             "disabled",
             assignee_id,
-            "担当変更通知はワークスペース設定で無効です",
+            MSG_ASSIGNEE_CHANGE_DISABLED,
         )
         .await;
         return;
@@ -193,7 +213,7 @@ pub async fn notify_assignee_change(
             "assignee_change",
             "skipped",
             None,
-            "担当者がいないため担当変更通知を送信しませんでした",
+            MSG_ASSIGNEE_CHANGE_NO_ASSIGNEE,
         )
         .await;
         return;
@@ -206,7 +226,7 @@ pub async fn notify_assignee_change(
             "assignee_change",
             "skipped",
             Some(assignee_id),
-            "担当者本人への担当変更通知はスキップしました",
+            MSG_ASSIGNEE_CHANGE_SELF,
         )
         .await;
         return;
@@ -253,7 +273,7 @@ pub async fn notify_review_ready(
             "review_ready",
             "disabled",
             assignee_id,
-            "レビュー待ち通知はワークスペース設定で無効です",
+            MSG_REVIEW_READY_DISABLED,
         )
         .await;
         return;
@@ -267,7 +287,7 @@ pub async fn notify_review_ready(
             "review_ready",
             "skipped",
             None,
-            "担当者がいないためレビュー待ち通知を送信しませんでした",
+            MSG_REVIEW_READY_NO_ASSIGNEE,
         )
         .await;
         return;
@@ -280,7 +300,7 @@ pub async fn notify_review_ready(
             "review_ready",
             "skipped",
             Some(assignee_id),
-            "担当者本人へのレビュー待ち通知はスキップしました",
+            MSG_REVIEW_READY_SELF,
         )
         .await;
         return;
@@ -329,7 +349,7 @@ pub async fn notify_overdue(
             "overdue",
             "disabled",
             assignee_id,
-            "期限超過通知はワークスペース設定で無効です",
+            MSG_OVERDUE_DISABLED,
         )
         .await;
         return;
@@ -343,7 +363,7 @@ pub async fn notify_overdue(
             "overdue",
             "skipped",
             None,
-            "担当者がいないため期限超過通知を送信しませんでした",
+            MSG_OVERDUE_NO_ASSIGNEE,
         )
         .await;
         return;
@@ -356,7 +376,7 @@ pub async fn notify_overdue(
             "overdue",
             "skipped",
             Some(assignee_id),
-            "担当者本人への期限超過通知はスキップしました",
+            MSG_OVERDUE_SELF,
         )
         .await;
         return;

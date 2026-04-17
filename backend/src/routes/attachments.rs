@@ -307,9 +307,14 @@ pub async fn delete_attachment(
     )
     .await?;
 
-    // Only uploader can delete
+    // Allow deletion if user is the uploader or a project admin
     if attachment.uploaded_by != user_id.0 {
-        return Err(AppError::Forbidden);
+        let project_id: String =
+            sqlx::query_scalar("SELECT project_id FROM issues WHERE id = ?")
+                .bind(&attachment.issue_id)
+                .fetch_one(&pool)
+                .await?;
+        check_project_permission(&pool, &user_id.0, &project_id, ProjectPermission::Admin).await?;
     }
 
     sqlx::query("DELETE FROM attachments WHERE id = ?")

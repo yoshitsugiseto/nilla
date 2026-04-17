@@ -1,8 +1,15 @@
 import type { Notification } from '../types'
 import client from './client'
 
-export async function getNotifications(): Promise<Notification[]> {
-  const res = await client.get<Notification[]>('/notifications')
+export interface NotificationPaginationParams {
+  limit?: number
+  offset?: number
+}
+
+export async function getNotifications(
+  params?: NotificationPaginationParams,
+): Promise<Notification[]> {
+  const res = await client.get<Notification[]>('/notifications', { params })
   return res.data
 }
 

@@ -1,7 +1,8 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     Extension, Json,
 };
+use serde::Deserialize;
 use sqlx::SqlitePool;
 
 use crate::{
@@ -10,14 +11,32 @@ use crate::{
     models::notification::Notification,
 };
 
+const DEFAULT_NOTIFICATION_LIMIT: i64 = 50;
+const MAX_NOTIFICATION_LIMIT: i64 = 100;
+
+#[derive(Deserialize)]
+pub struct NotificationQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
 pub async fn list_notifications(
     State(pool): State<SqlitePool>,
     Extension(user_id): Extension<UserId>,
+    Query(query): Query<NotificationQuery>,
 ) -> Result<Json<Vec<Notification>>> {
+    let limit = query
+        .limit
+        .unwrap_or(DEFAULT_NOTIFICATION_LIMIT)
+        .clamp(1, MAX_NOTIFICATION_LIMIT);
+    let offset = query.offset.unwrap_or(0).max(0);
+
     let notifications = sqlx::query_as::<_, Notification>(
-        "SELECT id, user_id, issue_id, type, message, read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50",
+        "SELECT id, user_id, issue_id, type, message, read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
     )
     .bind(&user_id.0)
+    .bind(limit)
+    .bind(offset)
     .fetch_all(&pool)
     .await?;
 

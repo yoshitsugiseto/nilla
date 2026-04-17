@@ -490,6 +490,7 @@ pub async fn get_velocity(
 
 pub async fn delete_sprint(
     State(pool): State<SqlitePool>,
+    State(realtime): State<RealtimeHub>,
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>> {
@@ -510,6 +511,22 @@ pub async fn delete_sprint(
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound);
+    }
+
+    // Broadcast sprint deletion event
+    if let Some(workspace_id) = crate::db::get_workspace_id_for_project(&pool, &project_id).await {
+        realtime
+            .publish_workspace(
+                &workspace_id,
+                serde_json::json!({
+                    "type": "sprint.deleted",
+                    "project_id": project_id,
+                    "workspace_id": workspace_id,
+                    "sprint_id": id,
+                })
+                .to_string(),
+            )
+            .await;
     }
 
     Ok(Json(serde_json::json!({ "ok": true })))

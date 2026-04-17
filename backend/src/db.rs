@@ -109,22 +109,48 @@ pub async fn create_pool(database_url: &str) -> anyhow::Result<SqlitePool> {
 
     // 起動時に期限切れのセッションと OAuth state / code / WS ticket を削除
     let now = chrono::Utc::now().to_rfc3339();
-    let _ = sqlx::query("DELETE FROM sessions WHERE expires_at < ?")
+    if let Err(e) = sqlx::query("DELETE FROM sessions WHERE expires_at < ?")
         .bind(&now)
         .execute(&pool)
-        .await;
-    let _ = sqlx::query("DELETE FROM oauth_states WHERE expires_at < ?")
+        .await
+    {
+        tracing::warn!("Failed to clean up expired sessions: {e}");
+    }
+    if let Err(e) = sqlx::query("DELETE FROM oauth_states WHERE expires_at < ?")
         .bind(&now)
         .execute(&pool)
-        .await;
-    let _ = sqlx::query("DELETE FROM oauth_codes WHERE expires_at < ?")
+        .await
+    {
+        tracing::warn!("Failed to clean up expired oauth_states: {e}");
+    }
+    if let Err(e) = sqlx::query("DELETE FROM oauth_codes WHERE expires_at < ?")
         .bind(&now)
         .execute(&pool)
-        .await;
-    let _ = sqlx::query("DELETE FROM ws_tickets WHERE expires_at < ?")
+        .await
+    {
+        tracing::warn!("Failed to clean up expired oauth_codes: {e}");
+    }
+    if let Err(e) = sqlx::query("DELETE FROM ws_tickets WHERE expires_at < ?")
         .bind(&now)
         .execute(&pool)
-        .await;
+        .await
+    {
+        tracing::warn!("Failed to clean up expired ws_tickets: {e}");
+    }
+
+    // Clean up old notifications (older than 90 days) and activity logs (older than 180 days)
+    if let Err(e) = sqlx::query("DELETE FROM notifications WHERE created_at < datetime('now', '-90 days')")
+        .execute(&pool)
+        .await
+    {
+        tracing::warn!("Failed to clean up old notifications: {e}");
+    }
+    if let Err(e) = sqlx::query("DELETE FROM activity_logs WHERE created_at < datetime('now', '-180 days')")
+        .execute(&pool)
+        .await
+    {
+        tracing::warn!("Failed to clean up old activity_logs: {e}");
+    }
 
     Ok(pool)
 }

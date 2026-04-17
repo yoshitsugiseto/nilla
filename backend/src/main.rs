@@ -91,10 +91,10 @@ async fn main() -> anyhow::Result<()> {
 
     let app = nilla::create_app(state, static_dir)
         .layer(cors)
-        .layer(RequestBodyLimitLayer::new(1 * 1024 * 1024)) // 1 MB (multipart は別途制限済み)
+        .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1 MB (multipart は別途制限済み)
+        .layer(TraceLayer::new_for_http())
         .layer(GovernorLayer::new(governor_conf))
-        .layer(axum::middleware::from_fn(nilla::auth::rate_limit_response))
-        .layer(TraceLayer::new_for_http());
+        .layer(axum::middleware::from_fn(nilla::auth::rate_limit_response));
 
     let addr = "0.0.0.0:8080";
     let listener = tokio::net::TcpListener::bind(addr).await?;

@@ -75,6 +75,10 @@ async fn add_security_headers(
         "Referrer-Policy",
         HeaderValue::from_static("strict-origin-when-cross-origin"),
     );
+    // TODO: Replace 'unsafe-inline' with nonce-based CSP once the frontend
+    // uses a nonce-injecting build plugin (e.g. vite-plugin-csp).
+    // Tailwind CSS injects styles at build time via <style> tags, so
+    // 'unsafe-inline' is currently required for production rendering.
     headers.insert(
         "Content-Security-Policy",
         HeaderValue::from_static(
