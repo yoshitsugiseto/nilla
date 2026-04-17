@@ -1334,3 +1334,56 @@ async fn update_issue_assignment_creates_assignee_activity_log() {
             && entry["new_value"] == common::TEST_USER_B_ID
     }));
 }
+
+// ---------------------------------------------------------------
+// LIKE metacharacter escaping in search
+// ---------------------------------------------------------------
+
+#[tokio::test]
+async fn test_search_like_metacharacters() {
+    let app = common::setup_app().await;
+    let pid = common::create_project(&app, "P", "LK").await;
+
+    common::create_issue(&app, &pid, "Normal issue").await;
+    common::create_issue(&app, &pid, "Issue with % percent").await;
+    common::create_issue(&app, &pid, "Issue with _ underscore").await;
+
+    // Search for "% percent" — should only match the percent issue, not "Normal issue"
+    let (_, headers, json) = common::send_with_headers(
+        &app,
+        common::get(&format!(
+            "/api/projects/{pid}/issues?q={}",
+            urlencoding::encode("% percent")
+        )),
+    )
+    .await;
+    assert_eq!(headers.get("x-total-count").unwrap(), "1");
+    let items = json.as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["title"], "Issue with % percent");
+
+    // Search for "_ underscore" — should only match the underscore issue
+    let (_, headers, json) = common::send_with_headers(
+        &app,
+        common::get(&format!(
+            "/api/projects/{pid}/issues?q={}",
+            urlencoding::encode("_ underscore")
+        )),
+    )
+    .await;
+    assert_eq!(headers.get("x-total-count").unwrap(), "1");
+    let items = json.as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["title"], "Issue with _ underscore");
+
+    // Search for "Normal" — should only match "Normal issue"
+    let (_, headers, json) = common::send_with_headers(
+        &app,
+        common::get(&format!("/api/projects/{pid}/issues?q=Normal")),
+    )
+    .await;
+    assert_eq!(headers.get("x-total-count").unwrap(), "1");
+    let items = json.as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["title"], "Normal issue");
+}

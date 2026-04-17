@@ -506,3 +506,65 @@ async fn test_jwt_decode_garbage_fails() {
     let result = jwt::decode_access_token("not.a.jwt", "my-secret");
     assert!(result.is_err());
 }
+
+// ---------------------------------------------------------------
+// OAuth single-use code exchange
+// ---------------------------------------------------------------
+
+/// Helper: insert a one-time OAuth code into the DB for testing the exchange endpoint.
+async fn insert_oauth_code(
+    pool: &sqlx::SqlitePool,
+    code: &str,
+    access_token: &str,
+    refresh_token: &str,
+) {
+    let expires_at = (chrono::Utc::now() + chrono::Duration::seconds(30)).to_rfc3339();
+    sqlx::query(
+        "INSERT INTO oauth_codes (code, access_token, refresh_token, expires_at) VALUES (?, ?, ?, ?)",
+    )
+    .bind(code)
+    .bind(access_token)
+    .bind(refresh_token)
+    .bind(&expires_at)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn test_oauth_code_single_use() {
+    let (app, pool) = common::setup_app_with_pool().await;
+
+    // Create a valid access token and refresh token for the test user
+    let access_token = common::test_token();
+    let refresh_token = "test-refresh-for-code-exchange";
+    let code = "test-one-time-code-abc123";
+
+    insert_oauth_code(&pool, code, &access_token, refresh_token).await;
+
+    // First exchange should succeed
+    let (status, json) = common::send(
+        &app,
+        Request::builder()
+            .method("GET")
+            .uri(&format!("/api/auth/token?code={}", code))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(json["access_token"].is_string());
+    assert!(!json["access_token"].as_str().unwrap().is_empty());
+
+    // Second exchange with the SAME code should fail (code is consumed)
+    let (status, _) = common::send(
+        &app,
+        Request::builder()
+            .method("GET")
+            .uri(&format!("/api/auth/token?code={}", code))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}

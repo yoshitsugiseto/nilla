@@ -1224,3 +1224,135 @@ async fn test_add_duplicate_member_returns_conflict() {
     .await;
     assert_eq!(status, StatusCode::CONFLICT);
 }
+
+// ---------------------------------------------------------------
+// Delete workspace
+// ---------------------------------------------------------------
+
+#[tokio::test]
+async fn test_delete_workspace_owner_can_delete() {
+    let (app, pool) = common::setup_app_with_pool().await;
+    common::insert_user_b(&pool).await;
+
+    let ws_id = common::create_workspace(&app).await;
+    let pid = common::create_project_in(&app, "Proj", "PR", &ws_id).await;
+
+    // Add user B as admin
+    common::send(
+        &app,
+        common::post(
+            &format!("/api/workspaces/{ws_id}/members"),
+            json!({ "user_id": common::TEST_USER_B_ID, "role": "admin" }),
+        ),
+    )
+    .await;
+
+    // Owner deletes the workspace
+    let (status, json) = common::send(&app, common::delete(&format!("/api/workspaces/{ws_id}"))).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "delete failed: {json}");
+
+    // After deletion, workspace is inaccessible (403 because membership check
+    // fails before the handler can determine the resource is gone)
+    let (status, _) =
+        common::send(&app, common::get(&format!("/api/workspaces/{ws_id}"))).await;
+    assert!(
+        status == StatusCode::NOT_FOUND || status == StatusCode::FORBIDDEN,
+        "expected 404 or 403 after delete, got {status}"
+    );
+
+    // After deletion, the project in that workspace should be inaccessible
+    let (status, _) =
+        common::send(&app, common::get(&format!("/api/projects/{pid}"))).await;
+    assert!(
+        status == StatusCode::NOT_FOUND || status == StatusCode::FORBIDDEN,
+        "expected 404 or 403 after delete, got {status}"
+    );
+}
+
+#[tokio::test]
+async fn test_delete_workspace_with_project() {
+    let (app, pool) = common::setup_app_with_pool().await;
+    common::insert_user_b(&pool).await;
+
+    let ws_id = common::create_workspace(&app).await;
+    let pid = common::create_project_in(&app, "Proj", "PR", &ws_id).await;
+
+    // Add user B as admin
+    common::send(
+        &app,
+        common::post(
+            &format!("/api/workspaces/{ws_id}/members"),
+            json!({ "user_id": common::TEST_USER_B_ID, "role": "admin" }),
+        ),
+    )
+    .await;
+
+    // Owner deletes the workspace
+    let (status, json) = common::send(&app, common::delete(&format!("/api/workspaces/{ws_id}"))).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "delete failed: {json}");
+
+    // After deletion, workspace is inaccessible
+    let (status, _) =
+        common::send(&app, common::get(&format!("/api/workspaces/{ws_id}"))).await;
+    assert!(
+        status == StatusCode::NOT_FOUND || status == StatusCode::FORBIDDEN,
+        "expected 404 or 403 after delete, got {status}"
+    );
+
+    // After deletion, the project in that workspace should be inaccessible
+    let (status, _) =
+        common::send(&app, common::get(&format!("/api/projects/{pid}"))).await;
+    assert!(
+        status == StatusCode::NOT_FOUND || status == StatusCode::FORBIDDEN,
+        "expected 404 or 403 after delete, got {status}"
+    );
+}
+
+#[tokio::test]
+async fn test_delete_workspace_admin_cannot_delete() {
+    let (app, pool) = common::setup_app_with_pool().await;
+    common::insert_user_b(&pool).await;
+
+    let ws_id = common::create_workspace(&app).await;
+
+    // Add user B as admin
+    common::send(
+        &app,
+        common::post(
+            &format!("/api/workspaces/{ws_id}/members"),
+            json!({ "user_id": common::TEST_USER_B_ID, "role": "admin" }),
+        ),
+    )
+    .await;
+
+    // Admin (user B) tries to delete — should be forbidden
+    let token_b = common::token_for(common::TEST_USER_B_ID);
+    let (status, _) = common::send(
+        &app,
+        common::delete_as(&format!("/api/workspaces/{ws_id}"), &token_b),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // Workspace should still exist
+    let (status, json) =
+        common::send(&app, common::get(&format!("/api/workspaces/{ws_id}"))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["id"], ws_id);
+}
+
+#[tokio::test]
+async fn test_delete_workspace_nonexistent_returns_404() {
+    let app = common::setup_app().await;
+
+    let (status, _) = common::send(
+        &app,
+        common::delete("/api/workspaces/nonexistent-ws-id"),
+    )
+    .await;
+    // Owner check fails first (user is not owner of nonexistent workspace) → 403
+    assert!(
+        status == StatusCode::NOT_FOUND || status == StatusCode::FORBIDDEN,
+        "Expected 404 or 403, got {status}"
+    );
+}

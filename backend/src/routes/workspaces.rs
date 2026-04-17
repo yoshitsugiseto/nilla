@@ -258,7 +258,7 @@ pub async fn delete_workspace(
     .await?;
 
     sqlx::query(
-        "DELETE FROM issue_links WHERE source_id IN (SELECT i.id FROM issues i JOIN projects p ON i.project_id = p.id WHERE p.workspace_id = ?) OR target_id IN (SELECT i.id FROM issues i JOIN projects p ON i.project_id = p.id WHERE p.workspace_id = ?)",
+        "DELETE FROM issue_links WHERE source_issue_id IN (SELECT i.id FROM issues i JOIN projects p ON i.project_id = p.id WHERE p.workspace_id = ?) OR target_issue_id IN (SELECT i.id FROM issues i JOIN projects p ON i.project_id = p.id WHERE p.workspace_id = ?)",
     )
     .bind(&id)
     .bind(&id)
@@ -288,7 +288,7 @@ pub async fn delete_workspace(
     .await?;
 
     sqlx::query(
-        "DELETE FROM labels WHERE project_id IN (SELECT id FROM projects WHERE workspace_id = ?)",
+        "DELETE FROM project_labels WHERE project_id IN (SELECT id FROM projects WHERE workspace_id = ?)",
     )
     .bind(&id)
     .execute(&mut *tx)
