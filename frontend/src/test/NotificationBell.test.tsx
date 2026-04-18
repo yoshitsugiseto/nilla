@@ -83,7 +83,6 @@ describe('NotificationBell', () => {
       activeWorkspaceId: null,
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
-      searchPresets: [],
       boardFilters: {},
     })
 
@@ -132,7 +131,6 @@ describe('NotificationBell', () => {
       activeWorkspaceId: null,
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
-      searchPresets: [],
       boardFilters: {},
     })
     vi.restoreAllMocks()

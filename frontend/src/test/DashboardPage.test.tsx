@@ -92,7 +92,6 @@ describe('DashboardPage', () => {
       activeWorkspaceId: 'workspace-1',
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
-      searchPresets: [],
       boardFilters: {},
     })
   })
@@ -105,7 +104,6 @@ describe('DashboardPage', () => {
       activeWorkspaceId: null,
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
-      searchPresets: [],
       boardFilters: {},
     })
     vi.restoreAllMocks()

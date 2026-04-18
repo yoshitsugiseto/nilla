@@ -33,7 +33,6 @@ describe('SettingsPage', () => {
       activeSprint: null,
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
-      searchPresets: [],
       boardFilters: {},
     })
     mockUseProjectPermissions.mockReset()

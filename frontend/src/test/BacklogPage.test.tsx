@@ -159,7 +159,6 @@ function renderBacklogPage() {
     activeWorkspaceId: 'workspace-1',
     pendingOpenIssueId: null,
     pendingOpenIssueTitle: null,
-    searchPresets: [],
     boardFilters: {},
   })
 
@@ -216,7 +215,6 @@ describe('BacklogPage', () => {
       activeWorkspaceId: null,
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
-      searchPresets: [],
       boardFilters: {},
     })
     useAuthStore.setState({ accessToken: null, user: null, isLoading: false })

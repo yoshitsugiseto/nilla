@@ -8,7 +8,6 @@ const cleanState = {
   activeWorkspaceId: null,
   pendingOpenIssueId: null,
   pendingOpenIssueTitle: null,
-  searchPresets: [],
   boardFilters: {},
 }
 
@@ -120,67 +119,4 @@ describe('useAppStore', () => {
     expect(useAppStore.getState().activeSprint).toEqual(sampleSprint)
   })
 
-  test('saveSearchPreset adds a new preset', () => {
-    useAppStore.getState().saveSearchPreset('project-1', 'My Search', 'bug', {
-      status: 'todo',
-      type: 'bug',
-      priority: '',
-      assignee_id: '',
-      sprint_id: '',
-    })
-
-    const presets = useAppStore.getState().searchPresets
-    expect(presets).toHaveLength(1)
-    expect(presets[0]?.name).toBe('My Search')
-    expect(presets[0]?.query).toBe('bug')
-    expect(presets[0]?.project_id).toBe('project-1')
-  })
-
-  test('saveSearchPreset updates existing preset with same query and filters', () => {
-    const filters = {
-      status: 'todo' as const,
-      type: 'bug' as const,
-      priority: '' as const,
-      assignee_id: '',
-      sprint_id: '',
-    }
-    useAppStore.getState().saveSearchPreset('project-1', 'Original', 'bug', filters)
-    useAppStore.getState().saveSearchPreset('project-1', 'Updated', 'bug', filters)
-
-    const presets = useAppStore.getState().searchPresets
-    expect(presets).toHaveLength(1)
-    expect(presets[0]?.name).toBe('Updated')
-  })
-
-  test('renameSearchPreset updates the preset name', () => {
-    useAppStore.getState().saveSearchPreset('project-1', 'Old Name', 'query', {
-      status: '',
-      type: '',
-      priority: '',
-      assignee_id: '',
-      sprint_id: '',
-    })
-    const id = useAppStore.getState().searchPresets[0]?.id
-    if (!id) throw new Error('preset was not created')
-
-    useAppStore.getState().renameSearchPreset(id, 'New Name')
-
-    expect(useAppStore.getState().searchPresets[0]?.name).toBe('New Name')
-  })
-
-  test('deleteSearchPreset removes the preset', () => {
-    useAppStore.getState().saveSearchPreset('project-1', 'To Delete', 'query', {
-      status: '',
-      type: '',
-      priority: '',
-      assignee_id: '',
-      sprint_id: '',
-    })
-    const id = useAppStore.getState().searchPresets[0]?.id
-    if (!id) throw new Error('preset was not created')
-
-    useAppStore.getState().deleteSearchPreset(id)
-
-    expect(useAppStore.getState().searchPresets).toHaveLength(0)
-  })
 })

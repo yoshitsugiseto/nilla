@@ -511,14 +511,18 @@ pub fn build_issue_where(project_id: &str, filters: &crate::models::issue::Issue
         clause.push_str(" AND i.status != 'done' AND i.due_date IS NOT NULL AND i.due_date < date('now')");
     }
     if let Some(q) = &filters.q {
+        // Use FTS5 for title/description search with a fallback for issue number search.
+        // Strip double-quotes to prevent FTS5 syntax injection, then wrap in quotes
+        // for phrase search with a trailing * for prefix matching.
+        let sanitized = q.replace('"', "");
+        let fts_query = format!("\"{}\"*", sanitized);
         clause.push_str(
-            " AND (i.title LIKE ? ESCAPE '\\' OR i.description LIKE ? ESCAPE '\\' OR CAST(i.number AS TEXT) LIKE ? ESCAPE '\\')",
+            " AND (i.id IN (SELECT id FROM issues_fts WHERE issues_fts MATCH ?) OR CAST(i.number AS TEXT) LIKE ? ESCAPE '\\')",
         );
+        args.push(fts_query);
         let escaped = escape_like_pattern(q);
-        let pattern = format!("%{}%", escaped);
-        args.push(pattern.clone());
-        args.push(pattern.clone());
-        args.push(pattern);
+        let number_pattern = format!("%{}%", escaped);
+        args.push(number_pattern);
     }
 
     (clause, args)

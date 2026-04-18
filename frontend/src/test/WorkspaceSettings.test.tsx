@@ -159,7 +159,6 @@ describe('WorkspaceSettings', () => {
       activeSprint: null,
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
-      searchPresets: [],
       boardFilters: {},
     })
     mockGetWorkspace.mockResolvedValue({

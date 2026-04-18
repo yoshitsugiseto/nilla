@@ -152,7 +152,6 @@ function renderSprintPage(onOpenSearch = vi.fn()) {
       activeWorkspaceId: 'workspace-1',
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
-      searchPresets: [],
       boardFilters: {},
     })
 
@@ -212,7 +211,6 @@ describe('SprintPage', () => {
       activeWorkspaceId: null,
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
-      searchPresets: [],
       boardFilters: {},
     })
     useAuthStore.setState({ accessToken: null, user: null, isLoading: false })

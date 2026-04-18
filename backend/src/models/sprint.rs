@@ -57,6 +57,7 @@ pub struct SprintRow {
     pub status: String,
     pub start_date: Option<NaiveDate>,
     pub end_date: Option<NaiveDate>,
+    pub snapshot_total_points: Option<i64>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -71,6 +72,7 @@ pub struct Sprint {
     pub status: SprintStatus,
     pub start_date: Option<NaiveDate>,
     pub end_date: Option<NaiveDate>,
+    pub snapshot_total_points: Option<i64>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -89,6 +91,7 @@ impl From<SprintRow> for Sprint {
             status,
             start_date: row.start_date,
             end_date: row.end_date,
+            snapshot_total_points: row.snapshot_total_points,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }

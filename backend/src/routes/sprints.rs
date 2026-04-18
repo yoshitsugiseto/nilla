@@ -81,9 +81,9 @@ async fn validate_next_sprint_target(
 }
 
 const LIST_SPRINTS_SQL: &str =
-    "SELECT id, project_id, name, goal, status, start_date, end_date, created_at, updated_at FROM sprints WHERE project_id = ? ORDER BY created_at DESC";
+    "SELECT id, project_id, name, goal, status, start_date, end_date, snapshot_total_points, created_at, updated_at FROM sprints WHERE project_id = ? ORDER BY created_at DESC";
 const GET_SPRINT_SQL: &str =
-    "SELECT id, project_id, name, goal, status, start_date, end_date, created_at, updated_at FROM sprints WHERE id = ?";
+    "SELECT id, project_id, name, goal, status, start_date, end_date, snapshot_total_points, created_at, updated_at FROM sprints WHERE id = ?";
 
 pub async fn list_sprints(
     State(pool): State<SqlitePool>,
@@ -129,7 +129,7 @@ pub async fn create_sprint(
     let id = Uuid::new_v4().to_string();
 
     let row = sqlx::query_as::<_, SprintRow>(
-        "INSERT INTO sprints (id, project_id, name, goal, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, project_id, name, goal, status, start_date, end_date, created_at, updated_at",
+        "INSERT INTO sprints (id, project_id, name, goal, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, project_id, name, goal, status, start_date, end_date, snapshot_total_points, created_at, updated_at",
     )
     .bind(&id)
     .bind(&project_id)
@@ -201,7 +201,7 @@ pub async fn update_sprint(
     }
 
     let row = sqlx::query_as::<_, SprintRow>(
-        "UPDATE sprints SET name=?, goal=?, start_date=?, end_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING id, project_id, name, goal, status, start_date, end_date, created_at, updated_at",
+        "UPDATE sprints SET name=?, goal=?, start_date=?, end_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING id, project_id, name, goal, status, start_date, end_date, snapshot_total_points, created_at, updated_at",
     )
     .bind(&name)
     .bind(&goal)
@@ -238,8 +238,17 @@ pub async fn start_sprint(
         ));
     }
 
+    // Snapshot total story points at sprint start
+    sqlx::query(
+        "UPDATE sprints SET snapshot_total_points = (SELECT COALESCE(SUM(points), 0) FROM issues WHERE sprint_id = ? AND points IS NOT NULL) WHERE id = ?",
+    )
+    .bind(&id)
+    .bind(&id)
+    .execute(&pool)
+    .await?;
+
     let updated_row = sqlx::query_as::<_, SprintRow>(
-        "UPDATE sprints SET status='active', updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING id, project_id, name, goal, status, start_date, end_date, created_at, updated_at",
+        "UPDATE sprints SET status='active', updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING id, project_id, name, goal, status, start_date, end_date, snapshot_total_points, created_at, updated_at",
     )
     .bind(&id)
     .fetch_one(&pool)
@@ -325,7 +334,7 @@ pub async fn complete_sprint(
     }
 
     let updated_row = sqlx::query_as::<_, SprintRow>(
-        "UPDATE sprints SET status='completed', updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING id, project_id, name, goal, status, start_date, end_date, created_at, updated_at",
+        "UPDATE sprints SET status='completed', updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING id, project_id, name, goal, status, start_date, end_date, snapshot_total_points, created_at, updated_at",
     )
     .bind(&id)
     .fetch_one(&mut *tx)
@@ -389,14 +398,17 @@ pub async fn get_burndown(
         return Ok(Json(vec![]));
     };
 
-    // NOTE: total_points は現時点のスプリント内イシューの合計ポイントを使用している。
-    // スプリント途中にイシューが追加・削除された場合、理想線と実績線の始点がずれる可能性がある。
-    // 正確なバーンダウンを実現するには、スプリント開始時点のスナップショットを保存する必要がある。
-    let total_points: i64 =
+    // Use snapshot_total_points (captured at sprint start) as the baseline.
+    // Fall back to current sum for sprints that were started before the snapshot feature
+    // or sprints that have not been started yet.
+    let total_points: i64 = if let Some(snapshot) = sprint.snapshot_total_points {
+        snapshot
+    } else {
         sqlx::query_scalar("SELECT COALESCE(SUM(points), 0) FROM issues WHERE sprint_id = ?")
             .bind(&id)
             .fetch_one(&pool)
-            .await?;
+            .await?
+    };
 
     let days = (end - start).num_days() + 1;
 

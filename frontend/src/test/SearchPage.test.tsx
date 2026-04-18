@@ -132,7 +132,6 @@ function renderSearchPage(
     activeWorkspaceId: 'workspace-1',
     pendingOpenIssueId: null,
     pendingOpenIssueTitle: null,
-    searchPresets: [],
     boardFilters: {},
   })
 
@@ -245,7 +244,6 @@ describe('SearchPage', () => {
       activeWorkspaceId: null,
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
-      searchPresets: [],
       boardFilters: {},
     })
     vi.restoreAllMocks()
@@ -382,28 +380,45 @@ describe('SearchPage', () => {
     )
   })
 
-  test('saves a search preset into shared app state', async () => {
+  test('saves a search preset via server-side API', async () => {
     const user = userEvent.setup()
     const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('My bugs')
 
     renderSearchPage('bug')
 
     await waitFor(() => expect(mockGetIssuesPaged).toHaveBeenCalled())
-    await user.click(screen.getByRole('button', { name: '個人保存' }))
+    const saveButton = await screen.findByRole('button', { name: 'プリセット保存' })
+    await user.click(saveButton)
 
     expect(promptSpy).toHaveBeenCalledWith('プリセット名', 'bug')
-    expect(useAppStore.getState().searchPresets).toEqual([
-      expect.objectContaining({
+    await waitFor(() =>
+      expect(mockCreateSearchPreset).toHaveBeenCalledWith('project-1', {
         name: 'My bugs',
         query: 'bug',
-        project_id: 'project-1',
-      }),
-    ])
+        filters: {
+          status: '',
+          type: '',
+          priority: '',
+          assignee_id: '',
+          sprint_id: '',
+          due_state: '',
+        },
+      })
+    )
   })
 
   test('saves and applies shared search presets', async () => {
     const user = userEvent.setup()
     const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('共有条件')
+    mockCreateSearchPreset.mockResolvedValue({
+      id: 'shared-2',
+      project_id: 'project-1',
+      name: '共有条件',
+      query: 'bug',
+      filters: { status: '', type: '', priority: '', assignee_id: '', sprint_id: '', due_state: '' },
+      created_at: '2026-03-01T00:00:00Z',
+      updated_at: '2026-03-01T00:00:00Z',
+    })
     const onApplyPreset = vi.fn()
 
     renderSearchPage(
@@ -413,10 +428,10 @@ describe('SearchPage', () => {
     )
 
     await waitFor(() => expect(mockGetSearchPresets).toHaveBeenCalledWith('project-1'))
-    expect(await screen.findByText('共有プリセット')).toBeInTheDocument()
+    expect(await screen.findByText('プリセット')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '共有レビュー待ち' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '共有保存' }))
+    await user.click(await screen.findByRole('button', { name: 'プリセット保存' }))
     await waitFor(() =>
       expect(mockCreateSearchPreset).toHaveBeenCalledWith('project-1', {
         name: '共有条件',

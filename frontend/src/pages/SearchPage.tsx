@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { bulkUpdateIssues, getIssuesPaged } from '../api/issues'
 import { getLabels } from '../api/labels'
-import { createSearchPreset, deleteSearchPreset as deleteSharedSearchPreset, getSearchPresets, updateSearchPreset } from '../api/searchPresets'
+import { createSearchPreset, deleteSearchPreset as deleteServerSearchPreset, getSearchPresets, updateSearchPreset } from '../api/searchPresets'
 import { getSprints } from '../api/sprints'
 import { getProjectMembers } from '../api/workspaces'
 import { useAppStore } from '../store'
@@ -47,13 +47,7 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
   const qc = useQueryClient()
   const showToast = useToast()
   const { user } = useAuthStore()
-  const {
-    activeProjectId,
-    searchPresets,
-    saveSearchPreset,
-    renameSearchPreset,
-    deleteSearchPreset,
-  } = useAppStore()
+  const { activeProjectId } = useAppStore()
   const statusId = useId()
   const typeId = useId()
   const priorityId = useId()
@@ -72,13 +66,12 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
   const hasFilters = Object.values(filters).some(Boolean)
   const effectivePage =
     (query.length >= 2 || hasFilters) && pageState.scope === searchScope ? pageState.page : 0
-  const projectPresets = searchPresets.filter((preset) => preset.project_id === activeProjectId)
-  const { data: sharedPresets = [] } = useQuery({
+  const { data: presets = [] } = useQuery({
     queryKey: ['search-presets', activeProjectId],
     queryFn: () => getSearchPresets(activeProjectId!),
     enabled: !!activeProjectId,
   })
-  const canSavePreset = query.trim().length >= 2 || hasFilters
+  const canSavePreset = (query.trim().length >= 2 || hasFilters) && canEditProject
 
   const { data: members = [] } = useQuery({
     queryKey: ['project-members', activeProjectId],
@@ -139,30 +132,30 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
     },
     onError: () => showToast('一括更新に失敗しました', 'error'),
   })
-  const sharedPresetMutation = useMutation({
+  const createPresetMutation = useMutation({
     mutationFn: (payload: { name: string }) =>
       createSearchPreset(activeProjectId!, { name: payload.name, query, filters }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['search-presets', activeProjectId] })
-      showToast('共有プリセットを保存しました', 'success')
+      showToast('プリセットを保存しました', 'success')
     },
-    onError: () => showToast('共有プリセットの保存に失敗しました', 'error'),
+    onError: () => showToast('プリセットの保存に失敗しました', 'error'),
   })
-  const renameSharedPresetMutation = useMutation({
+  const renamePresetMutation = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) => updateSearchPreset(id, { name }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['search-presets', activeProjectId] })
-      showToast('共有プリセット名を更新しました', 'success')
+      showToast('プリセット名を更新しました', 'success')
     },
-    onError: () => showToast('共有プリセット名の更新に失敗しました', 'error'),
+    onError: () => showToast('プリセット名の更新に失敗しました', 'error'),
   })
-  const deleteSharedPresetMutation = useMutation({
-    mutationFn: (id: string) => deleteSharedSearchPreset(id),
+  const deletePresetMutation = useMutation({
+    mutationFn: (id: string) => deleteServerSearchPreset(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['search-presets', activeProjectId] })
-      showToast('共有プリセットを削除しました', 'success')
+      showToast('プリセットを削除しました', 'success')
     },
-    onError: () => showToast('共有プリセットの削除に失敗しました', 'error'),
+    onError: () => showToast('プリセットの削除に失敗しました', 'error'),
   })
 
   const setFilter = (key: keyof IssueSearchFilters, value: string) =>
@@ -222,19 +215,12 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
         return filters.priority === 'critical'
     }
   }
-  const saveCurrentPreset = () => {
+  const savePreset = () => {
     if (!activeProjectId || !canSavePreset) return
     const defaultName = query.trim().length >= 2 ? query.trim() : 'フィルタ'
     const name = window.prompt('プリセット名', defaultName)
     if (!name?.trim()) return
-    saveSearchPreset(activeProjectId, name.trim(), query, filters)
-  }
-  const saveSharedPreset = () => {
-    if (!activeProjectId || !canSavePreset || !canEditProject) return
-    const defaultName = query.trim().length >= 2 ? query.trim() : 'フィルタ'
-    const name = window.prompt('共有プリセット名', defaultName)
-    if (!name?.trim()) return
-    sharedPresetMutation.mutate({ name: name.trim() })
+    createPresetMutation.mutate({ name: name.trim() })
   }
 
   const applyPreset = (preset: { id: string; query: string; filters: IssueSearchFilters }) => {
@@ -277,20 +263,13 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
                 <CheckSquare size={14} /> 一括操作
               </button>
             )}
-            <button
-              onClick={saveCurrentPreset}
-              disabled={!canSavePreset}
-              className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              個人保存
-            </button>
             {canEditProject && (
               <button
-                onClick={saveSharedPreset}
-                disabled={!canSavePreset || sharedPresetMutation.isPending}
+                onClick={savePreset}
+                disabled={!canSavePreset || createPresetMutation.isPending}
                 className="px-3 py-1.5 text-sm rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                共有保存
+                プリセット保存
               </button>
             )}
             <button
@@ -345,11 +324,11 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
           />
         )}
 
-        {sharedPresets.length > 0 && (
+        {presets.length > 0 && (
           <div className="mb-4">
-            <div className="mb-2 text-xs text-gray-400">共有プリセット</div>
+            <div className="mb-2 text-xs text-gray-400">プリセット</div>
             <div className="flex flex-wrap items-center gap-2">
-              {sharedPresets.map(preset => (
+              {presets.map(preset => (
                 <div key={preset.id} className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50/40 px-2 py-1">
                   <button
                     onClick={() => applyPreset(preset)}
@@ -361,61 +340,25 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
                     <>
                       <button
                         onClick={() => {
-                          const name = window.prompt('共有プリセット名を変更', preset.name)
+                          const name = window.prompt('プリセット名を変更', preset.name)
                           if (!name?.trim()) return
-                          renameSharedPresetMutation.mutate({ id: preset.id, name: name.trim() })
+                          renamePresetMutation.mutate({ id: preset.id, name: name.trim() })
                         }}
                         className="text-[10px] text-blue-400 hover:text-blue-700"
-                        aria-label={`${preset.name} を共有リネーム`}
+                        aria-label={`${preset.name} をリネーム`}
                       >
                         編集
                       </button>
                       <button
-                        onClick={() => deleteSharedPresetMutation.mutate(preset.id)}
+                        onClick={() => deletePresetMutation.mutate(preset.id)}
                         className="text-[10px] text-blue-400 hover:text-red-500"
-                        aria-label={`${preset.name} を共有削除`}
+                        aria-label={`${preset.name} を削除`}
                       >
                         削除
                       </button>
                     </>
                   )}
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {projectPresets.length > 0 && (
-          <div className="mb-4">
-            <div className="mb-2 text-xs text-gray-400">個人プリセット</div>
-            <div className="flex flex-wrap items-center gap-2">
-              {projectPresets.map(preset => (
-              <div key={preset.id} className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2 py-1">
-                <button
-                  onClick={() => applyPreset(preset)}
-                  className="text-xs text-gray-700 hover:text-blue-600"
-                >
-                  {preset.name}
-                </button>
-                <button
-                  onClick={() => {
-                    const name = window.prompt('プリセット名を変更', preset.name)
-                    if (!name?.trim()) return
-                    renameSearchPreset(preset.id, name.trim())
-                  }}
-                  className="text-[10px] text-gray-400 hover:text-gray-600"
-                  aria-label={`${preset.name} をリネーム`}
-                >
-                  編集
-                </button>
-                <button
-                  onClick={() => deleteSearchPreset(preset.id)}
-                  className="text-[10px] text-gray-400 hover:text-red-500"
-                  aria-label={`${preset.name} を削除`}
-                >
-                  削除
-                </button>
-              </div>
               ))}
             </div>
           </div>

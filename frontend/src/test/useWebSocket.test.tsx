@@ -90,7 +90,6 @@ describe('useWebSocket', () => {
       activeWorkspaceId: 'workspace-1',
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
-      searchPresets: [],
       boardFilters: {},
     })
   })
@@ -104,7 +103,6 @@ describe('useWebSocket', () => {
       activeWorkspaceId: null,
       pendingOpenIssueId: null,
       pendingOpenIssueTitle: null,
-      searchPresets: [],
       boardFilters: {},
     })
     vi.restoreAllMocks()
