@@ -4,6 +4,7 @@ import { updateIssueStatus, reorderIssues } from '../../api/issues'
 import type { Issue, IssueStatus } from '../../types'
 import { Column } from './Column'
 import { useToast } from '../common/useToast'
+import { useNonce } from '../../hooks/useNonce'
 
 const STATUSES: IssueStatus[] = ['todo', 'in_progress', 'in_review', 'done']
 
@@ -20,6 +21,7 @@ interface Props {
 export function Board({ issues, projectId, queryKey, canEdit }: Props) {
   const qc = useQueryClient()
   const showToast = useToast()
+  const nonce = useNonce()
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
@@ -82,7 +84,7 @@ export function Board({ issues, projectId, queryKey, canEdit }: Props) {
     issues.filter(i => i.status === status).sort((a, b) => a.position - b.position)
 
   return (
-    <DragDropContext onDragEnd={handleDragEnd}>
+    <DragDropContext onDragEnd={handleDragEnd} nonce={nonce}>
       <div className="flex gap-4 overflow-x-auto pb-4">
         {STATUSES.map(status => (
           <Column

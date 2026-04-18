@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod automation;
+pub mod csp;
 pub mod db;
 pub mod error;
 pub mod models;
@@ -12,8 +13,9 @@ use std::sync::Arc;
 use axum::http::HeaderValue;
 use axum::{middleware, routing::get, Router};
 use sqlx::SqlitePool;
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::services::ServeDir;
 
+use crate::csp::{serve_index_with_nonce, IndexTemplate};
 use crate::realtime::RealtimeHub;
 use crate::storage::Storage;
 
@@ -75,14 +77,14 @@ async fn add_security_headers(
         "Referrer-Policy",
         HeaderValue::from_static("strict-origin-when-cross-origin"),
     );
-    // TODO: Replace 'unsafe-inline' with nonce-based CSP once the frontend
-    // uses a nonce-injecting build plugin (e.g. vite-plugin-csp).
-    // Tailwind CSS injects styles at build time via <style> tags, so
-    // 'unsafe-inline' is currently required for production rendering.
+    // Static assets and API responses get a strict CSP without any nonce.
+    // The index.html handler (serve_index_with_nonce) sets its own
+    // per-request nonce-based CSP, so this default is only reached for
+    // non-HTML responses where inline styles/scripts are irrelevant.
     headers.insert(
         "Content-Security-Policy",
         HeaderValue::from_static(
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' wss:",
+            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self' wss:",
         ),
     );
     response
@@ -108,8 +110,20 @@ pub fn create_app(state: AppState, static_dir: Option<String>) -> Router {
         .with_state(state);
 
     if let Some(dir) = static_dir {
-        let index = format!("{dir}/index.html");
-        app = app.fallback_service(ServeDir::new(&dir).not_found_service(ServeFile::new(index)));
+        let template = IndexTemplate::load(&dir)
+            .expect("Failed to read index.html from static dir");
+        // Serve static assets (JS, CSS, images) directly.
+        // For any path not matched by ServeDir (i.e. SPA routes),
+        // fall back to index.html with a per-request CSP nonce.
+        let index_template = Arc::new(template);
+        app = app.fallback_service(
+            ServeDir::new(&dir).not_found_service(axum::routing::get(
+                move || {
+                    let tpl = Arc::clone(&index_template);
+                    async move { serve_index_with_nonce(&tpl) }
+                },
+            )),
+        );
     }
 
     app

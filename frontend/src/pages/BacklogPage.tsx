@@ -7,6 +7,7 @@ import { getLabels } from '../api/labels'
 import { getSprints } from '../api/sprints'
 import { getProjectMembers } from '../api/workspaces'
 import { useAppStore } from '../store'
+import { useNonce } from '../hooks/useNonce'
 import { Modal } from '../components/common/Modal'
 import { DetailPanel } from '../components/common/DetailPanel'
 import { IssueForm } from '../components/Issue/IssueForm'
@@ -340,6 +341,7 @@ export function BacklogPage() {
   const { activeProjectId } = useAppStore()
   const qc = useQueryClient()
   const showToast = useToast()
+  const nonce = useNonce()
   const { role, canEditProject } = useProjectPermissions(activeProjectId)
   const [creating, setCreating] = useState(false)
   const [createType, setCreateType] = useState<IssueType>('task')
@@ -600,7 +602,7 @@ export function BacklogPage() {
       {isLoading ? (
         <div role="status" aria-label="読み込み中" className="text-gray-400 text-center py-12">読み込み中...</div>
       ) : (
-        <DragDropContext onDragEnd={handleDragEnd}>
+        <DragDropContext onDragEnd={handleDragEnd} nonce={nonce}>
           <div className="space-y-4">
             {grouped.map(({ sprint, issues: sprintIssues, totalPts }) => (
               <SprintGroup

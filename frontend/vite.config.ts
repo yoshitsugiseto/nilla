@@ -4,6 +4,9 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  html: {
+    cspNonce: '__CSP_NONCE__',
+  },
   server: {
     port: 3000,
     proxy: {
