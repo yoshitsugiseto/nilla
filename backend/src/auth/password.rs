@@ -92,7 +92,7 @@ async fn create_session_and_tokens(
     .await?;
 
     let access_token = jwt::encode_access_token(user_id, &session_id, jwt_secret)
-        .map_err(|e| AppError::Internal(e))?;
+        .map_err(AppError::Internal)?;
 
     Ok((access_token, refresh_token))
 }

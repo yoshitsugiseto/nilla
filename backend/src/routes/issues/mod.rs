@@ -106,14 +106,14 @@ pub async fn create_issue(
     if body
         .description
         .as_deref()
-        .map_or(false, |d| d.len() > 10000)
+        .is_some_and(|d| d.len() > 10000)
     {
         return Err(AppError::BadRequest(
             "description must be 10000 characters or fewer".to_string(),
         ));
     }
 
-    if body.points.map_or(false, |p| p < 0 || p > 999) {
+    if body.points.is_some_and(|p| !(0..=999).contains(&p)) {
         return Err(AppError::BadRequest(
             "points must be between 0 and 999".to_string(),
         ));
@@ -230,7 +230,7 @@ pub async fn update_issue(
     if body
         .description
         .as_deref()
-        .map_or(false, |d| d.len() > 10000)
+        .is_some_and(|d| d.len() > 10000)
     {
         return Err(AppError::BadRequest(
             "description must be 10000 characters or fewer".to_string(),
@@ -245,7 +245,7 @@ pub async fn update_issue(
         }
     }
     if let Some(points) = body.points {
-        if points < 0 || points > 999 {
+        if !(0..=999).contains(&points) {
             return Err(AppError::BadRequest(
                 "points must be between 0 and 999".to_string(),
             ));

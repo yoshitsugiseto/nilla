@@ -108,12 +108,14 @@ pub async fn upload_attachment(
 ) -> Result<Json<AttachmentResponse>> {
     check_issue_permission(&pool, &user_id.0, &issue_id, ProjectPermission::Editor).await?;
 
-    while let Some(field) = multipart
+    let Some(field) = multipart
         .next_field()
         .await
         .map_err(|e| AppError::BadRequest(e.to_string()))?
-    {
-        let filename = field
+    else {
+        return Err(AppError::BadRequest("No file uploaded".to_string()));
+    };
+    let filename = field
             .file_name()
             .map(|s| s.to_string())
             .unwrap_or_else(|| "file".to_string());
@@ -217,10 +219,7 @@ pub async fn upload_attachment(
             }
         }
 
-        return Ok(Json(AttachmentResponse::from_row(attachment)));
-    }
-
-    Err(AppError::BadRequest("No file uploaded".to_string()))
+    Ok(Json(AttachmentResponse::from_row(attachment)))
 }
 
 pub async fn list_attachments(

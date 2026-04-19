@@ -116,7 +116,7 @@ pub async fn create_sprint(
             "name must be 255 characters or less".to_string(),
         ));
     }
-    if body.goal.as_deref().map_or(false, |g| g.len() > 10000) {
+    if body.goal.as_deref().is_some_and(|g| g.len() > 10000) {
         return Err(AppError::BadRequest(
             "goal must be 10000 characters or less".to_string(),
         ));
@@ -178,7 +178,7 @@ pub async fn update_sprint(
             ));
         }
     }
-    if body.goal.as_deref().map_or(false, |g| g.len() > 10000) {
+    if body.goal.as_deref().is_some_and(|g| g.len() > 10000) {
         return Err(AppError::BadRequest(
             "goal must be 10000 characters or less".to_string(),
         ));

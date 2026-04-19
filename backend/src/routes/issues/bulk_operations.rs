@@ -72,7 +72,7 @@ pub async fn bulk_update_issues(
     if body
         .labels
         .as_ref()
-        .map_or(false, |labels| labels.len() > 20)
+        .is_some_and(|labels| labels.len() > 20)
     {
         return Err(AppError::BadRequest(
             "labels must be 20 or fewer".to_string(),

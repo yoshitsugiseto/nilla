@@ -72,7 +72,7 @@ pub async fn create_project(
     if body
         .description
         .as_deref()
-        .map_or(false, |d| d.len() > 10000)
+        .is_some_and(|d| d.len() > 10000)
     {
         return Err(AppError::BadRequest(
             "description must be 10000 characters or less".to_string(),
@@ -144,7 +144,7 @@ pub async fn update_project(
     if body
         .description
         .as_deref()
-        .map_or(false, |d| d.len() > 10000)
+        .is_some_and(|d| d.len() > 10000)
     {
         return Err(AppError::BadRequest(
             "description must be 10000 characters or less".to_string(),

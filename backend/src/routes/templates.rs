@@ -85,8 +85,7 @@ pub async fn update_template(
     let labels_json = body
         .labels
         .as_ref()
-        .map(|l| serde_json::to_string(l).ok())
-        .flatten();
+        .and_then(|l| serde_json::to_string(l).ok());
 
     let row = sqlx::query_as::<_, IssueTemplateRow>(
         "UPDATE issue_templates SET

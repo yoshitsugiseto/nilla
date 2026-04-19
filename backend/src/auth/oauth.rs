@@ -544,7 +544,7 @@ pub async fn exchange_token(
 ) -> Result<Response<Body>, AppError> {
     let tokens = exchange_oauth_code(&state.pool, &params.code)
         .await
-        .map_err(|e| AppError::Internal(e))?
+        .map_err(AppError::Internal)?
         .ok_or(AppError::Unauthorized)?;
 
     let (access_token, refresh_token) = tokens;
@@ -611,7 +611,7 @@ pub async fn refresh_token(
     .ok_or(AppError::Unauthorized)?;
 
     let access_token = jwt::encode_access_token(&session.1, &session.0, &state.config.jwt_secret)
-        .map_err(|e| AppError::Internal(e))?;
+        .map_err(AppError::Internal)?;
 
     Ok(Json(serde_json::json!({ "access_token": access_token })))
 }

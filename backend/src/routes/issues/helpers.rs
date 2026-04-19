@@ -210,6 +210,7 @@ pub async fn insert_activity_log(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn notify_assignee_change(
     pool: &SqlitePool,
     realtime: &RealtimeHub,
@@ -296,6 +297,7 @@ pub async fn notify_assignee_change(
     .await;
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn notify_review_ready(
     pool: &SqlitePool,
     realtime: &RealtimeHub,
@@ -382,6 +384,7 @@ pub async fn notify_review_ready(
     .await;
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn notify_overdue(
     pool: &SqlitePool,
     realtime: &RealtimeHub,

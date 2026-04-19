@@ -175,10 +175,10 @@ async fn handle_socket(
             result = socket.recv() => {
                 match result {
                     Some(Ok(Message::Close(_))) | None => break,
-                    Some(Ok(Message::Ping(data))) => {
-                        if socket.send(Message::Pong(data)).await.is_err() {
-                            break;
-                        }
+                    Some(Ok(Message::Ping(data)))
+                        if socket.send(Message::Pong(data.clone())).await.is_err() =>
+                    {
+                        break;
                     }
                     _ => {}
                 }
