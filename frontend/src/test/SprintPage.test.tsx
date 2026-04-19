@@ -140,6 +140,7 @@ function makeAutomationSettings(
     notify_on_review_ready: true,
     notify_on_overdue_transition: true,
     sprint_carryover_mode: 'prompt',
+    slack_webhook_url: null,
     ...overrides,
   }
 }
