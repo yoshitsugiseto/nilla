@@ -11,6 +11,7 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 use nilla::auth::jwt;
+use nilla::email::EmailSender;
 use nilla::realtime::RealtimeHub;
 use nilla::storage::Storage;
 use nilla::{create_app, AppState, Config, SessionCache};
@@ -109,10 +110,30 @@ fn build_app(pool: SqlitePool) -> Router {
             app_url: "http://localhost:8080".to_string(),
             frontend_url: "http://localhost:3000".to_string(),
             http_client: reqwest::Client::new(),
+            smtp_host: None,
+            smtp_port: 587,
+            smtp_username: None,
+            smtp_password: None,
+            smtp_from: None,
         }),
         realtime,
         storage,
         session_cache,
+        email_sender: EmailSender::from_config(&Config {
+            jwt_secret: TEST_JWT_SECRET.to_string(),
+            google_client_id: String::new(),
+            google_client_secret: String::new(),
+            github_client_id: String::new(),
+            github_client_secret: String::new(),
+            app_url: "http://localhost:8080".to_string(),
+            frontend_url: "http://localhost:3000".to_string(),
+            http_client: reqwest::Client::new(),
+            smtp_host: None,
+            smtp_port: 587,
+            smtp_username: None,
+            smtp_password: None,
+            smtp_from: None,
+        }),
     };
 
     create_app(state, None)

@@ -32,6 +32,7 @@ export interface WorkspaceAutomationSettings {
   notify_on_review_ready: boolean
   notify_on_overdue_transition: boolean
   sprint_carryover_mode: SprintCarryoverMode
+  slack_webhook_url: string | null
 }
 
 export interface WorkspaceAutomationLog {

@@ -57,6 +57,7 @@ pub struct WorkspaceAutomationSettings {
     pub notify_on_review_ready: bool,
     pub notify_on_overdue_transition: bool,
     pub sprint_carryover_mode: String,
+    pub slack_webhook_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,6 +66,8 @@ pub struct UpdateWorkspaceAutomationSettings {
     pub notify_on_review_ready: Option<bool>,
     pub notify_on_overdue_transition: Option<bool>,
     pub sprint_carryover_mode: Option<String>,
+    /// `None` = no change, `Some(None)` = clear, `Some(Some(url))` = set
+    pub slack_webhook_url: Option<Option<String>>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]

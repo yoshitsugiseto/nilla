@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useId, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { bulkUpdateIssues, getIssuesPaged } from '../api/issues'
 import { getLabels } from '../api/labels'
@@ -63,6 +63,12 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [lastBulkResult, setLastBulkResult] = useState<import('../types').BulkUpdateResult | null>(null)
   const searchScope = JSON.stringify({ query, filters })
+  const [prevResetKey, setPrevResetKey] = useState(`${activeProjectId}|${searchScope}`)
+  const resetKey = `${activeProjectId}|${searchScope}`
+  if (prevResetKey !== resetKey) {
+    setPrevResetKey(resetKey)
+    setBulkSelected(new Set())
+  }
   const hasFilters = Object.values(filters).some(Boolean)
   const effectivePage =
     (query.length >= 2 || hasFilters) && pageState.scope === searchScope ? pageState.page : 0
@@ -115,9 +121,6 @@ export function SearchPage({ query, filters, onApplyPreset, onFiltersChange }: P
   const start = effectivePage * PAGE_SIZE + 1
   const end = Math.min(effectivePage * PAGE_SIZE + issues.length, total)
 
-  useEffect(() => {
-    setBulkSelected(new Set())
-  }, [activeProjectId, effectivePage, searchScope])
 
   const bulkMutation = useMutation({
     mutationFn: (payload: Omit<BulkUpdatePayload, 'issue_ids'>) =>

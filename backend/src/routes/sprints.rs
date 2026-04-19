@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use axum::{
     extract::{Path, State},
@@ -17,6 +18,8 @@ use crate::{
     error::{AppError, Result},
     models::sprint::{CreateSprint, Sprint, SprintRow, SprintStatus, UpdateSprint},
     realtime::RealtimeHub,
+    slack::notify_slack_for_project,
+    Config,
 };
 
 async fn get_project_id_for_sprint(pool: &SqlitePool, sprint_id: &str) -> Result<String> {
@@ -267,6 +270,7 @@ pub struct CompleteSprintBody {
 pub async fn complete_sprint(
     State(pool): State<SqlitePool>,
     State(realtime): State<RealtimeHub>,
+    State(config): State<Arc<Config>>,
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
     body: Option<Json<CompleteSprintBody>>,
@@ -368,6 +372,11 @@ pub async fn complete_sprint(
 
     let updated = Sprint::from(updated_row);
     broadcast_sprint_event(&pool, &realtime, "sprint.updated", &updated).await;
+
+    // Slack notification for sprint completion
+    let msg = format!("\u{1f3c1} Sprint \"{}\" completed", updated.name);
+    notify_slack_for_project(&pool, &config.http_client, &project_id, &msg).await;
+
     Ok(Json(updated))
 }
 

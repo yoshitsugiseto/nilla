@@ -39,6 +39,14 @@ async fn main() -> anyhow::Result<()> {
         frontend_url: std::env::var("FRONTEND_URL")
             .unwrap_or_else(|_| "http://localhost:3000".to_string()),
         http_client: reqwest::Client::new(),
+        smtp_host: std::env::var("SMTP_HOST").ok(),
+        smtp_port: std::env::var("SMTP_PORT")
+            .ok()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(587),
+        smtp_username: std::env::var("SMTP_USERNAME").ok(),
+        smtp_password: std::env::var("SMTP_PASSWORD").ok(),
+        smtp_from: std::env::var("SMTP_FROM").ok(),
     };
 
     let realtime = RealtimeHub::new();
@@ -52,12 +60,20 @@ async fn main() -> anyhow::Result<()> {
         .time_to_live(std::time::Duration::from_secs(30))
         .build();
 
+    let email_sender = nilla::email::EmailSender::from_config(&config);
+    if email_sender.is_enabled() {
+        tracing::info!("SMTP configured: email notifications enabled");
+    } else {
+        tracing::info!("SMTP not configured: email notifications disabled");
+    }
+
     let state = AppState {
         pool,
         config: Arc::new(config),
         realtime,
         storage,
         session_cache,
+        email_sender,
     };
 
     let cors = CorsLayer::new()

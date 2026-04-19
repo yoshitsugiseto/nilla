@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     automation::record_automation_execution,
+    email::EmailSender,
     error::{AppError, Result},
     realtime::RealtimeHub,
 };
@@ -156,6 +157,35 @@ pub async fn get_user_name(pool: &SqlitePool, user_id: &str) -> String {
     }
 }
 
+/// Look up the email address for a user.  Returns `None` when the user
+/// is not found or has no email on file.
+async fn get_user_email(pool: &SqlitePool, user_id: &str) -> Option<String> {
+    sqlx::query_scalar::<_, String>("SELECT email FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+}
+
+/// Best-effort email send: log a warning on failure but never propagate errors.
+async fn try_send_email(
+    email_sender: &EmailSender,
+    pool: &SqlitePool,
+    user_id: &str,
+    subject: &str,
+    body: &str,
+) {
+    if !email_sender.is_enabled() {
+        return;
+    }
+    if let Some(email) = get_user_email(pool, user_id).await {
+        if let Err(e) = email_sender.send(&email, subject, body).await {
+            tracing::warn!("Failed to send email to {email}: {e}");
+        }
+    }
+}
+
 pub fn issue_is_overdue(due_date: Option<NaiveDate>, status: &str, today: NaiveDate) -> bool {
     status != "done" && due_date.map(|value| value < today).unwrap_or(false)
 }
@@ -183,6 +213,7 @@ pub async fn insert_activity_log(
 pub async fn notify_assignee_change(
     pool: &SqlitePool,
     realtime: &RealtimeHub,
+    email_sender: &EmailSender,
     project_id: &str,
     actor_user_id: &str,
     actor_name: &str,
@@ -234,6 +265,17 @@ pub async fn notify_assignee_change(
 
     let msg = format!("{} が「{}」にアサインしました", actor_name, issue_title);
     create_notification(pool, realtime, assignee_id, issue_id, "assigned", &msg).await;
+    try_send_email(
+        email_sender,
+        pool,
+        assignee_id,
+        "Nilla: 担当タスクが割り当てられました",
+        &format!(
+            "{}さんが「{}」をあなたに割り当てました。",
+            actor_name, issue_title
+        ),
+    )
+    .await;
     let _ = insert_activity_log(
         pool,
         issue_id,
@@ -257,6 +299,7 @@ pub async fn notify_assignee_change(
 pub async fn notify_review_ready(
     pool: &SqlitePool,
     realtime: &RealtimeHub,
+    email_sender: &EmailSender,
     project_id: &str,
     actor_user_id: &str,
     actor_name: &str,
@@ -311,6 +354,14 @@ pub async fn notify_review_ready(
         actor_name, issue_title
     );
     create_notification(pool, realtime, assignee_id, issue_id, "review_ready", &msg).await;
+    try_send_email(
+        email_sender,
+        pool,
+        assignee_id,
+        "Nilla: レビュー依頼があります",
+        &format!("「{}」のレビューが依頼されました。", issue_title),
+    )
+    .await;
     let _ = insert_activity_log(
         pool,
         issue_id,
@@ -334,6 +385,7 @@ pub async fn notify_review_ready(
 pub async fn notify_overdue(
     pool: &SqlitePool,
     realtime: &RealtimeHub,
+    email_sender: &EmailSender,
     project_id: &str,
     actor_user_id: &str,
     enabled: bool,
@@ -384,6 +436,14 @@ pub async fn notify_overdue(
 
     let msg = format!("「{}」が期限超過になりました", issue_title);
     create_notification(pool, realtime, assignee_id, issue_id, "overdue", &msg).await;
+    try_send_email(
+        email_sender,
+        pool,
+        assignee_id,
+        "Nilla: タスクが期限超過です",
+        &format!("「{}」が期限を超過しています。", issue_title),
+    )
+    .await;
     let _ = insert_activity_log(pool, issue_id, "overdue", None, Some(assignee_id)).await;
     let _ = record_automation_execution(
         pool,

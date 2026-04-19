@@ -2,10 +2,12 @@ pub mod auth;
 pub mod automation;
 pub mod csp;
 pub mod db;
+pub mod email;
 pub mod error;
 pub mod models;
 pub mod realtime;
 pub mod routes;
+pub mod slack;
 pub mod storage;
 
 use std::sync::Arc;
@@ -17,6 +19,7 @@ use sqlx::SqlitePool;
 use tower_http::services::ServeDir;
 
 use crate::csp::{serve_index_with_nonce, IndexTemplate};
+use crate::email::EmailSender;
 use crate::realtime::RealtimeHub;
 use crate::storage::Storage;
 
@@ -36,6 +39,11 @@ pub struct Config {
     pub app_url: String,
     pub frontend_url: String,
     pub http_client: reqwest::Client,
+    pub smtp_host: Option<String>,
+    pub smtp_port: u16,
+    pub smtp_username: Option<String>,
+    pub smtp_password: Option<String>,
+    pub smtp_from: Option<String>,
 }
 
 #[derive(Clone)]
@@ -45,6 +53,7 @@ pub struct AppState {
     pub realtime: RealtimeHub,
     pub storage: Storage,
     pub session_cache: SessionCache,
+    pub email_sender: EmailSender,
 }
 
 /// 既存のルートハンドラが State<SqlitePool> で動き続けられるよう FromRef を実装
@@ -63,6 +72,18 @@ impl axum::extract::FromRef<AppState> for RealtimeHub {
 impl axum::extract::FromRef<AppState> for Storage {
     fn from_ref(state: &AppState) -> Self {
         state.storage.clone()
+    }
+}
+
+impl axum::extract::FromRef<AppState> for EmailSender {
+    fn from_ref(state: &AppState) -> Self {
+        state.email_sender.clone()
+    }
+}
+
+impl axum::extract::FromRef<AppState> for Arc<Config> {
+    fn from_ref(state: &AppState) -> Self {
+        state.config.clone()
     }
 }
 

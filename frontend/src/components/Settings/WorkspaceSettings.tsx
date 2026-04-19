@@ -82,6 +82,8 @@ export function WorkspaceSettings({ workspaceId }: Props) {
   const [logRuleFilter, setLogRuleFilter] = useState<'all' | WorkspaceAutomationLog['rule_type']>('all')
   const [logStatusFilter, setLogStatusFilter] = useState<'all' | WorkspaceAutomationLog['status']>('all')
   const [showAllLogs, setShowAllLogs] = useState(false)
+  const [slackWebhookInput, setSlackWebhookInput] = useState('')
+  const [editingSlackWebhook, setEditingSlackWebhook] = useState(false)
 
   const { data: members = [], isLoading: membersLoading } = useQuery({
     queryKey: ['workspace-members', workspaceId],
@@ -183,6 +185,7 @@ export function WorkspaceSettings({ workspaceId }: Props) {
       notify_on_review_ready?: boolean
       notify_on_overdue_transition?: boolean
       sprint_carryover_mode?: SprintCarryoverMode
+      slack_webhook_url?: string | null
     }) => updateWorkspaceAutomationSettings(workspaceId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workspace-automation', workspaceId] })
@@ -304,6 +307,87 @@ export function WorkspaceSettings({ workspaceId }: Props) {
             {!isAdmin && (
               <p className="mt-2 text-xs text-gray-400">自動化設定の変更はワークスペース管理者のみ可能です。</p>
             )}
+          </div>
+
+          <div className="border-t border-gray-100 pt-4">
+            <div>
+              <label htmlFor="workspace-slack-webhook" className="block text-sm font-medium text-gray-800 mb-1">
+                Slack通知 Webhook URL
+              </label>
+              <p className="text-xs text-gray-500 mb-2">
+                Slack Incoming Webhook URL を設定すると、担当変更・期限超過・スプリント完了時に Slack へ通知を送信します。
+              </p>
+              {editingSlackWebhook ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    id="workspace-slack-webhook"
+                    autoFocus
+                    type="url"
+                    value={slackWebhookInput}
+                    onChange={e => setSlackWebhookInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && slackWebhookInput.trim()) {
+                        automationMutation.mutate({ slack_webhook_url: slackWebhookInput.trim() }, {
+                          onSuccess: () => setEditingSlackWebhook(false),
+                        })
+                      }
+                      if (e.key === 'Escape') setEditingSlackWebhook(false)
+                    }}
+                    placeholder="https://hooks.slack.com/services/..."
+                    className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    onClick={() => {
+                      if (slackWebhookInput.trim()) {
+                        automationMutation.mutate({ slack_webhook_url: slackWebhookInput.trim() }, {
+                          onSuccess: () => setEditingSlackWebhook(false),
+                        })
+                      }
+                    }}
+                    disabled={automationMutation.isPending || !slackWebhookInput.trim()}
+                    className="p-1 text-green-600 hover:text-green-700 disabled:opacity-40"
+                  >
+                    <Check size={16} />
+                  </button>
+                  <button onClick={() => setEditingSlackWebhook(false)} className="p-1 text-gray-400 hover:text-gray-600">
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600 truncate max-w-md">
+                    {automationSettings?.slack_webhook_url
+                      ? automationSettings.slack_webhook_url.replace(/\/[^/]{6}$/, '/******')
+                      : '未設定'}
+                  </span>
+                  {isAdmin && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setSlackWebhookInput(automationSettings?.slack_webhook_url ?? '')
+                          setEditingSlackWebhook(true)
+                        }}
+                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600"
+                      >
+                        <Pencil size={12} /> {automationSettings?.slack_webhook_url ? '変更' : '設定'}
+                      </button>
+                      {automationSettings?.slack_webhook_url && (
+                        <button
+                          onClick={() => automationMutation.mutate({ slack_webhook_url: null })}
+                          disabled={automationMutation.isPending}
+                          className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 disabled:opacity-40"
+                        >
+                          <Trash2 size={12} /> 削除
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              {!isAdmin && (
+                <p className="mt-2 text-xs text-gray-400">Slack Webhook の設定はワークスペース管理者のみ変更できます。</p>
+              )}
+            </div>
           </div>
 
           <div className="border-t border-gray-100 pt-4">

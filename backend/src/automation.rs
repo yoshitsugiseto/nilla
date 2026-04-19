@@ -6,7 +6,7 @@ use crate::{
 };
 
 const AUTOMATION_COLUMNS: &str =
-    "workspace_id, notify_on_assignee_change, notify_on_review_ready, notify_on_overdue_transition, sprint_carryover_mode";
+    "workspace_id, notify_on_assignee_change, notify_on_review_ready, notify_on_overdue_transition, sprint_carryover_mode, slack_webhook_url";
 const AUTOMATION_LOG_COLUMNS: &str =
     "l.id, l.workspace_id, l.project_id, l.issue_id, i.title as issue_title, l.rule_type, l.status, l.target_user_id, u.name as target_user_name, l.message, l.created_at";
 
@@ -66,7 +66,8 @@ pub async fn get_project_automation_settings(
                   was.notify_on_assignee_change as notify_on_assignee_change,
                   was.notify_on_review_ready as notify_on_review_ready,
                   was.notify_on_overdue_transition as notify_on_overdue_transition,
-                  was.sprint_carryover_mode as sprint_carryover_mode
+                  was.sprint_carryover_mode as sprint_carryover_mode,
+                  was.slack_webhook_url as slack_webhook_url
            FROM workspace_automation_settings was
            JOIN projects p ON p.workspace_id = was.workspace_id
            WHERE p.id = ?"#,

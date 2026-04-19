@@ -7,6 +7,8 @@ use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
+use std::sync::Arc;
+
 use crate::{
     auth::middleware::UserId,
     automation::get_project_automation_settings,
@@ -15,7 +17,10 @@ use crate::{
     models::issue::{
         BulkUpdateIssues, BulkUpdateResult, BulkUpdateSkippedItem, Issue, IssueRow,
     },
+    email::EmailSender,
     realtime::RealtimeHub,
+    slack::notify_slack_for_project,
+    Config,
 };
 
 use super::helpers::{
@@ -26,6 +31,8 @@ use super::helpers::{
 pub async fn bulk_update_issues(
     State(pool): State<SqlitePool>,
     State(realtime): State<RealtimeHub>,
+    State(config): State<Arc<Config>>,
+    State(email_sender): State<EmailSender>,
     Extension(user_id): Extension<UserId>,
     Path(project_id): Path<String>,
     Json(body): Json<BulkUpdateIssues>,
@@ -278,6 +285,7 @@ pub async fn bulk_update_issues(
             notify_assignee_change(
                 &pool,
                 &realtime,
+                &email_sender,
                 &project_id,
                 &user_id.0,
                 &actor_name,
@@ -287,6 +295,14 @@ pub async fn bulk_update_issues(
                 item.assignee_id.as_deref(),
             )
             .await;
+            if let Some(ref aid) = item.assignee_id {
+                let assignee_name = super::helpers::get_user_name(&pool, aid).await;
+                let msg = format!(
+                    "\u{1f514} {} assigned \"{}\" to {}",
+                    actor_name, item.title, assignee_name
+                );
+                notify_slack_for_project(&pool, &config.http_client, &project_id, &msg).await;
+            }
         }
 
         if body.status.is_some()
@@ -296,6 +312,7 @@ pub async fn bulk_update_issues(
             notify_review_ready(
                 &pool,
                 &realtime,
+                &email_sender,
                 &project_id,
                 &user_id.0,
                 &actor_name,
@@ -313,6 +330,7 @@ pub async fn bulk_update_issues(
             notify_overdue(
                 &pool,
                 &realtime,
+                &email_sender,
                 &project_id,
                 &user_id.0,
                 automation_settings.notify_on_overdue_transition,
@@ -321,6 +339,8 @@ pub async fn bulk_update_issues(
                 item.assignee_id.as_deref(),
             )
             .await;
+            let msg = format!("\u{23f0} \"{}\" is overdue", item.title);
+            notify_slack_for_project(&pool, &config.http_client, &project_id, &msg).await;
         }
     }
 

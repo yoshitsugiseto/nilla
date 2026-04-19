@@ -23,6 +23,7 @@ interface Props {
   onClearSelection: () => void
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatBulkUpdateToast(result: BulkUpdateResult) {
   if (result.updated_count === 0 && result.skipped_ids.length > 0) {
     return {

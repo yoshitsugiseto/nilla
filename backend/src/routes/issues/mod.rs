@@ -12,6 +12,8 @@ use chrono::Utc;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
+use std::sync::Arc;
+
 use crate::{
     auth::middleware::UserId,
     automation::get_project_automation_settings,
@@ -21,7 +23,10 @@ use crate::{
         CreateIssue, Issue, IssueFilters, IssuePriority, IssueRow, IssueType,
         UpdateIssue, UpdateIssueSprint, UpdateIssueStatus,
     },
+    email::EmailSender,
     realtime::RealtimeHub,
+    slack::notify_slack_for_project,
+    Config,
 };
 
 use helpers::{
@@ -202,6 +207,8 @@ pub async fn get_issue(
 pub async fn update_issue(
     State(pool): State<SqlitePool>,
     State(realtime): State<RealtimeHub>,
+    State(config): State<Arc<Config>>,
+    State(email_sender): State<EmailSender>,
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
     Json(body): Json<UpdateIssue>,
@@ -370,6 +377,7 @@ pub async fn update_issue(
         notify_assignee_change(
             &pool,
             &realtime,
+            &email_sender,
             &project_id,
             &user_id.0,
             &actor_name,
@@ -379,11 +387,20 @@ pub async fn update_issue(
             assignee_id.as_deref(),
         )
         .await;
+        if let Some(ref aid) = assignee_id {
+            let assignee_name = get_user_name(&pool, aid).await;
+            let msg = format!(
+                "\u{1f514} {} assigned \"{}\" to {}",
+                actor_name, title, assignee_name
+            );
+            notify_slack_for_project(&pool, &config.http_client, &project_id, &msg).await;
+        }
     }
     if status_moved_to_review {
         notify_review_ready(
             &pool,
             &realtime,
+            &email_sender,
             &project_id,
             &user_id.0,
             &actor_name,
@@ -398,6 +415,7 @@ pub async fn update_issue(
         notify_overdue(
             &pool,
             &realtime,
+            &email_sender,
             &project_id,
             &user_id.0,
             automation_settings.notify_on_overdue_transition,
@@ -406,6 +424,8 @@ pub async fn update_issue(
             assignee_id.as_deref(),
         )
         .await;
+        let msg = format!("\u{23f0} \"{}\" is overdue", title);
+        notify_slack_for_project(&pool, &config.http_client, &project_id, &msg).await;
     }
 
     Ok(Json(issue))
@@ -455,6 +475,8 @@ pub async fn delete_issue(
 pub async fn update_issue_status(
     State(pool): State<SqlitePool>,
     State(realtime): State<RealtimeHub>,
+    State(config): State<Arc<Config>>,
+    State(email_sender): State<EmailSender>,
     Extension(user_id): Extension<UserId>,
     Path(id): Path<String>,
     Json(body): Json<UpdateIssueStatus>,
@@ -511,6 +533,7 @@ pub async fn update_issue_status(
         notify_review_ready(
             &pool,
             &realtime,
+            &email_sender,
             &project_id,
             &user_id.0,
             &actor_name,
@@ -525,6 +548,7 @@ pub async fn update_issue_status(
         notify_overdue(
             &pool,
             &realtime,
+            &email_sender,
             &project_id,
             &user_id.0,
             automation_settings.notify_on_overdue_transition,
@@ -533,6 +557,8 @@ pub async fn update_issue_status(
             issue.assignee_id.as_deref(),
         )
         .await;
+        let msg = format!("\u{23f0} \"{}\" is overdue", issue.title);
+        notify_slack_for_project(&pool, &config.http_client, &project_id, &msg).await;
     }
 
     Ok(Json(issue))

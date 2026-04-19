@@ -363,17 +363,34 @@ pub async fn update_workspace_automation(
         validate_sprint_carryover_mode(mode)?;
     }
 
+    // Validate Slack webhook URL if provided
+    if let Some(Some(ref url)) = body.slack_webhook_url {
+        if !url.starts_with("https://hooks.slack.com/") {
+            return Err(AppError::BadRequest(
+                "slack_webhook_url must start with https://hooks.slack.com/".to_string(),
+            ));
+        }
+    }
+
     let current = get_workspace_automation_settings(&pool, &id).await?;
     let now = Utc::now().to_rfc3339();
+
+    // Resolve slack_webhook_url: None = keep current, Some(None) = clear, Some(Some(url)) = set
+    let slack_webhook_url = match body.slack_webhook_url {
+        Some(v) => v,
+        None => current.slack_webhook_url.clone(),
+    };
+
     let settings = sqlx::query_as::<_, WorkspaceAutomationSettings>(
         "UPDATE workspace_automation_settings
          SET notify_on_assignee_change = ?,
              notify_on_review_ready = ?,
              notify_on_overdue_transition = ?,
              sprint_carryover_mode = ?,
+             slack_webhook_url = ?,
              updated_at = ?
          WHERE workspace_id = ?
-         RETURNING workspace_id, notify_on_assignee_change, notify_on_review_ready, notify_on_overdue_transition, sprint_carryover_mode",
+         RETURNING workspace_id, notify_on_assignee_change, notify_on_review_ready, notify_on_overdue_transition, sprint_carryover_mode, slack_webhook_url",
     )
     .bind(
         body.notify_on_assignee_change
@@ -388,6 +405,7 @@ pub async fn update_workspace_automation(
         body.sprint_carryover_mode
             .unwrap_or(current.sprint_carryover_mode),
     )
+    .bind(&slack_webhook_url)
     .bind(&now)
     .bind(&id)
     .fetch_one(&pool)
