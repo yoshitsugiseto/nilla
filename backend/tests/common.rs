@@ -13,7 +13,7 @@ use tower::ServiceExt;
 use nilla::auth::jwt;
 use nilla::realtime::RealtimeHub;
 use nilla::storage::Storage;
-use nilla::{create_app, AppState, Config};
+use nilla::{create_app, AppState, Config, SessionCache};
 
 pub const TEST_JWT_SECRET: &str = "test-secret";
 pub const TEST_USER_ID: &str = "test-user-001";
@@ -93,6 +93,11 @@ fn build_app(pool: SqlitePool) -> Router {
     )
     .unwrap();
 
+    let session_cache: SessionCache = moka::future::Cache::builder()
+        .max_capacity(10_000)
+        .time_to_live(std::time::Duration::from_secs(30))
+        .build();
+
     let state = AppState {
         pool,
         config: Arc::new(Config {
@@ -107,6 +112,7 @@ fn build_app(pool: SqlitePool) -> Router {
         }),
         realtime,
         storage,
+        session_cache,
     };
 
     create_app(state, None)

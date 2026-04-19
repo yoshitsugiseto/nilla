@@ -622,9 +622,24 @@ pub async fn logout(
 ) -> Response<Body> {
     if let Some(token) = extract_refresh_token_cookie(&headers) {
         let hash = hash_token(&token);
+
+        // Fetch the session id before deleting so we can invalidate the cache
+        let session_id: Option<String> = sqlx::query_scalar(
+            "SELECT id FROM sessions WHERE refresh_token_hash = ?",
+        )
+        .bind(&hash)
+        .fetch_optional(&state.pool)
+        .await
+        .unwrap_or(None);
+
         let _ = sqlx::query!("DELETE FROM sessions WHERE refresh_token_hash = ?", hash)
             .execute(&state.pool)
             .await;
+
+        // Invalidate the in-memory session cache entry
+        if let Some(sid) = session_id {
+            state.session_cache.invalidate(&sid).await;
+        }
     }
 
     let clear_cookie = "refresh_token=; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=0";

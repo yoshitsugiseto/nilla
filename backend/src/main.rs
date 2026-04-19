@@ -8,7 +8,7 @@ use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::trace::TraceLayer;
 
 use nilla::realtime::RealtimeHub;
-use nilla::{AppState, Config};
+use nilla::{AppState, Config, SessionCache};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -47,11 +47,17 @@ async fn main() -> anyhow::Result<()> {
     let storage =
         nilla::storage::Storage::local(&storage_path).expect("Failed to initialize local storage");
 
+    let session_cache: SessionCache = moka::future::Cache::builder()
+        .max_capacity(10_000)
+        .time_to_live(std::time::Duration::from_secs(30))
+        .build();
+
     let state = AppState {
         pool,
         config: Arc::new(config),
         realtime,
         storage,
+        session_cache,
     };
 
     let cors = CorsLayer::new()

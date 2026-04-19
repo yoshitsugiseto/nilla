@@ -39,6 +39,7 @@ sha2 = "0.10"
 hex = "0.4"
 urlencoding = "2"
 argon2 = "0.5"
+moka = { version = "0.12", features = ["future"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

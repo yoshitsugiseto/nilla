@@ -12,12 +12,19 @@ use std::sync::Arc;
 
 use axum::http::HeaderValue;
 use axum::{middleware, routing::get, Router};
+use moka::future::Cache;
 use sqlx::SqlitePool;
 use tower_http::services::ServeDir;
 
 use crate::csp::{serve_index_with_nonce, IndexTemplate};
 use crate::realtime::RealtimeHub;
 use crate::storage::Storage;
+
+/// In-memory session cache: maps session_id to (user_id, expires_at).
+/// Entries auto-expire after 30 seconds (TTL), reducing DB load on
+/// every authenticated request while still allowing revocation to take
+/// effect within a short window.
+pub type SessionCache = Cache<String, (String, chrono::DateTime<chrono::Utc>)>;
 
 #[derive(Clone)]
 pub struct Config {
@@ -37,6 +44,7 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub realtime: RealtimeHub,
     pub storage: Storage,
+    pub session_cache: SessionCache,
 }
 
 /// 既存のルートハンドラが State<SqlitePool> で動き続けられるよう FromRef を実装
