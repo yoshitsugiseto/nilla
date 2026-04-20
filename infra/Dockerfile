@@ -22,6 +22,8 @@ RUN cargo fetch
 # Build
 COPY backend/src ./src
 COPY backend/migrations ./migrations
+COPY backend/.sqlx ./.sqlx
+ENV SQLX_OFFLINE=true
 RUN cargo build --release
 
 # ── Stage 3: Runtime ────────────────────────────────────────────
